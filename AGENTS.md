@@ -4,6 +4,61 @@
 
 「**照鑑 / 抄観**」— 自分の周りで何が起きているかを、抄して観るための場所。
 
+## なぜ作るか
+
+### 解きたい問題
+
+普段、自分の周りには見たいデータが分散している:
+
+- 今日のRSSフィード（`wwwyo/me/daily/<date>/input.md`）
+- 進行中の code review（`gh` で取れる diff + 自分のコメント）
+- 仕事で共有された議事録 markdown（その場で開いて見たいだけ）
+- 今日のCalendar / TODO（[wwwyo/me](https://github.com/wwwyo/me) `daily/<date>/start.md` 由来）
+- meml に保存した記事の読み返し
+
+これらを **1つの URL で、構造化されたUIで、必要なときだけ** 見たい。Markdownファイルを次々開く運用も、Notionに溜め込む運用も、要件と噛み合わない。
+
+### Claude Code に毎回JSXを書かせる選択肢の限界
+
+Claude Code でviewを作ることは可能だが、毎回 JSX を生成させると:
+
+- **Token cost** が嵩む（数百行のJSX × 表示頻度）
+- **生成速度** が遅い（数秒〜数十秒のラグ）
+- **正確性** が揺れる（props間違い、型不一致、import漏れ）
+- **デザイン一貫性** が崩れる（同じArticleCardが日ごとに微妙に違う）
+- **Refactor不能** — 各pageが snowflake になり、共通変更ができない
+
+LLM の本来の強みは「データを構造化する」ことで、「描画」ではない。**描画は事前に1度設計すれば再利用できる**。この分業を構造化したい。
+
+### 永続化層と分けたい理由
+
+データを残すべき場所と、見たいだけの場所はライフサイクルが違う:
+
+| | 残す（meml） | 見るだけ（syokan） |
+|---|---|---|
+| 例 | 「3ヶ月前に学んだ概念」 | 「今日のRSS」「進行中のreview」 |
+| 削除すると失う | 知識 | 何も（再構築可能） |
+| バックアップ | 必須 | 不要 |
+| schema 安定性 | 高 | 緩い |
+
+これを同じstoreに混ぜると:
+- 一時的な review state が長期メモリを汚染する
+- 「今日のRSS」が3年後の検索に出てくる
+- 削除/cleanup ポリシーが噛み合わず、結局 retention で別テーブル切る → なら最初から分けろという話
+
+なので **syokan はデータを永続化しない**。残したいものは明示的に [meml](https://github.com/wwwyo/meml) へ昇格させる（promotion path）。
+
+### Interface を固定したくない理由
+
+入力経路を MCP に縛ると、CLI や webhook や paste が二級市民になる。実際の使い方は:
+
+- Claude Code がファイル編集ベースで投げる
+- CLI で「共有された .md ファイル → 開いて見たい」が頻発する
+- 将来的に scheduled agent が定期push する可能性
+- gh webhook で PR review トリガーする可能性
+
+これら全てを `POST /api/items { type, props, children? }` の同一 schema に流せれば、入力経路が増えても renderer は不変。
+
 ## 設計の核
 
 ### 役割の分離
