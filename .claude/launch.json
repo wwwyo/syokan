@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "syokan-dev",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["--hot", "server/index.ts"],
+      "port": 5173
+    }
+  ]
+}
