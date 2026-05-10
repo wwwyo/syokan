@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "bun --hot server/index.ts",
-    "dev:portless": "portless",
+    "dev:portless": "PORTLESS_APP_PORT=5173 portless",
     "start": "NODE_ENV=production bun server/index.ts",
     "typecheck": "tsc --noEmit"
   },
