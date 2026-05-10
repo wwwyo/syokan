@@ -4,8 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun --hot server/index.ts",
-    "dev:portless": "portless run --app-port 5173 bun --hot server/index.ts",
+    "dev": "portless run --app-port 5173 bun --hot server/index.ts",
     "start": "NODE_ENV=production bun server/index.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -25,6 +24,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "bun-plugin-tailwind": "0.1.2",
+    "portless": "0.12.0",
     "tailwindcss": "4.3.0",
     "typescript": "6.0.3"
   }

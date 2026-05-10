@@ -122,23 +122,13 @@ syokan/
 
 ```bash
 mise install     # Bun を mise.toml の固定バージョンで導入
-bun install
-bun run dev      # Bun.serve + HMR (http://localhost:5173)
+bun install     # portless (devDep) も入る
+bun run dev     # Bun.serve + HMR (https://syokan.localhost / http://localhost:5173)
 ```
 
-ブラウザで `http://localhost:5173` を開く。
+`dev` は [portless](https://github.com/vercel-labs/portless) (devDep) 経由で起動する。app は port 5173 に固定 (`--app-port 5173`)、portless proxy が `https://syokan.localhost` から 5173 へ転送するので、両方の URL でアクセス可能。
 
-### portless で起動 (推奨)
-
-[portless](https://github.com/vercel-labs/portless) を使うと named `.localhost` URL でアクセスできる。
-
-```bash
-bun run dev:portless   # https://syokan.localhost (app は port 5173)
-```
-
-`dev:portless` は `--app-port 5173` で app の port を固定しているので、`bun run dev` と同じ 5173 番。bookmark / CORS / `.env` の URL は両方の起動経路で互換。ただし port を共有するため **`dev` と `dev:portless` の同時起動はできない**（先勝ち）。
-
-初回は HTTPS proxy 起動で sudo (port 443) と CA 信頼ストア登録が走る。proxy はバックグラウンド daemon として常駐し、停止は `portless proxy stop`。bypass したい場合は `PORTLESS=0 bun run dev:portless`。
+初回は HTTPS proxy 起動で sudo (port 443) と CA 信頼ストア登録が走る。proxy はバックグラウンド daemon として常駐し、停止は `bunx portless proxy stop`。proxy を経由せず raw bun で動かしたい場合は `PORTLESS=0 bun run dev` で bypass。
 
 ## 技術スタック
 
