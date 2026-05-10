@@ -97,41 +97,46 @@ LLM に「JSXを書かせる」のではなく、**schema を満たす JSON tree
 
 ```
 syokan/
+├── index.html               # Bun.serve の HTML import entry
 ├── src/
 │   ├── catalog.ts           # component catalog 定義
 │   ├── Render.tsx           # JSON tree → React 再帰 renderer
-│   ├── components/          # 自前 component (shadcn/ui 合成)
-│   │   ├── ArticleCard.tsx
-│   │   ├── DiffViewer.tsx
-│   │   ├── MarkdownDoc.tsx
-│   │   └── Layout.tsx
-│   ├── pages/               # file-based routing (import.meta.glob)
-│   │   ├── Calendar.tsx
-│   │   └── TODO.tsx
-│   └── App.tsx
+│   ├── frontend.tsx         # createRoot mount
+│   ├── App.tsx
+│   ├── styles.css           # Tailwind v4 + shadcn CSS variables
+│   ├── lib/utils.ts         # cn() (clsx + tailwind-merge)
+│   └── components/
+│       ├── ui/              # shadcn primitives (CLI 経由で生成)
+│       └── ...              # composite component (ArticleCard / MarkdownDoc 等)
 ├── server/
-│   ├── index.ts             # Hono on Bun
-│   └── routes.ts            # /api/items, /api/views/:id, /api/repos/*
+│   └── index.ts             # Bun.serve({ routes }) — / は HTML import、/api/* はハンドラ
+├── bunfig.toml              # bun-plugin-tailwind + install policy
+├── components.json          # shadcn config (style: base-nova)
+├── mise.toml                # Bun version 固定
 └── package.json
 ```
+
+クライアント側ルーティングは採用しない。`window.location.pathname` から id を抽出する単一ページで対応する (PRD `Technical Considerations` 参照)。
 
 ## セットアップ
 
 ```bash
+mise install     # Bun を mise.toml の固定バージョンで導入
 bun install
-bun run dev      # Vite + Hono 同時起動
+bun run dev      # Bun.serve + HMR
 ```
 
 ブラウザで `http://localhost:5173` を開く。
 
 ## 技術スタック
 
-- **Runtime**: Bun
-- **Frontend**: Vite + React + TypeScript
-- **UI**: shadcn/ui + Tailwind CSS
-- **Backend**: Hono (Vite middleware として同居)
+- **Runtime / Bundler / HMR / TS 実行**: Bun (1 つに集約。Vite / Hono / React Router は使わない)
+- **Frontend**: React + TypeScript (Bun の HTML import + JSX/TSX ネイティブで bundle)
+- **UI**: shadcn/ui (`base-nova` style) + `@base-ui/react` + Tailwind CSS v4
+- **Backend**: `Bun.serve({ routes })` — `/` は HTML import、`/api/*` は同一プロセス内で同居
 - **Validation**: Zod
-- **Routing**: React Router (file-based via `import.meta.glob`)
+- **Routing (server)**: `Bun.serve` の routes patterns
+- **Routing (client)**: React Router 等は採用しない
 
 ## コミュニケーション方針
 
