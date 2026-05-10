@@ -1,0 +1,30 @@
+{
+  "name": "syokan",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot server/index.ts",
+    "start": "bun server/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "class-variance-authority": "latest",
+    "clsx": "latest",
+    "lucide-react": "latest",
+    "radix-ui": "^1.4.3",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwind-merge": "latest",
+    "tw-animate-css": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "bun-plugin-tailwind": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest"
+  }
+}
