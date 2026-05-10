@@ -123,10 +123,20 @@ syokan/
 ```bash
 mise install     # Bun を mise.toml の固定バージョンで導入
 bun install
-bun run dev      # Bun.serve + HMR
+bun run dev      # Bun.serve + HMR (http://localhost:5173)
 ```
 
 ブラウザで `http://localhost:5173` を開く。
+
+### portless で起動 (推奨)
+
+[portless](https://github.com/vercel-labs/portless) を使うと named `.localhost` URL でアクセスでき、port 番号衝突や複数 dev server の混乱を避けられる。
+
+```bash
+bun run dev:portless   # https://syokan.localhost
+```
+
+初回は HTTPS proxy 起動で sudo (port 443) と CA 信頼ストア登録が走る。proxy はバックグラウンド daemon として動き続けるので停止は `portless proxy stop`。bypass したい場合は `PORTLESS=0 bun run dev:portless`。
 
 ## 技術スタック
 
