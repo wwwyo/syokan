@@ -136,7 +136,7 @@ bun run dev      # Bun.serve + HMR (http://localhost:5173)
 bun run dev:portless   # https://syokan.localhost (app は port 5173)
 ```
 
-`dev:portless` は `PORTLESS_APP_PORT=5173` で app の port を固定しているので、`bun run dev` と同じ 5173 番。bookmark / CORS / `.env` の URL は両方の起動経路で互換。ただし port を共有するため **`dev` と `dev:portless` の同時起動はできない**（先勝ち）。
+`dev:portless` は `--app-port 5173` で app の port を固定しているので、`bun run dev` と同じ 5173 番。bookmark / CORS / `.env` の URL は両方の起動経路で互換。ただし port を共有するため **`dev` と `dev:portless` の同時起動はできない**（先勝ち）。
 
 初回は HTTPS proxy 起動で sudo (port 443) と CA 信頼ストア登録が走る。proxy はバックグラウンド daemon として常駐し、停止は `portless proxy stop`。bypass したい場合は `PORTLESS=0 bun run dev:portless`。
 
