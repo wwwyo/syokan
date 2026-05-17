@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "portless run --app-port 5173 bun --hot server/index.ts",
     "start": "NODE_ENV=production bun server/index.ts",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
