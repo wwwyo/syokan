@@ -3,13 +3,15 @@ import type { Item } from "./catalog";
 
 export const CURRENT_SCHEMA_VERSION = 1 as const;
 
+// metadata 本体は strict (top-level に予約外 field を生やさない PRD 方針)。
+// 一方 source の内側は loose にして label 以外 (url / fetchedAt 等) の後付けを
+// migration なしで受け入れる。PRD #3 を一段緩めた判断 (C3=2)。
 export const snapshotMetadataSchema = z
   .object({
     source: z
       .object({
         label: z.string().min(1),
       })
-      .strict()
       .optional(),
   })
   .strict();

@@ -91,6 +91,23 @@ describe("snapshot envelope", () => {
     expect(result.success).toBe(false);
   });
 
+  test("accepts unknown fields under metadata.source (loose for future expansion)", () => {
+    const result = envelopeSchema.safeParse({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: "abc",
+      root: baseRoot,
+      createdAt: "2026-05-10T12:00:00Z",
+      metadata: {
+        source: {
+          label: "rss-daily",
+          url: "https://example.com/feed",
+          fetchedAt: "2026-05-10T11:00:00Z",
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
   test("rejects unknown fields on envelope (no silent strip)", () => {
     const result = envelopeSchema.safeParse({
       schemaVersion: CURRENT_SCHEMA_VERSION,
