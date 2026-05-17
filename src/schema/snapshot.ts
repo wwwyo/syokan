@@ -26,12 +26,14 @@ export type SnapshotEnvelope = {
 };
 
 export function createSnapshotEnvelopeSchema(itemSchema: z.ZodType<Item>) {
-  return z.object({
-    schemaVersion: z.literal(CURRENT_SCHEMA_VERSION),
-    id: z.string().min(1),
-    title: z.string().min(1).optional(),
-    root: itemSchema,
-    createdAt: z.iso.datetime(),
-    metadata: snapshotMetadataSchema.optional(),
-  });
+  return z
+    .object({
+      schemaVersion: z.literal(CURRENT_SCHEMA_VERSION),
+      id: z.string().min(1),
+      title: z.string().min(1).optional(),
+      root: itemSchema,
+      createdAt: z.iso.datetime(),
+      metadata: snapshotMetadataSchema.optional(),
+    })
+    .strict();
 }

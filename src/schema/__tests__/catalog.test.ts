@@ -120,4 +120,14 @@ describe("createCatalog", () => {
     const parsed = itemSchema.parse({ type: "Text", props: { content: "hi" } });
     expect(parsed.type).toBe("Text");
   });
+
+  test("rejects unknown fields on item node (no silent strip)", () => {
+    const { itemSchema } = createCatalog([TextSpec]);
+    const result = itemSchema.safeParse({
+      type: "Text",
+      props: { content: "hi" },
+      childen: [],
+    });
+    expect(result.success).toBe(false);
+  });
 });

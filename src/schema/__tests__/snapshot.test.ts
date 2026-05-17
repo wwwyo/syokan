@@ -92,6 +92,17 @@ describe("snapshot envelope", () => {
     expect(result.success).toBe(false);
   });
 
+  test("rejects unknown fields on envelope (no silent strip)", () => {
+    const result = envelopeSchema.safeParse({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: "abc",
+      root: baseRoot,
+      createdAt: "2026-05-10T12:00:00Z",
+      extraneous: "field",
+    });
+    expect(result.success).toBe(false);
+  });
+
   test("rejects invalid root item via catalog", () => {
     const result = envelopeSchema.safeParse({
       schemaVersion: CURRENT_SCHEMA_VERSION,

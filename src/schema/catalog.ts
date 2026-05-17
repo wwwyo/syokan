@@ -6,14 +6,18 @@ export type Item = {
   children?: Item[];
 };
 
-export type ComponentSpec<TType extends string = string, TProps = unknown> = {
+export type ComponentSpec<
+  TType extends string = string,
+  TProps extends Record<string, unknown> = Record<string, unknown>,
+> = {
   type: TType;
   propsSchema: z.ZodType<TProps>;
 };
 
-export function defineComponent<TType extends string, TProps>(
-  spec: ComponentSpec<TType, TProps>,
-): ComponentSpec<TType, TProps> {
+export function defineComponent<
+  TType extends string,
+  TProps extends Record<string, unknown>,
+>(spec: ComponentSpec<TType, TProps>): ComponentSpec<TType, TProps> {
   return spec;
 }
 
@@ -46,11 +50,13 @@ function buildUnion(
   itemSchema: z.ZodType<Item>,
 ): z.ZodType<Item> {
   const variants = specs.map((spec) =>
-    z.object({
-      type: z.literal(spec.type),
-      props: spec.propsSchema,
-      children: z.array(itemSchema).optional(),
-    }),
+    z
+      .object({
+        type: z.literal(spec.type),
+        props: spec.propsSchema,
+        children: z.array(itemSchema).optional(),
+      })
+      .strict(),
   );
   if (variants.length === 1) {
     return variants[0] as unknown as z.ZodType<Item>;
