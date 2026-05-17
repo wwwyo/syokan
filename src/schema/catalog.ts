@@ -4,6 +4,7 @@ export type Item = {
   type: string;
   props: Record<string, unknown>;
   children?: Item[];
+  key?: string;
 };
 
 export type ComponentSpec<
@@ -55,6 +56,7 @@ function buildUnion(
         type: z.literal(spec.type),
         props: spec.propsSchema,
         children: z.array(itemSchema).optional(),
+        key: z.string().min(1).optional(),
       })
       .strict(),
   );

@@ -13,7 +13,7 @@ export function Render({ item }: RenderProps): ReactElement {
     return <UnknownComponent type={item.type} />;
   }
   const childElements = item.children?.map((child, index) => (
-    <Render key={index} item={child} />
+    <Render key={child.key ?? index} item={child} />
   ));
   return <Component {...item.props}>{childElements}</Component>;
 }

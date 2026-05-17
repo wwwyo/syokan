@@ -127,4 +127,28 @@ describe("createCatalog", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  test("accepts optional key on item node and exposes it on the parsed value", () => {
+    const { itemSchema } = createCatalog([TextSpec, ContainerSpec]);
+    const parsed = itemSchema.parse({
+      type: "Container",
+      props: {},
+      key: "header",
+      children: [
+        { type: "Text", props: { content: "hi" }, key: "greeting" },
+      ],
+    });
+    expect(parsed.key).toBe("header");
+    expect(parsed.children?.[0]?.key).toBe("greeting");
+  });
+
+  test("rejects empty string key (must satisfy min(1))", () => {
+    const { itemSchema } = createCatalog([TextSpec]);
+    const result = itemSchema.safeParse({
+      type: "Text",
+      props: { content: "hi" },
+      key: "",
+    });
+    expect(result.success).toBe(false);
+  });
 });

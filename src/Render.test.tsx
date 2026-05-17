@@ -85,4 +85,21 @@ describe("Render", () => {
     const html = renderToString(createElement(Render, { item }));
     expect(html).toContain("Nope");
   });
+
+  test("uses item.key as React key for children when provided, falls back to index otherwise", () => {
+    const item: Item = {
+      type: "Page",
+      props: {},
+      children: [
+        { type: "Section", props: { heading: "A" }, key: "intro" },
+        { type: "Section", props: { heading: "B" } },
+      ],
+    };
+    const element = Render({ item });
+    const rendered = (element.props as { children?: ReactElement[] }).children;
+    expect(rendered).toBeDefined();
+    expect(rendered).toHaveLength(2);
+    expect(rendered?.[0]?.key).toBe("intro");
+    expect(rendered?.[1]?.key).toBe("1");
+  });
 });
