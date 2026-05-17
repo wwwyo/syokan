@@ -12,8 +12,8 @@ export function Render({ item }: RenderProps): ReactElement {
   if (!Component) {
     return <UnknownComponent type={item.type} />;
   }
-  const renderedChildren = item.children?.map((child, index) => (
+  const childElements = item.children?.map((child, index) => (
     <Render key={index} item={child} />
   ));
-  return <Component {...item.props}>{renderedChildren}</Component>;
+  return <Component {...item.props}>{childElements}</Component>;
 }

@@ -1,8 +1,34 @@
 import type { ComponentType, ReactNode } from "react";
 import { z } from "zod";
-import { type Catalog, createCatalog, defineComponent } from "@/schema";
+import { type ComponentSpec, createCatalog, defineComponent } from "@/schema";
 import { Page } from "./components/Page";
 import { Section } from "./components/Section";
+
+export type ItemComponent = ComponentType<
+  Record<string, unknown> & { children?: ReactNode }
+>;
+
+type ViewComponentEntry<
+  TType extends string = string,
+  TProps extends Record<string, unknown> = Record<string, unknown>,
+> = {
+  spec: ComponentSpec<TType, TProps>;
+  component: ComponentType<TProps & { children?: ReactNode }>;
+};
+
+function defineViewComponent<
+  TType extends string,
+  TProps extends Record<string, unknown>,
+>(
+  type: TType,
+  propsSchema: z.ZodType<TProps>,
+  component: ComponentType<TProps & { children?: ReactNode }>,
+): ViewComponentEntry<TType, TProps> {
+  return {
+    spec: defineComponent({ type, propsSchema }),
+    component,
+  };
+}
 
 const pagePropsSchema = z
   .object({
@@ -16,25 +42,16 @@ const sectionPropsSchema = z
   })
   .strict();
 
-export const PageSpec = defineComponent({
-  type: "Page",
-  propsSchema: pagePropsSchema,
-});
+const PageEntry = defineViewComponent("Page", pagePropsSchema, Page);
+const SectionEntry = defineViewComponent("Section", sectionPropsSchema, Section);
 
-export const SectionSpec = defineComponent({
-  type: "Section",
-  propsSchema: sectionPropsSchema,
-});
+const entries: readonly ViewComponentEntry[] = [PageEntry, SectionEntry];
 
-const catalog: Catalog = createCatalog([PageSpec, SectionSpec]);
+export const PageSpec = PageEntry.spec;
+export const SectionSpec = SectionEntry.spec;
 
-export const { itemSchema, registry: schemaRegistry } = catalog;
+export const { itemSchema } = createCatalog(entries.map((e) => e.spec));
 
-export type ItemComponent = ComponentType<
-  Record<string, unknown> & { children?: ReactNode }
->;
-
-export const components: ReadonlyMap<string, ItemComponent> = new Map([
-  ["Page", Page as unknown as ItemComponent],
-  ["Section", Section as unknown as ItemComponent],
-]);
+export const components: ReadonlyMap<string, ItemComponent> = new Map(
+  entries.map((e) => [e.spec.type, e.component]),
+);

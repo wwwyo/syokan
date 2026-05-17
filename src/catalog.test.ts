@@ -1,11 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type ItemComponent,
-  PageSpec,
-  SectionSpec,
-  components,
-  itemSchema,
-} from "./catalog";
+import { PageSpec, SectionSpec, components, itemSchema } from "./catalog";
 import { Page } from "./components/Page";
 import { Section } from "./components/Section";
 
@@ -34,8 +28,8 @@ describe("catalog", () => {
   });
 
   test("components map exposes registered React components by type", () => {
-    expect(components.get("Page")).toBe(Page as unknown as ItemComponent);
-    expect(components.get("Section")).toBe(Section as unknown as ItemComponent);
+    expect(components.get("Page")).toBe(Page);
+    expect(components.get("Section")).toBe(Section);
     expect(components.get("Missing")).toBeUndefined();
     expect(components.size).toBe(2);
   });

@@ -13,9 +13,11 @@ export function Page({ title, children }: PageProps) {
     >
       <div className="mx-auto max-w-2xl px-6 py-12">
         {title ? (
-          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="mb-6 text-3xl font-semibold tracking-tight">
+            {title}
+          </h1>
         ) : null}
-        <div className={title ? "mt-6 space-y-8" : "space-y-8"}>{children}</div>
+        <div className="space-y-8">{children}</div>
       </div>
     </main>
   );
