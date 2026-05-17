@@ -1,12 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
+import { createCatalog, defineComponent } from "./catalog";
+import { formatValidationError } from "./error";
 import {
   CURRENT_SCHEMA_VERSION,
-  createCatalog,
   createSnapshotEnvelopeSchema,
-  defineComponent,
-  formatValidationError,
-} from "@/schema";
+} from "./snapshot";
 
 const TextSpec = defineComponent({
   type: "Text",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { formatValidationError } from "@/schema";
+import { formatValidationError } from "./error";
 
 describe("formatValidationError", () => {
   test("returns one issue per zod issue with path and message", () => {

@@ -1,10 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import {
-  createCatalog,
-  defineComponent,
-  formatValidationError,
-} from "@/schema";
+import { createCatalog, defineComponent } from "./catalog";
+import { formatValidationError } from "./error";
 
 const TextSpec = defineComponent({
   type: "Text",
