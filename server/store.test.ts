@@ -134,6 +134,17 @@ describe("SnapshotStore", () => {
     expect(items.length).toBe(10);
   });
 
+  test("reclaims a lock held by a dead process (crash recovery)", async () => {
+    // 存在しない pid の lock file を残しておく (= crash した owner)
+    const { writeFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    await writeFile(join(dir, "snapshots.json.lock"), "999999:stale", "utf8");
+    // owner が死んでいるので reclaim して create が成功するはず
+    const env = await store.create({ root: sampleRoot });
+    expect(env.id).toMatch(/[0-9a-f-]{36}/);
+    expect((await store.get(env.id))?.id).toBe(env.id);
+  });
+
   test("concurrent creates across separate instances all persist (cross-process lock)", async () => {
     const a = new SnapshotStore(dir);
     const b = new SnapshotStore(dir);

@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   CURRENT_SCHEMA_VERSION,
@@ -27,7 +27,6 @@ export type ViewSummary = {
 };
 
 const LOCK_TIMEOUT_MS = 5_000;
-const LOCK_STALE_MS = 10_000;
 
 export class SnapshotStore {
   private readonly file: string;
@@ -43,27 +42,30 @@ export class SnapshotStore {
 
   // クロスプロセス排他。lazy-spawn は同じ data dir を指す別 server プロセスを
   // 起こしうるので、in-process mutex だけだと別プロセス間で lost update する。
-  // O_EXCL な lock file を mutex に使い、stale (>10s) は奪う。
+  // O_EXCL な lock file を mutex に使う。
+  //
+  // staleness は「経過時間」ではなく「owner プロセスの生存」で判定する。
+  // 経過時間で奪うと、遅い writer (大きな書き込み / swap) のロックを critical
+  // section 中に奪ってしまい lost update が再発する。owner が生きている間は
+  // 絶対に奪わず、crash (pid が存在しない) のときだけ reclaim する。
+  // lock file には `pid:token` を書き、release / reclaim は内容一致時のみ rm
+  // して、他プロセスのロックを消さない。
   private async withLock<T>(fn: () => Promise<T>): Promise<T> {
     await mkdir(dirname(this.file), { recursive: true });
+    const content = `${process.pid}:${crypto.randomUUID()}`;
     const deadline = Date.now() + LOCK_TIMEOUT_MS;
     for (;;) {
       try {
         const handle = await open(this.lockFile, "wx");
-        await handle.close();
+        try {
+          await handle.writeFile(content);
+        } finally {
+          await handle.close();
+        }
         break;
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-        try {
-          const st = await stat(this.lockFile);
-          if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-            await rm(this.lockFile, { force: true });
-            continue;
-          }
-        } catch {
-          // lock が消えた → 取得を再試行
-          continue;
-        }
+        if (await this.reclaimIfDead()) continue;
         if (Date.now() > deadline) {
           throw new Error("SnapshotStore: lock acquisition timed out");
         }
@@ -75,7 +77,52 @@ export class SnapshotStore {
     try {
       return await fn();
     } finally {
-      await rm(this.lockFile, { force: true });
+      await this.releaseLock(content);
+    }
+  }
+
+  // owner プロセスが死んでいる lock だけを reclaim する。返り値は「取得を
+  // 再試行してよいか」(消した / 既に消えていた = true、生存中 = false)。
+  private async reclaimIfDead(): Promise<boolean> {
+    let raw: string;
+    try {
+      raw = await readFile(this.lockFile, "utf8");
+    } catch {
+      return true; // 既に消えた → 取得を再試行
+    }
+    const pid = Number.parseInt(raw.split(":")[0] ?? "", 10);
+    if (Number.isFinite(pid) && pid > 0 && this.isProcessAlive(pid)) {
+      return false; // owner 生存 → 奪わず待つ
+    }
+    // crash した owner (or 不正な内容)。読んだ内容と一致するときだけ消す
+    // (その間に生きたプロセスが取り直していたら消さない)。
+    try {
+      if ((await readFile(this.lockFile, "utf8")) === raw) {
+        await rm(this.lockFile, { force: true });
+      }
+    } catch {
+      // 既に消えた
+    }
+    return true;
+  }
+
+  private isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (err) {
+      // EPERM = 存在するが権限なし → alive 扱い (奪わない)
+      return (err as NodeJS.ErrnoException).code === "EPERM";
+    }
+  }
+
+  private async releaseLock(content: string): Promise<void> {
+    try {
+      if ((await readFile(this.lockFile, "utf8")) === content) {
+        await rm(this.lockFile, { force: true });
+      }
+    } catch {
+      // 既に無い / 読めない → 何もしない
     }
   }
 
