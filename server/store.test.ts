@@ -122,4 +122,17 @@ describe("SnapshotStore", () => {
     const items = await store.list();
     expect(items.length).toBe(10);
   });
+
+  test("concurrent creates across separate instances all persist (cross-process lock)", async () => {
+    const a = new SnapshotStore(dir);
+    const b = new SnapshotStore(dir);
+    await Promise.all([
+      a.create({ root: sampleRoot }),
+      b.create({ root: sampleRoot }),
+      a.create({ root: sampleRoot }),
+      b.create({ root: sampleRoot }),
+    ]);
+    const items = await new SnapshotStore(dir).list();
+    expect(items.length).toBe(4);
+  });
 });
