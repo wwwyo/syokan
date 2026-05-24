@@ -134,6 +134,22 @@ describe("api routes", () => {
     expect(res.status).toBe(404);
   });
 
+  test("GET /api/views/:id returns 404 for prototype-chain ids (no proto leak)", async () => {
+    for (const id of ["constructor", "toString", "__proto__"]) {
+      const res = await api.getView(
+        makeParamRequest(`/api/views/${id}`, { id }) as never,
+      );
+      expect(res.status).toBe(404);
+    }
+  });
+
+  test("DELETE /api/views/:id returns 404 for prototype-chain ids", async () => {
+    const res = await api.deleteView(
+      makeParamRequest("/api/views/constructor", { id: "constructor" }) as never,
+    );
+    expect(res.status).toBe(404);
+  });
+
   test("server restart simulation: new store sees previously-created snapshots", async () => {
     const post = await api.postItems(
       makeRequest("/api/items", {

@@ -79,6 +79,17 @@ describe("SnapshotStore", () => {
     expect(ok).toBe(false);
   });
 
+  test("get does not return Object.prototype members for crafted ids", async () => {
+    for (const id of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+      expect(await store.get(id)).toBeUndefined();
+    }
+  });
+
+  test("delete returns false for prototype-chain ids and does not rewrite", async () => {
+    expect(await store.delete("constructor")).toBe(false);
+    expect(await store.delete("__proto__")).toBe(false);
+  });
+
   test("idempotencyKey replays the same id on repeated create", async () => {
     const first = await store.create({
       root: sampleRoot,

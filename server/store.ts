@@ -81,13 +81,26 @@ export class SnapshotStore {
 
   // 都度 disk から読む。in-memory cache を持たないので、別プロセス
   // (lazy-spawn した server / 別の dev server) が書いた変更も常に反映される。
+  //
+  // map は null-prototype 化する。id は URL パス由来 (attacker-controlled) で、
+  // plain object だと `snapshots["constructor"]` 等が Object.prototype の
+  // 関数を返して `!env` ガードをすり抜け、`"toString" in snapshots` が true に
+  // なる。null-proto にすると lookup / `in` が own key のみを見るので、
+  // get / delete / idempotency の全 lookup がまとめて安全になる。
   private async read(): Promise<StoreFile> {
     try {
       const text = await readFile(this.file, "utf8");
-      return JSON.parse(text) as StoreFile;
+      const parsed = JSON.parse(text) as Partial<StoreFile>;
+      return {
+        snapshots: Object.assign(Object.create(null), parsed.snapshots),
+        idempotency: Object.assign(Object.create(null), parsed.idempotency),
+      };
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-      return { snapshots: {}, idempotency: {} };
+      return {
+        snapshots: Object.create(null),
+        idempotency: Object.create(null),
+      };
     }
   }
 
