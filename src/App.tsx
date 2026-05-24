@@ -1,19 +1,20 @@
-import { Button } from "@/components/ui/button";
+import { Home } from "./Home";
+import { ViewPageContainer } from "./ViewPageContainer";
+
+const VIEW_PATH = /^\/views\/([^/]+)\/?$/;
+
+export function matchViewId(pathname: string): string | null {
+  const match = VIEW_PATH.exec(pathname);
+  if (!match?.[1]) return null;
+  return decodeURIComponent(match[1]);
+}
 
 export function App() {
-  return (
-    <main className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-2xl px-6 py-16">
-        <h1 className="text-3xl font-semibold tracking-tight">syokan</h1>
-        <p className="mt-3 text-muted-foreground">
-          抄して観るための view layer。setup placeholder.
-        </p>
-        <div className="mt-6 flex gap-2">
-          <Button>Primary</Button>
-          <Button variant="secondary">Secondary</Button>
-          <Button variant="outline">Outline</Button>
-        </div>
-      </div>
-    </main>
-  );
+  const pathname =
+    typeof window === "undefined" ? "/" : window.location.pathname;
+  const viewId = matchViewId(pathname);
+  if (viewId !== null) {
+    return <ViewPageContainer id={viewId} />;
+  }
+  return <Home />;
 }

@@ -91,7 +91,7 @@ describe("snapshot envelope", () => {
     expect(result.success).toBe(false);
   });
 
-  test("accepts unknown fields under metadata.source (loose for future expansion)", () => {
+  test("preserves unknown fields under metadata.source (loose for future expansion)", () => {
     const result = envelopeSchema.safeParse({
       schemaVersion: CURRENT_SCHEMA_VERSION,
       id: "abc",
@@ -106,6 +106,12 @@ describe("snapshot envelope", () => {
       },
     });
     expect(result.success).toBe(true);
+    if (result.success) {
+      // loose なので strip されず保持される (silently 落とさない)
+      const source = result.data.metadata?.source as Record<string, unknown>;
+      expect(source?.url).toBe("https://example.com/feed");
+      expect(source?.fetchedAt).toBe("2026-05-10T11:00:00Z");
+    }
   });
 
   test("rejects unknown fields on envelope (no silent strip)", () => {

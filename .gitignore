@@ -27,6 +27,7 @@ yarn-error.log*
 
 # Ephemeral state (syokan は data を持たない設計、念のため除外)
 .syokan-state/
+data/
 
 # TypeScript
 *.tsbuildinfo

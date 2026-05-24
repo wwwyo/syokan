@@ -12,6 +12,9 @@ export const snapshotMetadataSchema = z
       .object({
         label: z.string().min(1),
       })
+      // .loose() で label 以外 (url / fetchedAt 等) の後付け field を strip せず保持する。
+      // plain object だと unknown key は silently strip され、保存内容が欠落する。
+      .loose()
       .optional(),
   })
   .strict();

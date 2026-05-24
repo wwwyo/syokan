@@ -79,3 +79,19 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+/* Shiki dual-theme: defaultColor:false で出力した CSS 変数を light/dark で切り替える */
+.shiki {
+  background-color: var(--shiki-light-bg);
+}
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+}
+.dark .shiki {
+  background-color: var(--shiki-dark-bg);
+}
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark);
+}
