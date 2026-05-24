@@ -114,22 +114,24 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
             <del className="text-muted-foreground">{children}</del>
           ),
           table: ({ children }) => (
-            <div className="my-4 overflow-x-auto">
+            <div className="my-4 overflow-x-auto rounded-lg border border-muted-foreground/25">
               <table className="w-full border-collapse text-sm">
                 {children}
               </table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="border-b border-border">{children}</thead>
+            <thead className="bg-muted">{children}</thead>
           ),
           th: ({ children }) => (
-            <th className="border border-border px-3 py-2 text-left font-semibold">
+            <th className="border border-muted-foreground/25 px-3 py-2 text-left font-semibold">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-border px-3 py-2">{children}</td>
+            <td className="border border-muted-foreground/25 px-3 py-2">
+              {children}
+            </td>
           ),
           input: ({ checked, type }) =>
             type === "checkbox" ? (

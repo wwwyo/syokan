@@ -80,16 +80,15 @@
   }
 }
 
-/* Shiki dual-theme: defaultColor:false で出力した CSS 変数を light/dark で切り替える */
+/* Shiki dual-theme: defaultColor:false で出力した CSS 変数を light/dark で切り替える。
+   背景は透明にして CodeBlock wrapper 側の面 (bg-muted + border) に委ねる。
+   github-light の bg は #fff でページ背景と同化し境界が消えるため。 */
 .shiki {
-  background-color: var(--shiki-light-bg);
+  background: transparent;
 }
 .shiki,
 .shiki span {
   color: var(--shiki-light);
-}
-.dark .shiki {
-  background-color: var(--shiki-dark-bg);
 }
 .dark .shiki,
 .dark .shiki span {

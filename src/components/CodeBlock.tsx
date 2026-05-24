@@ -32,7 +32,7 @@ export function CodeBlock({ code, lang }: CodeBlockProps) {
         data-slot="codeblock"
         // biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki が生成した信頼済み HTML
         dangerouslySetInnerHTML={{ __html: html }}
-        className="my-4 overflow-x-auto rounded-lg text-sm leading-6 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-4"
+        className="my-4 overflow-hidden rounded-lg border border-border bg-muted text-sm leading-6 [&_pre]:overflow-x-auto [&_pre]:bg-transparent [&_pre]:p-4"
       />
     );
   }
