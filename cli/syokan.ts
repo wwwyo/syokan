@@ -24,7 +24,7 @@ export type CliDeps = {
   // lazy-spawn 用: server を detached で起動する
   spawnServer: () => SpawnResult;
   // `syokan stop` 用: lazy-spawn した server を停止する
-  stopServer: () => StopResult;
+  stopServer: () => StopResult | Promise<StopResult>;
   // readiness poll の待機 (test では即時 resolve を注入する)
   sleep: (ms: number) => Promise<void>;
 };
@@ -178,8 +178,8 @@ export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
   return postWithServer(deps, payload);
 }
 
-export function runStop(deps: CliDeps): CliResult {
-  const { stopped, pid } = deps.stopServer();
+export async function runStop(deps: CliDeps): Promise<CliResult> {
+  const { stopped, pid } = await deps.stopServer();
   if (stopped) {
     deps.stderr(`syokan: stopped server (pid ${pid})`);
   } else {
@@ -272,7 +272,7 @@ function realSpawnServer(baseUrl: string): SpawnResult {
   return { pid: proc.pid };
 }
 
-function realStopServer(baseUrl: string): StopResult {
+async function realStopServer(baseUrl: string): Promise<StopResult> {
   const port = portFromBaseUrl(baseUrl);
   const file = pidFilePath(port);
   if (!existsSync(file)) return { stopped: false };
@@ -285,6 +285,20 @@ function realStopServer(baseUrl: string): StopResult {
     return { stopped: false };
   }
   if (typeof pid !== "number") {
+    rmSync(file, { force: true });
+    return { stopped: false };
+  }
+  // PID 再利用で無関係なプロセスを kill しないよう、記録した baseUrl で
+  // syokan server が実際に応答しているときだけ kill する。落ちていれば
+  // pidfile を掃除するだけ (= nothing-to-stop) にして誤 kill を避ける。
+  let healthy = false;
+  try {
+    const res = await fetch(`${baseUrl}/api/health`);
+    healthy = res.ok;
+  } catch {
+    healthy = false;
+  }
+  if (!healthy) {
     rmSync(file, { force: true });
     return { stopped: false };
   }

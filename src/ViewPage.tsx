@@ -98,14 +98,16 @@ export function ViewPage({ state, onDelete }: ViewPageProps) {
               </span>
             ) : null}
           </div>
-          <button
-            type="button"
-            data-slot="view-delete"
-            className="rounded-md border border-border px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
-            onClick={onDelete}
-          >
-            Delete
-          </button>
+          {onDelete ? (
+            <button
+              type="button"
+              data-slot="view-delete"
+              className="rounded-md border border-border px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
+              onClick={onDelete}
+            >
+              Delete
+            </button>
+          ) : null}
         </div>
       </header>
       <Render item={env.root} />

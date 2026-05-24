@@ -25,4 +25,9 @@ describe("matchViewId", () => {
   test("returns null for non-view paths", () => {
     expect(matchViewId("/api/views/abc")).toBeNull();
   });
+
+  test("returns null for malformed percent-encoding (no URIError crash)", () => {
+    expect(matchViewId("/views/%E0%A4")).toBeNull();
+    expect(matchViewId("/views/%")).toBeNull();
+  });
 });

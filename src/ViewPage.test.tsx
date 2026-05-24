@@ -8,6 +8,12 @@ function render(state: ViewPageState): string {
   return renderToString(createElement(ViewPage, { state }));
 }
 
+function renderWithDelete(state: ViewPageState): string {
+  return renderToString(
+    createElement(ViewPage, { state, onDelete: () => {} }),
+  );
+}
+
 const envelope: SnapshotEnvelope = {
   schemaVersion: 1,
   id: "abc-123",
@@ -49,10 +55,15 @@ describe("ViewPage", () => {
     expect(html).not.toContain("view-source");
   });
 
-  test("shows a delete button on the view page", () => {
-    const html = render({ kind: "found", envelope });
+  test("shows a delete button when onDelete is provided", () => {
+    const html = renderWithDelete({ kind: "found", envelope });
     expect(html).toContain("view-delete");
     expect(html).toContain("Delete");
+  });
+
+  test("omits the delete button when no onDelete handler is given", () => {
+    const html = render({ kind: "found", envelope });
+    expect(html).not.toContain("view-delete");
   });
 
   test("not-found state shows 404 and the id", () => {
