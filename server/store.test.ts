@@ -1,0 +1,160 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Item } from "@/schema";
+import { SnapshotStore } from "./store";
+
+const sampleRoot: Item = { type: "Page", props: { title: "T" } };
+
+describe("SnapshotStore", () => {
+  let dir: string;
+  let store: SnapshotStore;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "syokan-store-"));
+    store = new SnapshotStore(dir);
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("create assigns id, createdAt and persists root", async () => {
+    const env = await store.create({ root: sampleRoot, title: "Sample" });
+    expect(env.id).toMatch(/[0-9a-f-]{36}/);
+    expect(env.title).toBe("Sample");
+    expect(env.root.type).toBe("Page");
+    expect(env.schemaVersion).toBe(1);
+    expect(env.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test("get returns the stored envelope by id", async () => {
+    const env = await store.create({ root: sampleRoot });
+    const got = await store.get(env.id);
+    expect(got?.id).toBe(env.id);
+  });
+
+  test("get returns undefined for unknown id", async () => {
+    const got = await store.get("missing");
+    expect(got).toBeUndefined();
+  });
+
+  test("survives a 'restart' (fresh store instance over the same file)", async () => {
+    const env = await store.create({ root: sampleRoot });
+    const next = new SnapshotStore(dir);
+    const got = await next.get(env.id);
+    expect(got?.id).toBe(env.id);
+  });
+
+  test("list returns id/title/createdAt and optional source.label", async () => {
+    const a = await store.create({ root: sampleRoot, title: "A" });
+    const b = await store.create({
+      root: sampleRoot,
+      title: "B",
+      metadata: { source: { label: "rss-daily" } },
+    });
+    const items = await store.list();
+    expect(items.length).toBe(2);
+    const found = items.find((i) => i.id === b.id);
+    expect(found?.source?.label).toBe("rss-daily");
+    expect(items.some((i) => i.id === a.id)).toBe(true);
+  });
+
+  test("list returns empty array when store is empty", async () => {
+    const items = await store.list();
+    expect(items).toEqual([]);
+  });
+
+  test("delete removes the snapshot and returns true; further get is undefined", async () => {
+    const env = await store.create({ root: sampleRoot });
+    const ok = await store.delete(env.id);
+    expect(ok).toBe(true);
+    const got = await store.get(env.id);
+    expect(got).toBeUndefined();
+  });
+
+  test("delete returns false for unknown id", async () => {
+    const ok = await store.delete("missing");
+    expect(ok).toBe(false);
+  });
+
+  test("get does not return Object.prototype members for crafted ids", async () => {
+    for (const id of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+      expect(await store.get(id)).toBeUndefined();
+    }
+  });
+
+  test("delete returns false for prototype-chain ids and does not rewrite", async () => {
+    expect(await store.delete("constructor")).toBe(false);
+    expect(await store.delete("__proto__")).toBe(false);
+  });
+
+  test("idempotencyKey replays the same id on repeated create", async () => {
+    const first = await store.create({
+      root: sampleRoot,
+      idempotencyKey: "rss-2026-05-21",
+    });
+    const second = await store.create({
+      root: sampleRoot,
+      idempotencyKey: "rss-2026-05-21",
+    });
+    expect(second.id).toBe(first.id);
+  });
+
+  test("different idempotencyKeys produce different ids", async () => {
+    const a = await store.create({ root: sampleRoot, idempotencyKey: "k1" });
+    const b = await store.create({ root: sampleRoot, idempotencyKey: "k2" });
+    expect(a.id).not.toBe(b.id);
+  });
+
+  test("without idempotencyKey every create produces a new id", async () => {
+    const a = await store.create({ root: sampleRoot });
+    const b = await store.create({ root: sampleRoot });
+    expect(a.id).not.toBe(b.id);
+  });
+
+  test("concurrent creates with the same idempotencyKey collapse to one snapshot", async () => {
+    const [a, b, c] = await Promise.all([
+      store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
+      store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
+      store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
+    ]);
+    expect(b?.id).toBe(a?.id);
+    expect(c?.id).toBe(a?.id);
+    const items = await store.list();
+    expect(items.length).toBe(1);
+  });
+
+  test("concurrent distinct creates do not lose updates (serialized writes)", async () => {
+    await Promise.all(
+      Array.from({ length: 10 }, () => store.create({ root: sampleRoot })),
+    );
+    const items = await store.list();
+    expect(items.length).toBe(10);
+  });
+
+  test("reclaims a lock held by a dead process (crash recovery)", async () => {
+    // 存在しない pid の lock file を残しておく (= crash した owner)
+    const { writeFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    await writeFile(join(dir, "snapshots.json.lock"), "999999:stale", "utf8");
+    // owner が死んでいるので reclaim して create が成功するはず
+    const env = await store.create({ root: sampleRoot });
+    expect(env.id).toMatch(/[0-9a-f-]{36}/);
+    expect((await store.get(env.id))?.id).toBe(env.id);
+  });
+
+  test("concurrent creates across separate instances all persist (cross-process lock)", async () => {
+    const a = new SnapshotStore(dir);
+    const b = new SnapshotStore(dir);
+    await Promise.all([
+      a.create({ root: sampleRoot }),
+      b.create({ root: sampleRoot }),
+      a.create({ root: sampleRoot }),
+      b.create({ root: sampleRoot }),
+    ]);
+    const items = await new SnapshotStore(dir).list();
+    expect(items.length).toBe(4);
+  });
+});

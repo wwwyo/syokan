@@ -23,6 +23,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "server", "index.html"],
+  "include": ["src", "server", "cli", "index.html"],
   "exclude": ["node_modules", "dist", "build"]
 }

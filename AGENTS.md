@@ -99,15 +99,26 @@ LLM に「JSXを書かせる」のではなく、**schema を満たす JSON tree
 syokan/
 ├── index.html               # Bun.serve の HTML import entry
 ├── src/
-│   ├── catalog.ts           # component catalog 定義
 │   ├── Render.tsx           # JSON tree → React 再帰 renderer
 │   ├── frontend.tsx         # createRoot mount
 │   ├── App.tsx
 │   ├── styles.css           # Tailwind v4 + shadcn CSS variables
-│   ├── lib/utils.ts         # cn() (clsx + tailwind-merge)
-│   └── components/
-│       ├── ui/              # shadcn primitives (CLI 経由で生成)
-│       └── ...              # composite component (ArticleCard / MarkdownDoc 等)
+│   ├── lib/                 # utils layer: utils.ts (cn) / date.ts (formatDateTime) / shiki.ts
+│   ├── catalogs/            # ★ catalog 公開 component (LLM が JSON で投げられる type)
+│   │   ├── index.ts         #   registry: type 名 → (props schema, component) + itemSchema
+│   │   ├── ArticleCard/     #   各 component は <Name>/index.tsx + 同居 test/story
+│   │   │   ├── index.tsx
+│   │   │   ├── ArticleCard.test.tsx
+│   │   │   └── ArticleCard.stories.tsx  # Storybook (catalog の視覚レビュー用)
+│   │   ├── MarkdownDoc/     #   ...
+│   │   └── ...              #   Page / Section / ArticleList / PlainText
+│   └── components/          # catalog 非登録の UI (LLM が JSON で投げられない内部部品)
+│       ├── ui/              #   shadcn primitives (CLI 経由で生成・更新。Dir 化しない)
+│       ├── CodeBlock/       #   MarkdownDoc/PlainText の共有内部部品 (Shiki ハイライト)
+│       │   └── CopyButton/  #     CodeBlock 専用サブパーツは親 dir 配下にネスト
+│       ├── ViewHeader/      #   viewer chrome (snapshot メタ帯)
+│       └── UnknownComponent/ #  Render が未知 type に出すフォールバック
+├── .storybook/              # Storybook 設定 (main.ts / preview.tsx) — catalog レビュー基盤
 ├── server/
 │   └── index.ts             # Bun.serve({ routes }) — / は HTML import、/api/* はハンドラ
 ├── bunfig.toml              # bun-plugin-tailwind + install policy
@@ -117,6 +128,14 @@ syokan/
 ```
 
 クライアント側ルーティングは採用しない。`window.location.pathname` から id を抽出する単一ページで対応する (PRD `Technical Considerations` 参照)。
+
+### Component collocation
+
+component は `<Name>/index.tsx` に実装し、同じ dir に test (`<Name>.test.tsx`) と story (`<Name>.stories.tsx`) を同居させる。import は `@/components/CodeBlock` のように dir を指す (index.tsx に解決)。関連ファイルを 1 箇所に集め、refactor / 削除時の追従漏れを防ぐ。
+
+- **catalog 公開** (LLM が JSON で投げる type) は `catalogs/<Name>/`、**非公開の内部部品**は `components/<Name>/`
+- **内部専用サブパーツ** (その component からのみ使う部品) は親の dir 配下にネストする (例: `CodeBlock/CopyButton/`)。複数 component で共有するようになったら `components/` 直下へ昇格させる。スコープ = 置き場所
+- `components/ui/` は例外: shadcn が生成するフラットファイル群 (dir 化しない)
 
 ## セットアップ
 
@@ -130,7 +149,14 @@ bun run dev     # Bun.serve + HMR (https://syokan.localhost / http://localhost:5
 
 初回は HTTPS proxy 起動で sudo (port 443) と CA 信頼ストア登録が走る。proxy はバックグラウンド daemon として常駐し、停止は `bunx portless proxy stop`。proxy を経由せず raw bun で動かしたい場合は `PORTLESS=0 bun run dev` で bypass。
 
-## 技術スタック
+### Storybook (catalog のレビュー)
+
+```bash
+bun run storybook        # dev server (http://localhost:6006)
+bun run build-storybook  # 静的ビルド (storybook-static/、gitignore 済み)
+```
+
+catalog component を `<Name>/<Name>.stories.tsx` で story 化し、props の variant・edge case・dark/light を一覧でレビューする。`.storybook/preview.tsx` で `src/styles.css` を読み込み、toolbar から `.dark` class をトグルしてテーマ追従を確認できる。`.claude/launch.json` に `storybook` を登録済みなので preview 経由でも起動可能。
 
 - **Runtime / Bundler / HMR / TS 実行**: Bun (1 つに集約。Vite / Hono / React Router は使わない)
 - **Frontend**: React + TypeScript (Bun の HTML import + JSX/TSX ネイティブで bundle)
@@ -139,6 +165,7 @@ bun run dev     # Bun.serve + HMR (https://syokan.localhost / http://localhost:5
 - **Validation**: Zod
 - **Routing (server)**: `Bun.serve` の routes patterns
 - **Routing (client)**: React Router 等は採用しない
+- **Component catalog**: Storybook (`@storybook/react-vite` + `@tailwindcss/vite`)。catalog を story 化して視覚レビュー。builder は Vite だが **Storybook 専用の devDep** で、アプリ本体の「Vite を使わない」方針はアプリ bundle に限った話（Bun ネイティブの Storybook builder が無いため代替なし）
 
 ## コミュニケーション方針
 

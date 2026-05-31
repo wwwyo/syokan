@@ -13,6 +13,8 @@ export type ComponentSpec<
 > = {
   type: TType;
   propsSchema: z.ZodType<TProps>;
+  // 指定すると children の type が allowed list 内に制限される。未指定なら制限なし
+  childrenTypes?: readonly string[];
 };
 
 export function defineComponent<
@@ -37,6 +39,17 @@ export function createCatalog(specs: readonly ComponentSpec[]): Catalog {
       `createCatalog: duplicate component types: ${duplicates.join(", ")}`,
     );
   }
+  const knownTypes = new Set(specs.map((s) => s.type));
+  for (const spec of specs) {
+    if (!spec.childrenTypes) continue;
+    for (const t of spec.childrenTypes) {
+      if (!knownTypes.has(t)) {
+        throw new Error(
+          `createCatalog: ${spec.type}.childrenTypes references unknown type "${t}"`,
+        );
+      }
+    }
+  }
 
   const itemSchema: z.ZodType<Item> = z.lazy(() => buildUnion(specs, itemSchema));
 
@@ -50,16 +63,31 @@ function buildUnion(
   specs: readonly ComponentSpec[],
   itemSchema: z.ZodType<Item>,
 ): z.ZodType<Item> {
-  const variants = specs.map((spec) =>
-    z
+  const variants = specs.map((spec) => {
+    const allowed = spec.childrenTypes;
+    const childrenBase = z.array(itemSchema);
+    const childrenSchema = allowed
+      ? childrenBase.superRefine((arr, ctx) => {
+          arr.forEach((item, i) => {
+            if (!allowed.includes(item.type)) {
+              ctx.addIssue({
+                code: "custom",
+                path: [i, "type"],
+                message: `expected one of [${allowed.join(", ")}], got "${item.type}"`,
+              });
+            }
+          });
+        }).optional()
+      : childrenBase.optional();
+    return z
       .object({
         type: z.literal(spec.type),
         props: spec.propsSchema,
-        children: z.array(itemSchema).optional(),
+        children: childrenSchema,
         key: z.string().min(1).optional(),
       })
-      .strict(),
-  );
+      .strict();
+  });
   if (variants.length === 1) {
     return variants[0] as unknown as z.ZodType<Item>;
   }
