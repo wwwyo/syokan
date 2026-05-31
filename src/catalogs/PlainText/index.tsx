@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CodeBlock } from "../CodeBlock";
+import { CodeBlock } from "@/components/CodeBlock";
 
 export const plainTextPropsSchema = z
   .object({

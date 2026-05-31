@@ -5,7 +5,7 @@ import { CodeBlock } from ".";
 // Shiki ハイライトはマウント後に非同期で適用されるため、初回は plain fallback が
 // 一瞬見えることがある。
 const meta = {
-  title: "Catalog/CodeBlock (internal)",
+  title: "Components/CodeBlock",
   component: CodeBlock,
   tags: ["autodocs"],
 } satisfies Meta<typeof CodeBlock>;
@@ -50,5 +50,16 @@ export const Diff: Story = {
 export const UnknownLang: Story = {
   args: {
     code: "plain text without highlighting\n  indented line",
+  },
+};
+
+// filename を渡すとコード上部にファイル名ヘッダーを出す
+export const WithFilename: Story = {
+  args: {
+    lang: "ts",
+    filename: "src/lib/date.ts",
+    code: `export function formatDateTime(iso: string): string {
+  return new Date(iso).toISOString();
+}`,
   },
 };

@@ -111,10 +111,10 @@ syokan/
 │   │   │   ├── ArticleCard.test.tsx
 │   │   │   └── ArticleCard.stories.tsx  # Storybook (catalog の視覚レビュー用)
 │   │   ├── MarkdownDoc/     #   ...
-│   │   ├── CodeBlock/       #   catalog 非登録だが MarkdownDoc/PlainText の共有内部部品
 │   │   └── ...              #   Page / Section / ArticleList / PlainText
-│   └── components/          # catalog 非登録の UI
+│   └── components/          # catalog 非登録の UI (LLM が JSON で投げられない内部部品)
 │       ├── ui/              #   shadcn primitives (CLI 経由で生成・更新。Dir 化しない)
+│       ├── CodeBlock/       #   MarkdownDoc/PlainText の共有内部部品 (Shiki ハイライト)
 │       ├── ViewHeader/      #   viewer chrome (snapshot メタ帯)
 │       └── UnknownComponent/ #  Render が未知 type に出すフォールバック
 ├── .storybook/              # Storybook 設定 (main.ts / preview.tsx) — catalog レビュー基盤

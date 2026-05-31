@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { z } from "zod";
+import { CodeBlock } from "@/components/CodeBlock";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
@@ -11,7 +12,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { resolveCodeInfo } from "@/lib/shiki";
-import { CodeBlock } from "../CodeBlock";
 
 export const markdownDocPropsSchema = z
   .object({
