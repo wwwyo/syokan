@@ -31,13 +31,14 @@ describe("resolveCodeInfo", () => {
     expect(resolveCodeInfo("bash")).toEqual({ lang: "bash" });
   });
 
-  test("filename: derives lang from extension and keeps the filename", () => {
+  test("filename: keeps the raw extension as the lang candidate and the filename", () => {
     expect(resolveCodeInfo("hoge.json")).toEqual({
       lang: "json",
       filename: "hoge.json",
     });
+    // 拡張子をそのまま渡す。py は shiki の python alias として解決される
     expect(resolveCodeInfo("app.py")).toEqual({
-      lang: "python",
+      lang: "py",
       filename: "app.py",
     });
     // 複数ドットは最後の拡張子で解決する
@@ -47,14 +48,25 @@ describe("resolveCodeInfo", () => {
     });
   });
 
-  test("filename with unknown extension: filename only, lang undefined", () => {
-    const r = resolveCodeInfo("notes.xyz");
-    expect(r.filename).toBe("notes.xyz");
-    expect(r.lang).toBeUndefined();
+  test("filename with an alias-less extension: raw ext as lang (highlight falls back to text)", () => {
+    expect(resolveCodeInfo("notes.xyz")).toEqual({
+      lang: "xyz",
+      filename: "notes.xyz",
+    });
   });
 
   test("empty info returns nothing", () => {
     expect(resolveCodeInfo(undefined)).toEqual({});
     expect(resolveCodeInfo("")).toEqual({});
+  });
+
+  // 拡張子→言語マップを持たず shiki の alias に委ねるので、end-to-end で担保する
+  test("extension-derived lang is resolved by shiki aliases (py → python)", async () => {
+    const { lang } = resolveCodeInfo("app.py"); // "py"
+    const highlighted = await highlightToHtml("import os", lang);
+    const fallback = await highlightToHtml("import os", "alias-less-ext");
+    expect(highlighted).toContain("class=\"shiki");
+    // py が python として解決され、未知 lang (text) とは別のトークン分割になる
+    expect(highlighted).not.toBe(fallback);
   });
 });

@@ -115,6 +115,7 @@ syokan/
 │   └── components/          # catalog 非登録の UI (LLM が JSON で投げられない内部部品)
 │       ├── ui/              #   shadcn primitives (CLI 経由で生成・更新。Dir 化しない)
 │       ├── CodeBlock/       #   MarkdownDoc/PlainText の共有内部部品 (Shiki ハイライト)
+│       │   └── CopyButton/  #     CodeBlock 専用サブパーツは親 dir 配下にネスト
 │       ├── ViewHeader/      #   viewer chrome (snapshot メタ帯)
 │       └── UnknownComponent/ #  Render が未知 type に出すフォールバック
 ├── .storybook/              # Storybook 設定 (main.ts / preview.tsx) — catalog レビュー基盤
@@ -127,6 +128,14 @@ syokan/
 ```
 
 クライアント側ルーティングは採用しない。`window.location.pathname` から id を抽出する単一ページで対応する (PRD `Technical Considerations` 参照)。
+
+### Component collocation
+
+component は `<Name>/index.tsx` に実装し、同じ dir に test (`<Name>.test.tsx`) と story (`<Name>.stories.tsx`) を同居させる。import は `@/components/CodeBlock` のように dir を指す (index.tsx に解決)。関連ファイルを 1 箇所に集め、refactor / 削除時の追従漏れを防ぐ。
+
+- **catalog 公開** (LLM が JSON で投げる type) は `catalogs/<Name>/`、**非公開の内部部品**は `components/<Name>/`
+- **内部専用サブパーツ** (その component からのみ使う部品) は親の dir 配下にネストする (例: `CodeBlock/CopyButton/`)。複数 component で共有するようになったら `components/` 直下へ昇格させる。スコープ = 置き場所
+- `components/ui/` は例外: shadcn が生成するフラットファイル群 (dir 化しない)
 
 ## セットアップ
 
