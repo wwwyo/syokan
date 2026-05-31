@@ -38,19 +38,22 @@ describe("ViewHeader", () => {
     expect(html).not.toContain("view-source");
   });
 
-  test("shows the delete button only when onDelete is provided", () => {
+  test("shows the actions-menu trigger only when onDelete is provided", () => {
     const withDelete = renderToString(
       createElement(ViewHeader, {
         createdAt: "2026-05-21T03:04:00Z",
         onDelete: () => {},
       }),
     );
-    expect(withDelete).toContain("data-slot=\"view-delete\"");
-    expect(withDelete).toContain("Delete");
+    // 削除はメニュー (Portal, 既定で閉) の中なので SSR には trigger だけが出る。
+    // open → Delete クリックの動作はブラウザ確認で担保する。
+    expect(withDelete).toContain("data-slot=\"view-menu-trigger\"");
+    expect(withDelete).toContain("aria-haspopup=\"menu\"");
 
     const without = renderToString(
       createElement(ViewHeader, { createdAt: "2026-05-21T03:04:00Z" }),
     );
+    expect(without).not.toContain("view-menu-trigger");
     expect(without).not.toContain("view-delete");
   });
 });

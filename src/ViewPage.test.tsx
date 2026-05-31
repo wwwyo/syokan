@@ -55,14 +55,15 @@ describe("ViewPage", () => {
     expect(html).not.toContain("view-source");
   });
 
-  test("shows a delete button when onDelete is provided", () => {
+  test("shows the actions-menu trigger when onDelete is provided", () => {
     const html = renderWithDelete({ kind: "found", envelope });
-    expect(html).toContain("view-delete");
-    expect(html).toContain("Delete");
+    // 削除はメニュー内に隠れる。SSR では trigger だけが出る
+    expect(html).toContain("view-menu-trigger");
   });
 
-  test("omits the delete button when no onDelete handler is given", () => {
+  test("omits the actions-menu trigger when no onDelete handler is given", () => {
     const html = render({ kind: "found", envelope });
+    expect(html).not.toContain("view-menu-trigger");
     expect(html).not.toContain("view-delete");
   });
 
