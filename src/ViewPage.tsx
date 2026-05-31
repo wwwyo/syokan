@@ -1,5 +1,6 @@
 import type { SnapshotEnvelope } from "@/schema";
 import { Render } from "./Render";
+import { ViewHeader } from "./components/ViewHeader";
 
 export type ViewPageState =
   | { kind: "loading" }
@@ -11,18 +12,6 @@ export type ViewPageProps = {
   state: ViewPageState;
   onDelete?: () => void;
 };
-
-// 閲覧者のローカル TZ で表示する (機械可読な UTC は <time dateTime> 側に残す)。
-function formatCreatedAt(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mi = String(date.getMinutes()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
 
 export function ViewPage({ state, onDelete }: ViewPageProps) {
   if (state.kind === "loading") {
@@ -74,42 +63,16 @@ export function ViewPage({ state, onDelete }: ViewPageProps) {
   }
 
   const env = state.envelope;
-  const sourceLabel = env.metadata?.source?.label;
 
   return (
     // min-h-screen は付けない。root (例 Page) 側が自前の高さを持つため二重に
     // すると content 高が viewport を超えて余計なスクロールが出る。
     <div data-slot="view-page" className="bg-background">
-      <header
-        data-slot="view-header"
-        className="border-b border-border bg-background/95 backdrop-blur"
-      >
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-4 px-6 py-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-3">
-            <time data-slot="view-created-at" dateTime={env.createdAt}>
-              {formatCreatedAt(env.createdAt)}
-            </time>
-            {sourceLabel ? (
-              <span
-                data-slot="view-source"
-                className="rounded-full border border-border px-2 py-0.5"
-              >
-                {sourceLabel}
-              </span>
-            ) : null}
-          </div>
-          {onDelete ? (
-            <button
-              type="button"
-              data-slot="view-delete"
-              className="rounded-md border border-border px-2 py-1 text-xs text-destructive hover:bg-destructive/10"
-              onClick={onDelete}
-            >
-              Delete
-            </button>
-          ) : null}
-        </div>
-      </header>
+      <ViewHeader
+        createdAt={env.createdAt}
+        sourceLabel={env.metadata?.source?.label}
+        onDelete={onDelete}
+      />
       <Render item={env.root} />
     </div>
   );

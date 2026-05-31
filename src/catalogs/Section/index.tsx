@@ -1,7 +1,13 @@
 import type { ReactNode } from "react";
+import { z } from "zod";
 
-export type SectionProps = {
-  heading?: string;
+export const sectionPropsSchema = z
+  .object({
+    heading: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type SectionProps = z.infer<typeof sectionPropsSchema> & {
   children?: ReactNode;
 };
 

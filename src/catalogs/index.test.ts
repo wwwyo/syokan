@@ -1,31 +1,24 @@
 import { describe, expect, test } from "bun:test";
-import {
-  ArticleCardSpec,
-  ArticleListSpec,
-  MarkdownDocSpec,
-  PageSpec,
-  SectionSpec,
-  type ItemComponent,
-  components,
-  itemSchema,
-} from "./catalog";
-import { ArticleCard } from "./components/ArticleCard";
-import { ArticleList } from "./components/ArticleList";
-import { MarkdownDoc } from "./components/MarkdownDoc";
-import { Page } from "./components/Page";
-import { Section } from "./components/Section";
+import { type ItemComponent, components, itemSchema, specs } from ".";
+import { ArticleCard } from "./ArticleCard";
+import { ArticleList } from "./ArticleList";
+import { MarkdownDoc } from "./MarkdownDoc";
+import { Page } from "./Page";
+import { PlainText } from "./PlainText";
+import { Section } from "./Section";
 
 // Map に格納された component は ItemComponent に widening 済み。
 // テスト側では識別性 (=== 比較) のみ意味があるので同型へ寄せる。
 const asItem = (c: unknown) => c as ItemComponent;
 
 describe("catalog", () => {
-  test("exposes component specs", () => {
-    expect(PageSpec.type).toBe("Page");
-    expect(SectionSpec.type).toBe("Section");
-    expect(MarkdownDocSpec.type).toBe("MarkdownDoc");
-    expect(ArticleCardSpec.type).toBe("ArticleCard");
-    expect(ArticleListSpec.type).toBe("ArticleList");
+  test("exposes component specs by type", () => {
+    expect(specs.get("Page")?.type).toBe("Page");
+    expect(specs.get("Section")?.type).toBe("Section");
+    expect(specs.get("MarkdownDoc")?.type).toBe("MarkdownDoc");
+    expect(specs.get("PlainText")?.type).toBe("PlainText");
+    expect(specs.get("ArticleCard")?.type).toBe("ArticleCard");
+    expect(specs.get("ArticleList")?.type).toBe("ArticleList");
   });
 
   test("itemSchema parses a Page containing Section children", () => {
@@ -50,10 +43,11 @@ describe("catalog", () => {
     expect(components.get("Page")).toBe(asItem(Page));
     expect(components.get("Section")).toBe(asItem(Section));
     expect(components.get("MarkdownDoc")).toBe(asItem(MarkdownDoc));
+    expect(components.get("PlainText")).toBe(asItem(PlainText));
     expect(components.get("ArticleCard")).toBe(asItem(ArticleCard));
     expect(components.get("ArticleList")).toBe(asItem(ArticleList));
     expect(components.get("Missing")).toBeUndefined();
-    expect(components.size).toBe(5);
+    expect(components.size).toBe(6);
   });
 
   test("page props is strict (rejects unknown fields)", () => {
@@ -83,6 +77,21 @@ describe("catalog", () => {
       props: {},
     });
     expect(missing.success).toBe(false);
+  });
+
+  test("PlainText requires a body string and is strict", () => {
+    const ok = itemSchema.safeParse({
+      type: "PlainText",
+      props: { body: "raw\nlog\nlines" },
+    });
+    expect(ok.success).toBe(true);
+    const missing = itemSchema.safeParse({ type: "PlainText", props: {} });
+    expect(missing.success).toBe(false);
+    const extra = itemSchema.safeParse({
+      type: "PlainText",
+      props: { body: "x", lang: "ts" },
+    });
+    expect(extra.success).toBe(false);
   });
 
   test("ArticleCard accepts title/url and optional summary/publishedAt", () => {

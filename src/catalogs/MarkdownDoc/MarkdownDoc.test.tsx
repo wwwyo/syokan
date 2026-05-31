@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { MarkdownDoc } from "./MarkdownDoc";
+import { MarkdownDoc } from ".";
 
 describe("MarkdownDoc", () => {
   test("renders headings, paragraphs and lists", () => {
@@ -41,6 +41,19 @@ describe("MarkdownDoc", () => {
     expect(html).toContain("data-slot=\"codeblock\"");
   });
 
+  test("renders a filename header for ```filename.ext fences", () => {
+    const body = '```hoge.json\n{"a":1}\n```';
+    const html = renderToString(createElement(MarkdownDoc, { body }));
+    expect(html).toContain('data-slot="codeblock-filename"');
+    expect(html).toContain("hoge.json");
+  });
+
+  test("plain language fences have no filename header", () => {
+    const body = "```ts\nconst x = 1;\n```";
+    const html = renderToString(createElement(MarkdownDoc, { body }));
+    expect(html).not.toContain('data-slot="codeblock-filename"');
+  });
+
   test("renders inline links as anchors with href", () => {
     const body = "see [example](https://example.com) here";
     const html = renderToString(createElement(MarkdownDoc, { body }));
@@ -56,7 +69,7 @@ describe("MarkdownDoc", () => {
     expect(html).toContain("bun test");
   });
 
-  test("renders GFM tables (remark-gfm)", () => {
+  test("renders GFM tables as shadcn Table (remark-gfm)", () => {
     const body = [
       "| Name | Score |",
       "| ---- | ----- |",
@@ -64,8 +77,11 @@ describe("MarkdownDoc", () => {
       "| Bob | 20 |",
     ].join("\n");
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    expect(html).toContain("<table");
-    expect(html).toContain("<th");
+    // shadcn Table component で描画する
+    expect(html).toContain("data-slot=\"table\"");
+    expect(html).toContain("data-slot=\"table-header\"");
+    expect(html).toContain("data-slot=\"table-head\"");
+    expect(html).toContain("data-slot=\"table-cell\"");
     expect(html).toContain("Name");
     expect(html).toContain("Alice");
     expect(html).toContain("20");
@@ -78,10 +94,17 @@ describe("MarkdownDoc", () => {
     expect(html).toContain("gone");
   });
 
-  test("renders GFM task lists with checkboxes (remark-gfm)", () => {
+  test("renders GFM task lists as shadcn Checkbox (read-only, state-mapped)", () => {
     const body = ["- [x] done", "- [ ] todo"].join("\n");
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    expect(html).toContain("type=\"checkbox\"");
+    // ネイティブ input ではなく shadcn (base-ui) Checkbox で描画する
+    expect(html).toContain("data-slot=\"checkbox\"");
+    expect(html).toContain("role=\"checkbox\"");
+    // 編集不可の表示専用
+    expect(html).toContain("aria-readonly=\"true\"");
+    // [x] / [ ] が checked / unchecked に対応する
+    expect(html).toContain("data-checked");
+    expect(html).toContain("data-unchecked");
     expect(html).toContain("done");
     expect(html).toContain("todo");
   });

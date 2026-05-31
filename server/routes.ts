@@ -1,6 +1,6 @@
 import type { BunRequest } from "bun";
 import { z } from "zod";
-import { itemSchema } from "@/catalog";
+import { itemSchema } from "@/catalogs";
 import {
   CURRENT_SCHEMA_VERSION,
   formatValidationError,

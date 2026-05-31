@@ -1,10 +1,25 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CodeBlock } from "./CodeBlock";
+import { z } from "zod";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { resolveCodeInfo } from "@/lib/shiki";
+import { CodeBlock } from "../CodeBlock";
 
-export type MarkdownDocProps = {
-  body: string;
-};
+export const markdownDocPropsSchema = z
+  .object({
+    body: z.string(),
+  })
+  .strict();
+
+export type MarkdownDocProps = z.infer<typeof markdownDocPropsSchema>;
 
 type HastNode = {
   tagName?: string;
@@ -15,24 +30,26 @@ type HastNode = {
 
 function extractCodeFromPre(
   node: unknown,
-): { code: string; lang?: string } | null {
+): { code: string; lang?: string; filename?: string } | null {
   const pre = node as HastNode | undefined;
   const codeNode =
     pre?.children?.find((c) => c.tagName === "code") ?? pre?.children?.[0];
   if (!codeNode) return null;
-  let lang: string | undefined;
+  // info string (例 "ts" / "hoge.json") は className "language-<info>" に載る
+  let info: string | undefined;
   const classes = codeNode.properties?.className;
   if (Array.isArray(classes)) {
     for (const c of classes) {
       const match = typeof c === "string" ? /^language-(.+)$/.exec(c) : null;
-      if (match?.[1]) lang = match[1];
+      if (match?.[1]) info = match[1];
     }
   }
   const code = (codeNode.children ?? [])
     .map((c) => (typeof c.value === "string" ? c.value : ""))
     .join("")
     .replace(/\n$/, "");
-  return { code, lang };
+  // info がファイル名 (例 hoge.json) なら拡張子から lang を推定しファイル名も返す
+  return { code, ...resolveCodeInfo(info) };
 }
 
 export function MarkdownDoc({ body }: MarkdownDocProps) {
@@ -94,7 +111,13 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
           pre: ({ node, children }) => {
             const extracted = extractCodeFromPre(node);
             if (extracted) {
-              return <CodeBlock code={extracted.code} lang={extracted.lang} />;
+              return (
+                <CodeBlock
+                  code={extracted.code}
+                  lang={extracted.lang}
+                  filename={extracted.filename}
+                />
+              );
             }
             return (
               <pre
@@ -114,32 +137,23 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
             <del className="text-muted-foreground">{children}</del>
           ),
           table: ({ children }) => (
-            <div className="my-4 overflow-x-auto rounded-lg border border-muted-foreground/25">
-              <table className="w-full border-collapse text-sm">
-                {children}
-              </table>
+            <div className="my-4 overflow-hidden rounded-lg border border-border">
+              <Table>{children}</Table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-muted">{children}</thead>
+            <TableHeader className="bg-muted">{children}</TableHeader>
           ),
-          th: ({ children }) => (
-            <th className="border border-muted-foreground/25 px-3 py-2 text-left font-semibold">
-              {children}
-            </th>
-          ),
-          td: ({ children }) => (
-            <td className="border border-muted-foreground/25 px-3 py-2">
-              {children}
-            </td>
-          ),
+          tbody: ({ children }) => <TableBody>{children}</TableBody>,
+          tr: ({ children }) => <TableRow>{children}</TableRow>,
+          th: ({ children }) => <TableHead>{children}</TableHead>,
+          td: ({ children }) => <TableCell>{children}</TableCell>,
           input: ({ checked, type }) =>
             type === "checkbox" ? (
-              <input
-                type="checkbox"
-                checked={checked}
+              <Checkbox
+                checked={checked === true}
                 readOnly
-                className="mr-2 align-middle"
+                className="mr-2 inline-flex align-middle"
               />
             ) : null,
         }}

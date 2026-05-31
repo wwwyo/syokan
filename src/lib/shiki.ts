@@ -54,3 +54,52 @@ export async function highlightToHtml(
     defaultColor: false,
   });
 }
+
+// 拡張子 → shiki 言語 ID。値は必ず LANGS のいずれか (= ハイライト可能) にする。
+const EXT_TO_LANG: Record<string, string> = {
+  ts: "ts",
+  mts: "ts",
+  cts: "ts",
+  tsx: "tsx",
+  js: "js",
+  mjs: "js",
+  cjs: "js",
+  jsx: "jsx",
+  json: "json",
+  jsonc: "jsonc",
+  sh: "bash",
+  bash: "bash",
+  zsh: "bash",
+  html: "html",
+  htm: "html",
+  css: "css",
+  md: "markdown",
+  markdown: "markdown",
+  py: "python",
+  go: "go",
+  rs: "rust",
+  yml: "yaml",
+  yaml: "yaml",
+  toml: "toml",
+  sql: "sql",
+  diff: "diff",
+  patch: "diff",
+};
+
+// コードフェンスの info string を言語 ID とファイル名に解釈する。
+// `.` を含めばファイル名とみなし拡張子から lang を推定する
+// (例: "hoge.json" → { lang: "json", filename: "hoge.json" })。
+// `.` が無ければ従来どおり言語 ID 扱い (例: "ts" → { lang: "ts" })。
+// 未知拡張子 (例: "notes.xyz") は lang を付けず filename だけ返し、highlight は
+// text フォールバックさせる。
+export function resolveCodeInfo(info?: string): {
+  lang?: string;
+  filename?: string;
+} {
+  if (!info) return {};
+  if (info.includes(".")) {
+    const ext = info.slice(info.lastIndexOf(".") + 1).toLowerCase();
+    return { lang: EXT_TO_LANG[ext], filename: info };
+  }
+  return { lang: info };
+}

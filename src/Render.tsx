@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import type { Item } from "@/schema";
-import { components } from "./catalog";
+import { components } from "./catalogs";
 import { UnknownComponent } from "./components/UnknownComponent";
 
 export type RenderProps = {

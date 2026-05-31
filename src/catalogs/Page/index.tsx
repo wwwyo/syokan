@@ -1,7 +1,13 @@
 import type { ReactNode } from "react";
+import { z } from "zod";
 
-export type PageProps = {
-  title?: string;
+export const pagePropsSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type PageProps = z.infer<typeof pagePropsSchema> & {
   children?: ReactNode;
 };
 

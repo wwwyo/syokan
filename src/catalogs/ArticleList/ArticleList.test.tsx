@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { ArticleCard } from "./ArticleCard";
-import { ArticleList } from "./ArticleList";
+import { ArticleCard } from "../ArticleCard";
+import { ArticleList } from ".";
 
 describe("ArticleList", () => {
   test("renders ArticleCard children stacked vertically", () => {

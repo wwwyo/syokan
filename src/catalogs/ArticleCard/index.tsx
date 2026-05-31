@@ -1,23 +1,17 @@
+import { z } from "zod";
+import { formatDateTime } from "@/lib/date";
 import { cn } from "@/lib/utils";
 
-export type ArticleCardProps = {
-  title: string;
-  url: string;
-  summary?: string;
-  publishedAt?: string;
-};
+export const articleCardPropsSchema = z
+  .object({
+    title: z.string().min(1),
+    url: z.url(),
+    summary: z.string().optional(),
+    publishedAt: z.iso.datetime().optional(),
+  })
+  .strict();
 
-function formatPublishedAt(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  // 閲覧者のローカル TZ で YYYY-MM-DD HH:mm 表示 (UTC は <time dateTime> に残す)
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mi = String(date.getMinutes()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
-}
+export type ArticleCardProps = z.infer<typeof articleCardPropsSchema>;
 
 export function ArticleCard({
   title,
@@ -50,7 +44,7 @@ export function ArticleCard({
       ) : null}
       <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
         {publishedAt ? (
-          <time dateTime={publishedAt}>{formatPublishedAt(publishedAt)}</time>
+          <time dateTime={publishedAt}>{formatDateTime(publishedAt)}</time>
         ) : null}
         <a
           href={url}

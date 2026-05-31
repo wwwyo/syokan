@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { ArticleCard } from "./ArticleCard";
+import { ArticleCard } from ".";
 
 describe("ArticleCard", () => {
   test("renders title, url, summary, publishedAt", () => {

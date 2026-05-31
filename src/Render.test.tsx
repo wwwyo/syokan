@@ -3,8 +3,8 @@ import { createElement, type ReactElement } from "react";
 import { renderToString } from "react-dom/server";
 import type { Item } from "@/schema";
 import { Render } from "./Render";
-import { Page } from "./components/Page";
-import { Section } from "./components/Section";
+import { Page } from "./catalogs/Page";
+import { Section } from "./catalogs/Section";
 import { UnknownComponent } from "./components/UnknownComponent";
 
 describe("Render", () => {

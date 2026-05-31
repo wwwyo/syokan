@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   type CliDeps,
   buildMarkdownPayload,
+  buildTextPayload,
+  classifyInput,
   deriveTitle,
   ensureServerRunning,
   main,
@@ -133,13 +135,56 @@ describe("buildMarkdownPayload", () => {
   });
 });
 
-describe("cli main: post-markdown", () => {
+describe("buildTextPayload", () => {
+  test("wraps body in a PlainText root (no markdown parsing)", () => {
+    const payload = buildTextPayload("# literal\nlog line") as {
+      root: { type: string; props: { body: string } };
+    };
+    expect(payload.root.type).toBe("PlainText");
+    expect(payload.root.props.body).toBe("# literal\nlog line");
+  });
+
+  test("attaches title and source label when provided", () => {
+    const payload = buildTextPayload("x", {
+      title: "app.log",
+      sourceLabel: "manual-cli",
+    }) as { title: string; metadata: { source: { label: string } } };
+    expect(payload.title).toBe("app.log");
+    expect(payload.metadata.source.label).toBe("manual-cli");
+  });
+});
+
+describe("classifyInput", () => {
+  test("treats a .json extension as json even if the body looks like markdown", () => {
+    expect(classifyInput("/x/tree.json", "# not really markdown")).toBe("json");
+  });
+
+  test("treats .md / .markdown extensions as markdown even if the body is JSON", () => {
+    expect(classifyInput("/x/note.md", "{}")).toBe("markdown");
+    expect(classifyInput("/x/note.markdown", "{}")).toBe("markdown");
+  });
+
+  test("treats .txt / .log extensions as text", () => {
+    expect(classifyInput("/x/notes.txt", "# literal hash")).toBe("text");
+    expect(classifyInput("/x/app.log", "[INFO] started")).toBe("text");
+  });
+
+  test("extensionless: a leading { is treated as json", () => {
+    expect(classifyInput("/x/clip", '  {"root":{}}')).toBe("json");
+  });
+
+  test("extensionless: anything else is treated as markdown", () => {
+    expect(classifyInput("/x/clip", "# heading")).toBe("markdown");
+  });
+});
+
+describe("cli main: post (markdown file)", () => {
   test("prints the view URL on success and exits 0", async () => {
     const { deps, out, calls } = makeDeps({
       files: { "doc.md": "# Hello\n\nworld" },
       respond: () => okResponse("abc-123"),
     });
-    const result = await main(["post-markdown", "doc.md"], deps);
+    const result = await main(["post", "doc.md"], deps);
     expect(result.exitCode).toBe(0);
     expect(out).toEqual(["http://localhost:5173/views/abc-123"]);
     expect(calls[0]?.url).toBe("http://localhost:5173/api/items");
@@ -152,7 +197,7 @@ describe("cli main: post-markdown", () => {
       files: { "doc.md": "# Hello" },
       respond: () => errorResponse(),
     });
-    const result = await main(["post-markdown", "doc.md"], deps);
+    const result = await main(["post", "doc.md"], deps);
     expect(result.exitCode).toBe(1);
     expect(out).toEqual([]);
     expect(err.length).toBe(1);
@@ -165,7 +210,7 @@ describe("cli main: post-markdown", () => {
       files: {},
       respond: () => okResponse(),
     });
-    const result = await main(["post-markdown", "nope.md"], deps);
+    const result = await main(["post", "nope.md"], deps);
     expect(result.exitCode).toBe(1);
     const parsed = JSON.parse(err[0] as string) as { error: string };
     expect(parsed.error).toBe("read_failed");
@@ -173,13 +218,13 @@ describe("cli main: post-markdown", () => {
 
   test("missing file argument: usage error exit 2", async () => {
     const { deps, err } = makeDeps({ respond: () => okResponse() });
-    const result = await main(["post-markdown"], deps);
+    const result = await main(["post"], deps);
     expect(result.exitCode).toBe(2);
     expect(err[0]).toContain("usage");
   });
 });
 
-describe("cli main: post", () => {
+describe("cli main: post (json file)", () => {
   test("posts a raw JSON tree and prints the URL", async () => {
     const tree = JSON.stringify({
       root: { type: "Page", props: { title: "T" } },
@@ -216,6 +261,62 @@ describe("cli main: post", () => {
     expect(out).toEqual([]);
     const parsed = JSON.parse(err[0] as string) as { error: string };
     expect(parsed.error).toBe("validation_failed");
+  });
+});
+
+describe("cli main: post (text/log file)", () => {
+  test("routes a .log file through PlainText with the filename as title", async () => {
+    const { deps, out, calls } = makeDeps({
+      files: { "app.log": "[INFO] started\n# not a heading\n* not a bullet" },
+      respond: () => okResponse("log-1"),
+    });
+    const result = await main(["post", "app.log"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(out).toEqual(["http://localhost:5173/views/log-1"]);
+    const body = calls[0]?.body as {
+      root: { type: string; props: { body: string } };
+      title: string;
+    };
+    expect(body.root.type).toBe("PlainText");
+    expect(body.root.props.body).toContain("# not a heading");
+    expect(body.title).toBe("app.log");
+  });
+
+  test("routes a .txt file through PlainText", async () => {
+    const { deps, calls } = makeDeps({
+      files: { "notes.txt": "plain text body" },
+      respond: () => okResponse("txt-1"),
+    });
+    const result = await main(["post", "notes.txt"], deps);
+    expect(result.exitCode).toBe(0);
+    const body = calls[0]?.body as { root: { type: string } };
+    expect(body.root.type).toBe("PlainText");
+  });
+});
+
+describe("cli main: post (extensionless file)", () => {
+  test("routes a JSON-looking body to a raw post", async () => {
+    const { deps, calls } = makeDeps({
+      files: {
+        clip: JSON.stringify({ root: { type: "Section", props: { heading: "h" } } }),
+      },
+      respond: () => okResponse("ext-json"),
+    });
+    const result = await main(["post", "clip"], deps);
+    expect(result.exitCode).toBe(0);
+    const body = calls[0]?.body as { root: { type: string } };
+    expect(body.root.type).toBe("Section");
+  });
+
+  test("routes a markdown-looking body through MarkdownDoc", async () => {
+    const { deps, calls } = makeDeps({
+      files: { clip: "# Title\n\nbody" },
+      respond: () => okResponse("ext-md"),
+    });
+    const result = await main(["post", "clip"], deps);
+    expect(result.exitCode).toBe(0);
+    const body = calls[0]?.body as { root: { type: string } };
+    expect(body.root.type).toBe("MarkdownDoc");
   });
 });
 
@@ -261,7 +362,7 @@ describe("ensureServerRunning (lazy-spawn)", () => {
 });
 
 describe("cli main: lazy-spawn integration", () => {
-  test("post-markdown spawns the server when down, then posts", async () => {
+  test("post (markdown) spawns the server when down, then posts", async () => {
     let checks = 0;
     const h = makeDeps({
       files: { "doc.md": "# Hi\n\nbody" },
@@ -271,7 +372,7 @@ describe("cli main: lazy-spawn integration", () => {
         return checks > 1; // 初回 (起動前) だけ落ちている
       },
     });
-    const result = await main(["post-markdown", "doc.md"], h.deps);
+    const result = await main(["post", "doc.md"], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.spawnCount()).toBe(1);
     expect(h.out).toEqual(["http://localhost:5173/views/spawned-1"]);
@@ -293,13 +394,13 @@ describe("cli main: lazy-spawn integration", () => {
     expect(h.out).toEqual(["http://localhost:5173/views/reuse-1"]);
   });
 
-  test("post-markdown reports server_unavailable if it never comes up", async () => {
+  test("post (markdown) reports server_unavailable if it never comes up", async () => {
     const h = makeDeps({
       files: { "doc.md": "# Hi" },
       respond: () => okResponse(),
       health: () => false,
     });
-    const result = await main(["post-markdown", "doc.md"], h.deps);
+    const result = await main(["post", "doc.md"], h.deps);
     expect(result.exitCode).toBe(1);
     expect(h.out).toEqual([]);
     const parsed = JSON.parse(h.err.at(-1) as string) as { error: string };

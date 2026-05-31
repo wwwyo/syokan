@@ -62,6 +62,20 @@ export function buildMarkdownPayload(
   return payload;
 }
 
+export function buildTextPayload(
+  body: string,
+  opts?: { title?: string; sourceLabel?: string },
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    root: { type: "PlainText", props: { body } },
+  };
+  if (opts?.title) payload.title = opts.title;
+  if (opts?.sourceLabel) {
+    payload.metadata = { source: { label: opts.sourceLabel } };
+  }
+  return payload;
+}
+
 async function isHealthy(deps: CliDeps): Promise<boolean> {
   try {
     const res = await deps.fetch(`${deps.baseUrl}/api/health`);
@@ -140,24 +154,24 @@ async function postWithServer(
   return result.ok ? reportSuccess(deps, result.data) : reportFailure(deps, result);
 }
 
-export async function runPostMarkdown(
+// 入力種別を識別する。拡張子を最優先で見る: .json は中身が壊れていても JSON
+// として扱い (markdown に化けて MarkdownDoc 投稿される事故を防ぎ、invalid_json を
+// 返す)、.md / .markdown は markdown、.txt / .log は整形しない PlainText。
+// 拡張子が無いときだけ中身で判定する: JSON envelope は必ず object なので、trim 後の
+// 先頭が `{` なら json、それ以外は markdown とみなす (議事録/メモは markdown 期待が多い)。
+export function classifyInput(
   file: string,
-  deps: CliDeps,
-): Promise<CliResult> {
-  let body: string;
-  try {
-    body = await deps.readFile(file);
-  } catch (err) {
-    deps.stderr(JSON.stringify({ error: "read_failed", message: String(err) }));
-    return { exitCode: 1 };
-  }
-  const payload = buildMarkdownPayload(body, {
-    title: deriveTitle(body, file),
-    sourceLabel: "manual-cli",
-  });
-  return postWithServer(deps, payload);
+  text: string,
+): "json" | "markdown" | "text" {
+  const lower = file.toLowerCase();
+  if (lower.endsWith(".json")) return "json";
+  if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
+  if (lower.endsWith(".txt") || lower.endsWith(".log")) return "text";
+  return text.trimStart().startsWith("{") ? "json" : "markdown";
 }
 
+// 単一 post コマンド。markdown は MarkdownDoc envelope に包み、JSON はそのまま
+// envelope として投げる。種別は classifyInput で決める。
 export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
   let text: string;
   try {
@@ -166,13 +180,29 @@ export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
     deps.stderr(JSON.stringify({ error: "read_failed", message: String(err) }));
     return { exitCode: 1 };
   }
+
+  const kind = classifyInput(file, text);
+  if (kind === "markdown") {
+    const payload = buildMarkdownPayload(text, {
+      title: deriveTitle(text, file),
+      sourceLabel: "manual-cli",
+    });
+    return postWithServer(deps, payload);
+  }
+  if (kind === "text") {
+    // plain text / log は markdown の H1 抽出が効かないので title は file 名にする
+    const payload = buildTextPayload(text, {
+      title: basename(file),
+      sourceLabel: "manual-cli",
+    });
+    return postWithServer(deps, payload);
+  }
+
   let payload: unknown;
   try {
     payload = JSON.parse(text);
   } catch (err) {
-    deps.stderr(
-      JSON.stringify({ error: "invalid_json", message: String(err) }),
-    );
+    deps.stderr(JSON.stringify({ error: "invalid_json", message: String(err) }));
     return { exitCode: 1 };
   }
   return postWithServer(deps, payload);
@@ -197,12 +227,8 @@ type Command = {
 };
 
 const COMMANDS: Record<string, Command> = {
-  "post-markdown": {
-    arg: "<file.md>",
-    run: (deps, file) => runPostMarkdown(file, deps),
-  },
   post: {
-    arg: "<items.json>",
+    arg: "<file.md|file.json>",
     run: (deps, file) => runPost(file, deps),
   },
   stop: {
