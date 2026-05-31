@@ -4,22 +4,11 @@ import "../src/styles.css";
 
 const preview: Preview = {
   parameters: {
-    // 各 story 自身が bg-background の枠を持つので canvas 側の余白は付けない
-    layout: "fullscreen",
-    controls: {
-      matchers: {
-        color: /(background|color)$/i,
-        date: /Date$/i,
-      },
-    },
+    // padded で標準余白のみ付ける。背景/文字色は styles.css の body ルール
+    // (bg-background / text-foreground) が preview iframe にも効くので枠は不要
+    layout: "padded",
   },
   decorators: [
-    // theme 追従の背景枠。styles.css の CSS 変数 (.dark) をそのまま反映させる
-    (Story) => (
-      <div className="min-h-screen bg-background p-6 text-foreground">
-        <Story />
-      </div>
-    ),
     // toolbar から light/dark を切替。.dark class を <html> に付与する
     withThemeByClassName({
       themes: { light: "", dark: "dark" },
