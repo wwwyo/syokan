@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Item } from "@/schema";
 import { SnapshotStore } from "./store";
 
-const sampleRoot: Item = { type: "Page", props: { title: "T" } };
+const sampleRoot: Item = { type: "Stack", props: {} };
 
 describe("SnapshotStore", () => {
   let dir: string;
@@ -24,7 +24,7 @@ describe("SnapshotStore", () => {
     const env = await store.create({ root: sampleRoot, title: "Sample" });
     expect(env.id).toMatch(/[0-9a-f-]{36}/);
     expect(env.title).toBe("Sample");
-    expect(env.root.type).toBe("Page");
+    expect(env.root.type).toBe("Stack");
     expect(env.schemaVersion).toBe(1);
     expect(env.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });

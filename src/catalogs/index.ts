@@ -1,12 +1,14 @@
 import type { ComponentType, ReactNode } from "react";
 import type { z } from "zod";
 import { type ComponentSpec, createCatalog, defineComponent } from "@/schema";
-import { ArticleCard, articleCardPropsSchema } from "./ArticleCard";
-import { ArticleList, articleListPropsSchema } from "./ArticleList";
+import { Card, cardPropsSchema } from "./Card";
+import { Heading, headingPropsSchema } from "./Heading";
+import { Link, linkPropsSchema } from "./Link";
 import { MarkdownDoc, markdownDocPropsSchema } from "./MarkdownDoc";
-import { Page, pagePropsSchema } from "./Page";
 import { PlainText, plainTextPropsSchema } from "./PlainText";
-import { Section, sectionPropsSchema } from "./Section";
+import { Stack, stackPropsSchema } from "./Stack";
+import { Text, textPropsSchema } from "./Text";
+import { Time, timePropsSchema } from "./Time";
 
 export type ItemComponent = ComponentType<
   Record<string, unknown> & { children?: ReactNode }
@@ -43,13 +45,21 @@ function defineViewComponent<
 // 各 component を 1 度だけ列挙する。この配列が「LLM が投げられる type」の
 // 唯一の公開マニフェストで、itemSchema / specs / components はここから導出する。
 const entries: readonly ViewComponentEntry[] = [
-  defineViewComponent("Page", pagePropsSchema, Page),
-  defineViewComponent("Section", sectionPropsSchema, Section),
-  defineViewComponent("MarkdownDoc", markdownDocPropsSchema, MarkdownDoc),
-  defineViewComponent("PlainText", plainTextPropsSchema, PlainText),
-  defineViewComponent("ArticleCard", articleCardPropsSchema, ArticleCard),
-  defineViewComponent("ArticleList", articleListPropsSchema, ArticleList, {
-    childrenTypes: ["ArticleCard"],
+  defineViewComponent("Stack", stackPropsSchema, Stack),
+  defineViewComponent("Card", cardPropsSchema, Card),
+  // leaf component は children を持たない。childrenTypes: [] で children 混入を
+  // ingest 時に弾く (未指定だと children が黙って捨てられる)。
+  defineViewComponent("Heading", headingPropsSchema, Heading, {
+    childrenTypes: [],
+  }),
+  defineViewComponent("Link", linkPropsSchema, Link, { childrenTypes: [] }),
+  defineViewComponent("Text", textPropsSchema, Text, { childrenTypes: [] }),
+  defineViewComponent("Time", timePropsSchema, Time, { childrenTypes: [] }),
+  defineViewComponent("MarkdownDoc", markdownDocPropsSchema, MarkdownDoc, {
+    childrenTypes: [],
+  }),
+  defineViewComponent("PlainText", plainTextPropsSchema, PlainText, {
+    childrenTypes: [],
   }),
 ];
 
