@@ -7,7 +7,7 @@ export type CopyButtonProps = {
   className?: string;
 };
 
-// 生の code をクリップボードへ書き込み、成功したら 1.5s だけチェックマークに
+// 生の code をクリップボードへ書き込み、成功したら 3s だけチェックマークに
 // 切り替える。出現 (hover/focus) と配置 (absolute / flex 行内) は呼び出し側が
 // className で決める。Code 専用の内部サブパーツ。
 export function CopyButton({ code, className }: CopyButtonProps) {
@@ -15,7 +15,7 @@ export function CopyButton({ code, className }: CopyButtonProps) {
 
   useEffect(() => {
     if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 1500);
+    const timer = setTimeout(() => setCopied(false), 3000);
     return () => clearTimeout(timer);
   }, [copied]);
 
