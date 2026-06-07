@@ -5,7 +5,8 @@
       "name": "syokan-dev",
       "runtimeExecutable": "bun",
       "runtimeArgs": ["--hot", "server/index.ts"],
-      "port": 5173
+      "port": 5273,
+      "autoPort": true
     },
     {
       "name": "storybook",

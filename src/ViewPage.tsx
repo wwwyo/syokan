@@ -1,6 +1,7 @@
 import type { SnapshotEnvelope } from "@/schema";
-import { Render } from "./Render";
+import { PageLayout } from "./components/PageLayout";
 import { ViewHeader } from "./components/ViewHeader";
+import { Render } from "./Render";
 
 export type ViewPageState =
   | { kind: "loading" }
@@ -16,26 +17,19 @@ export type ViewPageProps = {
 export function ViewPage({ state, onDelete }: ViewPageProps) {
   if (state.kind === "loading") {
     return (
-      <main
-        data-slot="view-loading"
-        className="min-h-screen bg-background text-foreground"
-      >
-        <div className="mx-auto max-w-2xl px-6 py-16 text-muted-foreground">
+      <PageLayout>
+        <p data-slot="view-loading" className="text-muted-foreground">
           Loading…
-        </div>
-      </main>
+        </p>
+      </PageLayout>
     );
   }
 
   if (state.kind === "not-found") {
     return (
-      <main
-        data-slot="view-not-found"
-        className="min-h-screen bg-background text-foreground"
-      >
-        <div className="mx-auto max-w-2xl px-6 py-16">
-          <h1 className="text-3xl font-semibold tracking-tight">404</h1>
-          <p className="mt-3 text-muted-foreground">
+      <PageLayout title="404">
+        <div data-slot="view-not-found">
+          <p className="text-muted-foreground">
             Snapshot <code className="font-mono">{state.id}</code> not found.
           </p>
           <p className="mt-6">
@@ -44,36 +38,42 @@ export function ViewPage({ state, onDelete }: ViewPageProps) {
             </a>
           </p>
         </div>
-      </main>
+      </PageLayout>
     );
   }
 
   if (state.kind === "error") {
     return (
-      <main
-        data-slot="view-error"
-        className="min-h-screen bg-background text-foreground"
-      >
-        <div className="mx-auto max-w-2xl px-6 py-16">
-          <h1 className="text-2xl font-semibold tracking-tight">Error</h1>
-          <p className="mt-3 text-destructive">{state.message}</p>
-        </div>
-      </main>
+      <PageLayout title="Error">
+        <p data-slot="view-error" className="text-destructive">
+          {state.message}
+        </p>
+      </PageLayout>
     );
   }
 
   const env = state.envelope;
+  const root = env.root;
+  // root が resizable Stack のときだけ幅制約を外して全画面に広げる。
+  // 通常の縦積み (非 resizable / 記事一覧) は読みやすい max-w-2xl を維持する。
+  const fullBleed =
+    root.type === "Stack" &&
+    (root.props as { resizable?: boolean }).resizable === true;
 
   return (
-    // min-h-screen は付けない。root (例 Page) 側が自前の高さを持つため二重に
-    // すると content 高が viewport を超えて余計なスクロールが出る。
-    <div data-slot="view-page" className="bg-background">
-      <ViewHeader
-        createdAt={env.createdAt}
-        sourceLabel={env.metadata?.source?.label}
-        onDelete={onDelete}
-      />
-      <Render item={env.root} />
-    </div>
+    <PageLayout
+      title={env.title}
+      fullBleed={fullBleed}
+      header={
+        <ViewHeader
+          createdAt={env.createdAt}
+          sourceLabel={env.metadata?.source?.label}
+          onDelete={onDelete}
+          fullBleed={fullBleed}
+        />
+      }
+    >
+      <Render item={root} />
+    </PageLayout>
   );
 }

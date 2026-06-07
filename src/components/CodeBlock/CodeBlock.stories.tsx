@@ -35,7 +35,7 @@ export const Bash: Story = {
 export const Json: Story = {
   args: {
     lang: "json",
-    code: `{ "type": "ArticleCard", "props": { "title": "hi", "url": "https://x" } }`,
+    code: `{ "type": "Heading", "props": { "text": "hi", "href": "https://x" } }`,
   },
 };
 

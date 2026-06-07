@@ -9,9 +9,7 @@ function render(state: ViewPageState): string {
 }
 
 function renderWithDelete(state: ViewPageState): string {
-  return renderToString(
-    createElement(ViewPage, { state, onDelete: () => {} }),
-  );
+  return renderToString(createElement(ViewPage, { state, onDelete: () => {} }));
 }
 
 const envelope: SnapshotEnvelope = {
@@ -20,9 +18,12 @@ const envelope: SnapshotEnvelope = {
   title: "Sample",
   createdAt: "2026-05-21T03:04:00Z",
   root: {
-    type: "Page",
-    props: { title: "Hello" },
-    children: [{ type: "Section", props: { heading: "Intro" } }],
+    type: "Stack",
+    props: {},
+    children: [
+      { type: "Heading", props: { text: "Hello" } },
+      { type: "Heading", props: { text: "Intro" } },
+    ],
   },
 };
 
@@ -36,7 +37,7 @@ describe("ViewPage", () => {
   test("displays createdAt", () => {
     const html = render({ kind: "found", envelope });
     expect(html).toContain("<time");
-    expect(html).toContain("dateTime=\"2026-05-21T03:04:00Z\"");
+    expect(html).toContain('dateTime="2026-05-21T03:04:00Z"');
   });
 
   test("displays metadata.source.label when present", () => {
@@ -76,5 +77,28 @@ describe("ViewPage", () => {
   test("loading state shows a placeholder", () => {
     const html = render({ kind: "loading" });
     expect(html).toContain("Loading");
+  });
+
+  test("resizable Stack root expands full-bleed (drops max-w constraint)", () => {
+    const html = render({
+      kind: "found",
+      envelope: {
+        ...envelope,
+        root: {
+          type: "Stack",
+          props: { resizable: true, direction: "horizontal" },
+          children: [
+            { type: "Heading", props: { text: "L" } },
+            { type: "Heading", props: { text: "R" } },
+          ],
+        },
+      },
+    });
+    expect(html).not.toContain("max-w-2xl");
+  });
+
+  test("non-resizable root stays width-constrained (max-w-2xl)", () => {
+    const html = render({ kind: "found", envelope });
+    expect(html).toContain("max-w-2xl");
   });
 });

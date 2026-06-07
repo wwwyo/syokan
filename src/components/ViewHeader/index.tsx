@@ -6,23 +6,36 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatDateTime } from "@/lib/date";
+import { cn } from "@/lib/utils";
 
 export type ViewHeaderProps = {
   createdAt: string;
   sourceLabel?: string;
   onDelete?: () => void;
+  /** 本文が fullBleed のとき帯の内側も幅制約を外して揃える */
+  fullBleed?: boolean;
 };
 
 // snapshot のメタ情報 (取得時刻 / source / 削除操作) を出す viewer 用ヘッダ。
 // catalog 描画 (env.root) の外側のクロムで、schema-driven の render tree には含まれない。
 // 削除は誤操作を避けるため直置きせず ellipsis メニューの中に隠す。
-export function ViewHeader({ createdAt, sourceLabel, onDelete }: ViewHeaderProps) {
+export function ViewHeader({
+  createdAt,
+  sourceLabel,
+  onDelete,
+  fullBleed = false,
+}: ViewHeaderProps) {
   return (
     <header
       data-slot="view-header"
       className="border-b border-border bg-background/95 backdrop-blur"
     >
-      <div className="mx-auto flex max-w-2xl items-center justify-between gap-4 px-6 py-3 text-xs text-muted-foreground">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-4 py-3 text-xs text-muted-foreground",
+          fullBleed ? "px-4" : "mx-auto max-w-2xl px-6",
+        )}
+      >
         <div className="flex items-center gap-3">
           <time data-slot="view-created-at" dateTime={createdAt}>
             {formatDateTime(createdAt)}

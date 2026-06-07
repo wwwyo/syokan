@@ -7,9 +7,9 @@ import { SnapshotStore } from "./store";
 
 const baseInput = {
   root: {
-    type: "Page",
-    props: { title: "Hello" },
-    children: [{ type: "Section", props: { heading: "S1" } }],
+    type: "Stack",
+    props: {},
+    children: [{ type: "Heading", props: { text: "S1" } }],
   },
 } as const;
 
@@ -95,7 +95,7 @@ describe("api routes", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          root: { type: "ArticleCard", props: { title: "T" } },
+          root: { type: "Heading", props: {} },
         }),
       }),
     );
@@ -103,10 +103,10 @@ describe("api routes", () => {
     const data = (await res.json()) as {
       issues: Array<{ path: (string | number)[]; expected?: string }>;
     };
-    const urlIssue = data.issues.find(
-      (i) => i.path.includes("url") && i.path.includes("props"),
+    const textIssue = data.issues.find(
+      (i) => i.path.includes("text") && i.path.includes("props"),
     );
-    expect(urlIssue).toBeDefined();
+    expect(textIssue).toBeDefined();
   });
 
   test("GET /api/views/:id returns the snapshot after POST", async () => {
@@ -124,7 +124,7 @@ describe("api routes", () => {
     expect(get.status).toBe(200);
     const env = (await get.json()) as { id: string; root: { type: string } };
     expect(env.id).toBe(id);
-    expect(env.root.type).toBe("Page");
+    expect(env.root.type).toBe("Stack");
   });
 
   test("GET /api/views/:id returns 404 for unknown id", async () => {
