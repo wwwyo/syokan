@@ -1,4 +1,5 @@
 import { File } from "@pierre/diffs/react";
+import type { CSSProperties } from "react";
 import { z } from "zod";
 import { toCodeLang } from "@/lib/code";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -15,59 +16,60 @@ export const codePropsSchema = z
 
 export type CodeProps = z.infer<typeof codePropsSchema>;
 
-// hover / focus 時だけ現れる遷移。filename 行内・absolute 配置の両方で共有する。
 const COPY_REVEAL =
   "opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100";
 
+// pierre File の host (diffs-container) はテーマ背景 (github の編集面) を自分で持つ。
+// host に直接 padding / 行間を渡すことで、別サーフェスを重ねず単一面に余白付きで描画する。
+// (旧実装は bg-muted の枠に白いコード面が重なり濁っていた)
+const FILE_STYLE = {
+  display: "block",
+  padding: "0.875rem 1rem",
+  "--diffs-font-size": "13px",
+  "--diffs-line-height": "1.65",
+} as CSSProperties;
+
+const FILE_OPTIONS = {
+  // app 全体のコード表示で揃える github テーマ。dark/light は themeType で切替
+  theme: { dark: "github-dark", light: "github-light" },
+  disableFileHeader: true,
+  disableLineNumbers: true,
+  overflow: "scroll",
+} as const;
+
 /**
  * コード断片を等幅 + シンタックスハイライトで表示する catalog component。
- * ハイライトは @pierre/diffs の File に委譲し、Diff と同じ Shiki スタックに統一する。
- * filename ヘッダと CopyButton は light DOM 側の chrome として持ち、コード本体のみ File へ渡す
- * (pierre 既定のヘッダ/行番号は無効化)。lang 未指定/未知は "text" として素のテキストで見せる。
+ * ハイライトは @pierre/diffs の File に委譲し Diff と同じ Shiki スタックに統一する。
+ * コード面は File 自身のテーマ背景を唯一のサーフェスとし、filename / CopyButton は
+ * その上に重ねる chrome として持つ。lang 未指定/未知は "text" として素のテキストで見せる。
  */
 export function Code({ code, lang, filename }: CodeProps) {
   const themeType = useColorScheme();
   return (
     <div
       data-slot="code"
-      className="group relative my-4 overflow-hidden rounded-lg border border-border bg-muted"
+      className="group relative my-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
     >
       {filename ? (
-        // filename がある時はヘッダ行に filename と copy を同じ row で並べる
         <div
           data-slot="code-filename"
-          className="flex items-center justify-between gap-2 border-b border-border px-4 py-1.5"
+          className="flex items-center justify-between gap-2 border-b border-border px-4 py-2"
         >
-          <span className="truncate font-mono text-xs text-muted-foreground">
+          <span className="truncate font-mono text-xs font-medium text-muted-foreground">
             {filename}
           </span>
           <CopyButton code={code} className={COPY_REVEAL} />
         </div>
       ) : null}
-      {/* File は自前テーマ背景で edge-to-edge に描画するため、内側に余白を持たせて
-          コードブロックらしい見た目にする (旧 <pre> の p-4 相当) */}
-      <div className="px-4 py-3 text-sm">
-        <File
-          file={{
-            name: filename ?? "code",
-            contents: code,
-            lang: toCodeLang(lang),
-          }}
-          options={{
-            // app の他コード表示と揃える github テーマ。dark/light は themeType で切替
-            theme: { dark: "github-dark", light: "github-light" },
-            themeType,
-            disableFileHeader: true,
-            disableLineNumbers: true,
-            overflow: "scroll",
-          }}
-        />
-      </div>
+      <File
+        file={{ name: filename ?? "code", contents: code, lang: toCodeLang(lang) }}
+        style={FILE_STYLE}
+        options={{ ...FILE_OPTIONS, themeType }}
+      />
       {filename ? null : (
-        // filename が無い時はコード右上に浮かせる
         <CopyButton
           code={code}
-          className={cn("absolute right-1.5 top-1.5", COPY_REVEAL)}
+          className={cn("absolute right-2 top-2 z-10", COPY_REVEAL)}
         />
       )}
     </div>
