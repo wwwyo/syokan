@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { CodeBlock } from ".";
+import { Code } from ".";
 
-// CodeBlock は catalog 非登録の共有内部部品 (MarkdownDoc / PlainText が利用)。
-// Shiki ハイライトはマウント後に非同期で適用されるため、初回は plain fallback が
-// 一瞬見えることがある。
+// Code は @pierre/diffs の File をラップした catalog component。
+// ハイライトはマウント後に shadow DOM 内で適用される。未知 lang は "text" にフォールバックする。
+// theme は documentElement の .dark を監視して切替わるので toolbar の light/dark で追従確認できる。
 const meta = {
-  title: "Components/CodeBlock",
-  component: CodeBlock,
+  title: "Catalog/Code",
+  component: Code,
   tags: ["autodocs"],
-} satisfies Meta<typeof CodeBlock>;
+} satisfies Meta<typeof Code>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -26,10 +26,7 @@ export function Counter() {
 };
 
 export const Bash: Story = {
-  args: {
-    lang: "bash",
-    code: "bun install\nbun run dev",
-  },
+  args: { lang: "bash", code: "bun install\nbun run dev" },
 };
 
 export const Json: Story = {
@@ -39,21 +36,6 @@ export const Json: Story = {
   },
 };
 
-export const Diff: Story = {
-  args: {
-    lang: "diff",
-    code: "- const a = 1;\n+ const a = 2;",
-  },
-};
-
-// 未知 lang / lang 未指定は text 扱いでハイライトせず等幅表示
-export const UnknownLang: Story = {
-  args: {
-    code: "plain text without highlighting\n  indented line",
-  },
-};
-
-// filename を渡すとコード上部にファイル名ヘッダーを出す
 export const WithFilename: Story = {
   args: {
     lang: "ts",
@@ -64,7 +46,12 @@ export const WithFilename: Story = {
   },
 };
 
-// Shiki が知らない lang を指定した場合に落ちず素のテキストで出るか確認する
+// lang 未指定は素のテキスト表示 (markdown 解釈なし)
+export const PlainTextLike: Story = {
+  args: { code: "plain text without highlighting\n  indented line" },
+};
+
+// Shiki が知らない lang は落ちず "text" フォールバックで生テキストを出す
 export const UnsupportedLang: Story = {
   args: {
     lang: "made-up-lang",

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type ItemComponent, components, itemSchema, specs } from ".";
 import { Card } from "./Card";
+import { Code } from "./Code";
 import { Diff } from "./Diff";
 import { Heading } from "./Heading";
 import { Link } from "./Link";
@@ -25,6 +26,7 @@ describe("catalog", () => {
     expect(specs.get("MarkdownDoc")?.type).toBe("MarkdownDoc");
     expect(specs.get("PlainText")?.type).toBe("PlainText");
     expect(specs.get("Diff")?.type).toBe("Diff");
+    expect(specs.get("Code")?.type).toBe("Code");
   });
 
   test("itemSchema parses a Card containing Heading/Text children", () => {
@@ -58,8 +60,9 @@ describe("catalog", () => {
     expect(components.get("MarkdownDoc")).toBe(asItem(MarkdownDoc));
     expect(components.get("PlainText")).toBe(asItem(PlainText));
     expect(components.get("Diff")).toBe(asItem(Diff));
+    expect(components.get("Code")).toBe(asItem(Code));
     expect(components.get("Missing")).toBeUndefined();
-    expect(components.size).toBe(9);
+    expect(components.size).toBe(10);
   });
 
   test("Heading requires text and is strict", () => {
@@ -178,6 +181,20 @@ describe("catalog", () => {
     ).toBe(false);
   });
 
+  test("Code requires a code string and is strict", () => {
+    expect(
+      itemSchema.safeParse({ type: "Code", props: { code: "const x = 1;" } })
+        .success,
+    ).toBe(true);
+    expect(itemSchema.safeParse({ type: "Code", props: {} }).success).toBe(
+      false,
+    );
+    expect(
+      itemSchema.safeParse({ type: "Code", props: { code: "x", extra: 1 } })
+        .success,
+    ).toBe(false);
+  });
+
   test("Card accepts arbitrary catalog children", () => {
     const ok = itemSchema.safeParse({
       type: "Card",
@@ -201,6 +218,7 @@ describe("catalog", () => {
     expect(withChild("MarkdownDoc", { body: "x" })).toBe(false);
     expect(withChild("PlainText", { body: "x" })).toBe(false);
     expect(withChild("Diff", { patch: "diff" })).toBe(false);
+    expect(withChild("Code", { code: "x" })).toBe(false);
   });
 
   test("Time requires an ISO datetime and is strict", () => {

@@ -31,26 +31,26 @@ describe("MarkdownDoc", () => {
     expect(html).toContain("one");
   });
 
-  test("renders fenced code via CodeBlock (pierre File host; highlights client-side)", () => {
+  test("renders fenced code via Code (pierre File host; highlights client-side)", () => {
     const body = "```ts\nconst x = 1;\n```";
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    // コードフェンスは CodeBlock (= @pierre/diffs File) に委譲。コード本体は client 描画なので
+    // コードフェンスは Code catalog (= @pierre/diffs File) に委譲。コード本体は client 描画なので
     // SSR では host のみ出る。
-    expect(html).toContain('data-slot="codeblock"');
+    expect(html).toContain('data-slot="code"');
     expect(html).toContain("<diffs-container");
   });
 
   test("renders a filename header for ```filename.ext fences", () => {
     const body = '```hoge.json\n{"a":1}\n```';
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    expect(html).toContain('data-slot="codeblock-filename"');
+    expect(html).toContain('data-slot="code-filename"');
     expect(html).toContain("hoge.json");
   });
 
   test("plain language fences have no filename header", () => {
     const body = "```ts\nconst x = 1;\n```";
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    expect(html).not.toContain('data-slot="codeblock-filename"');
+    expect(html).not.toContain('data-slot="code-filename"');
   });
 
   test("renders inline links as anchors with href", () => {

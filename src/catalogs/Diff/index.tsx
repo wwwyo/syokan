@@ -85,7 +85,7 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
           lineAnnotations={lineAnnotations.length ? lineAnnotations : undefined}
           renderAnnotation={(a) => <DiffComment {...a.metadata} />}
           options={{
-            // app の CodeBlock (github-light/dark) と syntax color を揃える
+            // app の Code (github-light/dark) と syntax color を揃える
             theme: { dark: "github-dark", light: "github-light" },
             themeType,
             diffStyle,

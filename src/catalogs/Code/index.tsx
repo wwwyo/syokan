@@ -1,36 +1,41 @@
 import { File } from "@pierre/diffs/react";
+import { z } from "zod";
 import { toCodeLang } from "@/lib/code";
 import { useColorScheme } from "@/lib/useColorScheme";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./CopyButton";
 
-export type CodeBlockProps = {
-  code: string;
-  lang?: string;
-  filename?: string;
-};
+export const codePropsSchema = z
+  .object({
+    code: z.string(),
+    lang: z.string().optional(),
+    filename: z.string().optional(),
+  })
+  .strict();
+
+export type CodeProps = z.infer<typeof codePropsSchema>;
 
 // hover / focus 時だけ現れる遷移。filename 行内・absolute 配置の両方で共有する。
 const COPY_REVEAL =
   "opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100";
 
 /**
- * コードを等幅 + シンタックスハイライトで表示する共有内部部品 (MarkdownDoc / PlainText が利用)。
- * ハイライトは @pierre/diffs の File に委譲し、diff と同じ Shiki スタックに統一する。
+ * コード断片を等幅 + シンタックスハイライトで表示する catalog component。
+ * ハイライトは @pierre/diffs の File に委譲し、Diff と同じ Shiki スタックに統一する。
  * filename ヘッダと CopyButton は light DOM 側の chrome として持ち、コード本体のみ File へ渡す
- * (pierre 既定のヘッダ/行番号は無効化)。lang 未指定は "text" として素のテキストで見せる。
+ * (pierre 既定のヘッダ/行番号は無効化)。lang 未指定/未知は "text" として素のテキストで見せる。
  */
-export function CodeBlock({ code, lang, filename }: CodeBlockProps) {
+export function Code({ code, lang, filename }: CodeProps) {
   const themeType = useColorScheme();
   return (
     <div
-      data-slot="codeblock"
+      data-slot="code"
       className="group relative my-4 overflow-hidden rounded-lg border border-border bg-muted"
     >
       {filename ? (
         // filename がある時はヘッダ行に filename と copy を同じ row で並べる
         <div
-          data-slot="codeblock-filename"
+          data-slot="code-filename"
           className="flex items-center justify-between gap-2 border-b border-border px-4 py-1.5"
         >
           <span className="truncate font-mono text-xs text-muted-foreground">

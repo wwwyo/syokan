@@ -9,7 +9,7 @@ export type CopyButtonProps = {
 
 // 生の code をクリップボードへ書き込み、成功したら 1.5s だけチェックマークに
 // 切り替える。出現 (hover/focus) と配置 (absolute / flex 行内) は呼び出し側が
-// className で決める。CodeBlock 専用の内部サブパーツ。
+// className で決める。Code 専用の内部サブパーツ。
 export function CopyButton({ code, className }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
@@ -32,7 +32,7 @@ export function CopyButton({ code, className }: CopyButtonProps) {
   return (
     <button
       type="button"
-      data-slot="codeblock-copy"
+      data-slot="code-copy"
       onClick={onCopy}
       aria-label={copied ? "Copied" : "Copy code"}
       className={cn(
