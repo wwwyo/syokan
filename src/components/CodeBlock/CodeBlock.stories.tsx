@@ -63,3 +63,11 @@ export const WithFilename: Story = {
 }`,
   },
 };
+
+// Shiki が知らない lang を指定した場合に落ちず素のテキストで出るか確認する
+export const UnsupportedLang: Story = {
+  args: {
+    lang: "made-up-lang",
+    code: "this is not a real language\n  keep indentation",
+  },
+};

@@ -1,7 +1,9 @@
 import { type DiffLineAnnotation, PatchDiff } from "@pierre/diffs/react";
 import { MessageSquare } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { z } from "zod";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useColorScheme } from "@/lib/useColorScheme";
 
 const diffCommentSchema = z.object({
   // 旧ファイル側 (deletions) か新ファイル側 (additions) か。LLM には old/new の方が直感的。
@@ -22,26 +24,21 @@ export const diffPropsSchema = z
 
 export type DiffProps = z.infer<typeof diffPropsSchema>;
 
+type DiffCommentInput = z.infer<typeof diffCommentSchema>;
 type CommentMeta = { body: string; author?: string };
 
 /**
- * app は class ベースの dark mode (.dark)、@pierre/diffs は shadow DOM 内で独自テーマを
- * 持つため app の CSS 変数が届かない。documentElement の .dark を監視して themeType を
- * 明示制御する。pierre 既定の themeType:'system' は OS preference 追従で、app/storybook の
- * class トグルと噛み合わないため使わない。
+ * catalog の comment (old/new 表記) を pierre の DiffLineAnnotation に変換する。
+ * old=deletions(旧ファイル側) / new=additions(新ファイル側) のマッピングはここに集約する。
  */
-function useColorScheme(): "dark" | "light" {
-  const [scheme, setScheme] = useState<"dark" | "light">("light");
-  useEffect(() => {
-    const root = document.documentElement;
-    const sync = () =>
-      setScheme(root.classList.contains("dark") ? "dark" : "light");
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-  return scheme;
+export function toLineAnnotations(
+  comments: readonly DiffCommentInput[] | undefined,
+): DiffLineAnnotation<CommentMeta>[] {
+  return (comments ?? []).map((c) => ({
+    side: c.side === "old" ? "deletions" : "additions",
+    lineNumber: c.line,
+    metadata: { body: c.body, author: c.author },
+  }));
 }
 
 /**
@@ -68,31 +65,33 @@ function DiffComment({ body, author }: CommentMeta) {
  */
 export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
   const themeType = useColorScheme();
-  const lineAnnotations = useMemo<DiffLineAnnotation<CommentMeta>[]>(
-    () =>
-      (comments ?? []).map((c) => ({
-        side: c.side === "old" ? "deletions" : "additions",
-        lineNumber: c.line,
-        metadata: { body: c.body, author: c.author },
-      })),
-    [comments],
-  );
+  const lineAnnotations = useMemo(() => toLineAnnotations(comments), [comments]);
   return (
     <div
       data-slot="diff"
       className="my-4 overflow-hidden rounded-lg border border-border"
     >
-      <PatchDiff
-        patch={patch}
-        lineAnnotations={lineAnnotations.length ? lineAnnotations : undefined}
-        renderAnnotation={(a) => <DiffComment {...a.metadata} />}
-        options={{
-          // app の CodeBlock (github-light/dark) と syntax color を揃える
-          theme: { dark: "github-dark", light: "github-light" },
-          themeType,
-          diffStyle,
-        }}
-      />
+      {/* PatchDiff は不正/複数ファイル/空の patch で render 中に throw する
+          (getSingularPatch)。ツリー全体のクラッシュを防ぐため境界で包む。 */}
+      <ErrorBoundary
+        fallback={
+          <div className="px-4 py-3 text-sm text-muted-foreground">
+            diff を表示できませんでした (単一ファイルの patch のみ対応)。
+          </div>
+        }
+      >
+        <PatchDiff
+          patch={patch}
+          lineAnnotations={lineAnnotations.length ? lineAnnotations : undefined}
+          renderAnnotation={(a) => <DiffComment {...a.metadata} />}
+          options={{
+            // app の CodeBlock (github-light/dark) と syntax color を揃える
+            theme: { dark: "github-dark", light: "github-light" },
+            themeType,
+            diffStyle,
+          }}
+        />
+      </ErrorBoundary>
     </div>
   );
 }

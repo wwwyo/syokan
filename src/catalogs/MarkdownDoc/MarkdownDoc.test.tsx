@@ -31,14 +31,13 @@ describe("MarkdownDoc", () => {
     expect(html).toContain("one");
   });
 
-  test("renders code blocks in monospaced <pre><code> (fallback before highlight)", () => {
+  test("renders fenced code via CodeBlock (pierre File host; highlights client-side)", () => {
     const body = "```ts\nconst x = 1;\n```";
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    // useEffect は SSR で走らないため Shiki 前の plain fallback が出る
-    expect(html).toContain("<pre");
-    expect(html).toContain("font-mono");
-    expect(html).toContain("const x = 1;");
-    expect(html).toContain("data-slot=\"codeblock\"");
+    // コードフェンスは CodeBlock (= @pierre/diffs File) に委譲。コード本体は client 描画なので
+    // SSR では host のみ出る。
+    expect(html).toContain('data-slot="codeblock"');
+    expect(html).toContain("<diffs-container");
   });
 
   test("renders a filename header for ```filename.ext fences", () => {

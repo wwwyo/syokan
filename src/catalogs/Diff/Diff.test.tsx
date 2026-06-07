@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { Diff, diffPropsSchema } from ".";
+import { Diff, diffPropsSchema, toLineAnnotations } from ".";
 
 const PATCH = `diff --git a/example.ts b/example.ts
 --- a/example.ts
@@ -69,6 +69,23 @@ describe("diffPropsSchema", () => {
         comments: [{ side: "new", line: 1 }],
       }).success,
     ).toBe(false);
+  });
+});
+
+describe("toLineAnnotations", () => {
+  test("maps old→deletions and new→additions with metadata", () => {
+    const result = toLineAnnotations([
+      { side: "old", line: 3, body: "removed?" },
+      { side: "new", line: 7, body: "looks good", author: "me" },
+    ]);
+    expect(result).toEqual([
+      { side: "deletions", lineNumber: 3, metadata: { body: "removed?", author: undefined } },
+      { side: "additions", lineNumber: 7, metadata: { body: "looks good", author: "me" } },
+    ]);
+  });
+
+  test("returns an empty array for undefined comments", () => {
+    expect(toLineAnnotations(undefined)).toEqual([]);
   });
 });
 

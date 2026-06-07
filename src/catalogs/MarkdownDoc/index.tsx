@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { resolveCodeInfo } from "@/lib/shiki";
+import { resolveCodeInfo } from "@/lib/code";
 
 export const markdownDocPropsSchema = z
   .object({
