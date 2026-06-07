@@ -8,7 +8,14 @@ import { useEffect, useState } from "react";
  * 噛み合わないため使わない。SSR / 初回は `light` で開始し、mount 後に同期する。
  */
 export function useColorScheme(): "dark" | "light" {
-  const [scheme, setScheme] = useState<"dark" | "light">("light");
+  // 初回 client render で実際の .dark を読み、light→dark の flash を防ぐ。
+  // server / document 不在では "light" にフォールバック (SSR 安全)。
+  const [scheme, setScheme] = useState<"dark" | "light">(() =>
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark")
+      ? "dark"
+      : "light",
+  );
   useEffect(() => {
     const root = document.documentElement;
     const sync = () =>
