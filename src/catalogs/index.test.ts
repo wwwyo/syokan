@@ -164,4 +164,39 @@ describe("catalog", () => {
     });
     expect(ok.success).toBe(true);
   });
+
+  test("leaf components reject children (childrenTypes: [])", () => {
+    const withChild = (type: string, props: Record<string, unknown>) =>
+      itemSchema.safeParse({
+        type,
+        props,
+        children: [{ type: "Text", props: { body: "x" } }],
+      }).success;
+    expect(withChild("Heading", { text: "H" })).toBe(false);
+    expect(withChild("Text", { body: "x" })).toBe(false);
+    expect(withChild("Link", { href: "https://example.com/" })).toBe(false);
+    expect(withChild("MarkdownDoc", { body: "x" })).toBe(false);
+    expect(withChild("PlainText", { body: "x" })).toBe(false);
+  });
+
+  test("Heading/Link href reject non-http(s) protocols (XSS guard)", () => {
+    expect(
+      itemSchema.safeParse({
+        type: "Heading",
+        props: { text: "H", href: "javascript:alert(1)" },
+      }).success,
+    ).toBe(false);
+    expect(
+      itemSchema.safeParse({
+        type: "Link",
+        props: { href: "javascript:alert(1)" },
+      }).success,
+    ).toBe(false);
+    expect(
+      itemSchema.safeParse({
+        type: "Link",
+        props: { href: "https://example.com/" },
+      }).success,
+    ).toBe(true);
+  });
 });

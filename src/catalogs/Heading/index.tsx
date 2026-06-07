@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { httpUrl } from "@/lib/url";
 import { cn } from "@/lib/utils";
 
 export const headingPropsSchema = z
@@ -6,7 +7,7 @@ export const headingPropsSchema = z
     text: z.string().min(1),
     level: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
     // href があれば見出しをリンク化する (記事タイトル等を 1 ノードで表現する)
-    href: z.url().optional(),
+    href: httpUrl.optional(),
   })
   .strict();
 

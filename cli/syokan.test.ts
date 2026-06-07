@@ -227,7 +227,7 @@ describe("cli main: post (markdown file)", () => {
 describe("cli main: post (json file)", () => {
   test("posts a raw JSON tree and prints the URL", async () => {
     const tree = JSON.stringify({
-      root: { type: "Page", props: { title: "T" } },
+      root: { type: "Heading", props: { text: "T" } },
     });
     const { deps, out, calls } = makeDeps({
       files: { "items.json": tree },
@@ -237,7 +237,7 @@ describe("cli main: post (json file)", () => {
     expect(result.exitCode).toBe(0);
     expect(out).toEqual(["http://localhost:5173/views/xyz"]);
     const body = calls[0]?.body as { root: { type: string } };
-    expect(body.root.type).toBe("Page");
+    expect(body.root.type).toBe("Heading");
   });
 
   test("invalid JSON file: error to stderr, exit non-zero", async () => {
@@ -298,14 +298,14 @@ describe("cli main: post (extensionless file)", () => {
   test("routes a JSON-looking body to a raw post", async () => {
     const { deps, calls } = makeDeps({
       files: {
-        clip: JSON.stringify({ root: { type: "Section", props: { heading: "h" } } }),
+        clip: JSON.stringify({ root: { type: "Heading", props: { text: "h" } } }),
       },
       respond: () => okResponse("ext-json"),
     });
     const result = await main(["post", "clip"], deps);
     expect(result.exitCode).toBe(0);
     const body = calls[0]?.body as { root: { type: string } };
-    expect(body.root.type).toBe("Section");
+    expect(body.root.type).toBe("Heading");
   });
 
   test("routes a markdown-looking body through MarkdownDoc", async () => {
@@ -384,7 +384,7 @@ describe("cli main: lazy-spawn integration", () => {
 
   test("post does not spawn when the server is already up", async () => {
     const h = makeDeps({
-      files: { "items.json": JSON.stringify({ root: { type: "Page", props: {} } }) },
+      files: { "items.json": JSON.stringify({ root: { type: "Stack", props: {} } }) },
       respond: () => okResponse("reuse-1"),
       health: () => true,
     });

@@ -46,11 +46,19 @@ function defineViewComponent<
 const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Stack", stackPropsSchema, Stack),
   defineViewComponent("Card", cardPropsSchema, Card),
-  defineViewComponent("Heading", headingPropsSchema, Heading),
-  defineViewComponent("Link", linkPropsSchema, Link),
-  defineViewComponent("Text", textPropsSchema, Text),
-  defineViewComponent("MarkdownDoc", markdownDocPropsSchema, MarkdownDoc),
-  defineViewComponent("PlainText", plainTextPropsSchema, PlainText),
+  // leaf component は children を持たない。childrenTypes: [] で children 混入を
+  // ingest 時に弾く (未指定だと children が黙って捨てられる)。
+  defineViewComponent("Heading", headingPropsSchema, Heading, {
+    childrenTypes: [],
+  }),
+  defineViewComponent("Link", linkPropsSchema, Link, { childrenTypes: [] }),
+  defineViewComponent("Text", textPropsSchema, Text, { childrenTypes: [] }),
+  defineViewComponent("MarkdownDoc", markdownDocPropsSchema, MarkdownDoc, {
+    childrenTypes: [],
+  }),
+  defineViewComponent("PlainText", plainTextPropsSchema, PlainText, {
+    childrenTypes: [],
+  }),
 ];
 
 const catalog = createCatalog(entries.map((e) => e.spec));

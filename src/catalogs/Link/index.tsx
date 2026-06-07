@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { httpUrl } from "@/lib/url";
 
 export const linkPropsSchema = z
   .object({
-    href: z.url(),
+    href: httpUrl,
     // ラベル。省略時は href 自体を表示する
     text: z.string().min(1).optional(),
   })
