@@ -7,6 +7,7 @@ import {
   deriveTitle,
   ensureServerRunning,
   main,
+  stripLeadingH1,
 } from "./syokan";
 
 type Captured = {
@@ -315,8 +316,14 @@ describe("cli main: post (extensionless file)", () => {
     });
     const result = await main(["post", "clip"], deps);
     expect(result.exitCode).toBe(0);
-    const body = calls[0]?.body as { root: { type: string } };
+    const body = calls[0]?.body as {
+      root: { type: string; props: { body: string } };
+      title: string;
+    };
     expect(body.root.type).toBe("MarkdownDoc");
+    // 先頭 H1 は title に昇格し body からは除かれる (タイトル二重表示を防ぐ)
+    expect(body.title).toBe("Title");
+    expect(body.root.props.body).toBe("body");
   });
 });
 
@@ -326,6 +333,22 @@ describe("cli main: unknown command", () => {
     const result = await main(["frobnicate"], deps);
     expect(result.exitCode).toBe(2);
     expect(err[0]).toContain("unknown command");
+  });
+});
+
+describe("stripLeadingH1", () => {
+  test("removes the leading H1 that became the title", () => {
+    expect(stripLeadingH1("# Meeting Notes\n\nbody", "Meeting Notes")).toBe(
+      "body",
+    );
+  });
+
+  test("keeps body when the leading H1 differs from the title", () => {
+    expect(stripLeadingH1("# Other\n\nbody", "notes")).toBe("# Other\n\nbody");
+  });
+
+  test("keeps body when there is no leading H1", () => {
+    expect(stripLeadingH1("just text\n", "notes")).toBe("just text\n");
   });
 });
 

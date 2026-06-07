@@ -48,6 +48,26 @@ export function deriveTitle(body: string, file: string): string {
   return basename(file).replace(/\.md$/i, "");
 }
 
+/**
+ * deriveTitle が先頭 H1 を title に昇格させた場合、その H1 行を body から除く。
+ * 除かないと PageLayout の title と MarkdownDoc の H1 でタイトルが二重表示される。
+ */
+export function stripLeadingH1(body: string, title: string): string {
+  const lines = body.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]?.trim() ?? "";
+    const heading = /^#\s+(.+)$/.exec(line);
+    if (heading?.[1]) {
+      if (heading[1].trim() !== title) return body;
+      return [...lines.slice(0, i), ...lines.slice(i + 1)]
+        .join("\n")
+        .replace(/^\n+/, "");
+    }
+    if (line.length > 0) return body;
+  }
+  return body;
+}
+
 export function buildMarkdownPayload(
   body: string,
   opts?: { title?: string; sourceLabel?: string },
@@ -183,8 +203,9 @@ export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
 
   const kind = classifyInput(file, text);
   if (kind === "markdown") {
-    const payload = buildMarkdownPayload(text, {
-      title: deriveTitle(text, file),
+    const title = deriveTitle(text, file);
+    const payload = buildMarkdownPayload(stripLeadingH1(text, title), {
+      title,
       sourceLabel: "manual-cli",
     });
     return postWithServer(deps, payload);
