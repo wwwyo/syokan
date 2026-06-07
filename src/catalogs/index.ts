@@ -8,6 +8,7 @@ import { MarkdownDoc, markdownDocPropsSchema } from "./MarkdownDoc";
 import { PlainText, plainTextPropsSchema } from "./PlainText";
 import { Stack, stackPropsSchema } from "./Stack";
 import { Text, textPropsSchema } from "./Text";
+import { Time, timePropsSchema } from "./Time";
 
 export type ItemComponent = ComponentType<
   Record<string, unknown> & { children?: ReactNode }
@@ -53,6 +54,7 @@ const entries: readonly ViewComponentEntry[] = [
   }),
   defineViewComponent("Link", linkPropsSchema, Link, { childrenTypes: [] }),
   defineViewComponent("Text", textPropsSchema, Text, { childrenTypes: [] }),
+  defineViewComponent("Time", timePropsSchema, Time, { childrenTypes: [] }),
   defineViewComponent("MarkdownDoc", markdownDocPropsSchema, MarkdownDoc, {
     childrenTypes: [],
   }),

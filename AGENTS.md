@@ -111,7 +111,7 @@ syokan/
 │   │   │   ├── Card.test.tsx
 │   │   │   └── Card.stories.tsx  # Storybook (catalog の視覚レビュー用)
 │   │   ├── MarkdownDoc/     #   ...
-│   │   └── ...              #   Stack / Heading / Link / Text / PlainText (合成可能なプリミティブ)
+│   │   └── ...              #   Stack / Heading / Link / Text / Time / PlainText (合成可能なプリミティブ)
 │   └── components/          # catalog 非登録の UI (LLM が JSON で投げられない内部部品)
 │       ├── ui/              #   shadcn primitives (CLI 経由で生成・更新。Dir 化しない)
 │       ├── CodeBlock/       #   MarkdownDoc/PlainText の共有内部部品 (Shiki ハイライト)

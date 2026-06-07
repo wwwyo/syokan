@@ -7,6 +7,7 @@ import { MarkdownDoc } from "./MarkdownDoc";
 import { PlainText } from "./PlainText";
 import { Stack } from "./Stack";
 import { Text } from "./Text";
+import { Time } from "./Time";
 
 // Map に格納された component は ItemComponent に widening 済み。
 // テスト側では識別性 (=== 比較) のみ意味があるので同型へ寄せる。
@@ -19,6 +20,7 @@ describe("catalog", () => {
     expect(specs.get("Heading")?.type).toBe("Heading");
     expect(specs.get("Link")?.type).toBe("Link");
     expect(specs.get("Text")?.type).toBe("Text");
+    expect(specs.get("Time")?.type).toBe("Time");
     expect(specs.get("MarkdownDoc")?.type).toBe("MarkdownDoc");
     expect(specs.get("PlainText")?.type).toBe("PlainText");
   });
@@ -50,10 +52,11 @@ describe("catalog", () => {
     expect(components.get("Heading")).toBe(asItem(Heading));
     expect(components.get("Link")).toBe(asItem(Link));
     expect(components.get("Text")).toBe(asItem(Text));
+    expect(components.get("Time")).toBe(asItem(Time));
     expect(components.get("MarkdownDoc")).toBe(asItem(MarkdownDoc));
     expect(components.get("PlainText")).toBe(asItem(PlainText));
     expect(components.get("Missing")).toBeUndefined();
-    expect(components.size).toBe(7);
+    expect(components.size).toBe(8);
   });
 
   test("Heading requires text and is strict", () => {
@@ -174,9 +177,26 @@ describe("catalog", () => {
       }).success;
     expect(withChild("Heading", { text: "H" })).toBe(false);
     expect(withChild("Text", { body: "x" })).toBe(false);
+    expect(withChild("Time", { datetime: "2026-05-21T03:04:00Z" })).toBe(false);
     expect(withChild("Link", { href: "https://example.com/" })).toBe(false);
     expect(withChild("MarkdownDoc", { body: "x" })).toBe(false);
     expect(withChild("PlainText", { body: "x" })).toBe(false);
+  });
+
+  test("Time requires an ISO datetime and is strict", () => {
+    expect(
+      itemSchema.safeParse({
+        type: "Time",
+        props: { datetime: "2026-05-21T03:04:00Z" },
+      }).success,
+    ).toBe(true);
+    expect(
+      itemSchema.safeParse({ type: "Time", props: { datetime: "not a date" } })
+        .success,
+    ).toBe(false);
+    expect(itemSchema.safeParse({ type: "Time", props: {} }).success).toBe(
+      false,
+    );
   });
 
   test("Heading/Link href reject non-http(s) protocols (XSS guard)", () => {
