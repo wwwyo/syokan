@@ -10,7 +10,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// PlainText は markdown 解釈せず空白・改行をそのまま等幅で見せる (CodeBlock lang=text)
+// PlainText は markdown 解釈せず空白・改行をそのまま等幅で見せる (Code lang=text)
 export const Log: Story = {
   args: {
     body: `[12:00:01] INFO  server started on :5173

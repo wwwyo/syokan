@@ -2,6 +2,8 @@ import type { ComponentType, ReactNode } from "react";
 import type { z } from "zod";
 import { type ComponentSpec, createCatalog, defineComponent } from "@/schema";
 import { Card, cardPropsSchema } from "./Card";
+import { Code, codePropsSchema } from "./Code";
+import { Diff, diffPropsSchema } from "./Diff";
 import { Heading, headingPropsSchema } from "./Heading";
 import { Link, linkPropsSchema } from "./Link";
 import { MarkdownDoc, markdownDocPropsSchema } from "./MarkdownDoc";
@@ -61,6 +63,8 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("PlainText", plainTextPropsSchema, PlainText, {
     childrenTypes: [],
   }),
+  defineViewComponent("Diff", diffPropsSchema, Diff, { childrenTypes: [] }),
+  defineViewComponent("Code", codePropsSchema, Code, { childrenTypes: [] }),
 ];
 
 const catalog = createCatalog(entries.map((e) => e.spec));

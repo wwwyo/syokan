@@ -6,7 +6,7 @@ import { CopyButton } from ".";
 describe("CopyButton", () => {
   test("renders a button labelled 'Copy code' in its initial state", () => {
     const html = renderToString(createElement(CopyButton, { code: "x" }));
-    expect(html).toContain('data-slot="codeblock-copy"');
+    expect(html).toContain('data-slot="code-copy"');
     expect(html).toContain('type="button"');
     expect(html).toContain('aria-label="Copy code"');
   });

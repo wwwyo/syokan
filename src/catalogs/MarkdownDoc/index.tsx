@@ -1,7 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { z } from "zod";
-import { CodeBlock } from "@/components/CodeBlock";
+import { Code } from "@/catalogs/Code";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { resolveCodeInfo } from "@/lib/shiki";
+import { resolveCodeInfo } from "@/lib/code";
 
 export const markdownDocPropsSchema = z
   .object({
@@ -112,7 +112,7 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
             const extracted = extractCodeFromPre(node);
             if (extracted) {
               return (
-                <CodeBlock
+                <Code
                   code={extracted.code}
                   lang={extracted.lang}
                   filename={extracted.filename}
@@ -121,7 +121,7 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
             }
             return (
               <pre
-                data-slot="codeblock"
+                data-slot="code"
                 className="my-4 overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-6"
               >
                 {children}
