@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 import type { z } from "zod";
 import { type ComponentSpec, createCatalog, defineComponent } from "@/schema";
+import { Badge, badgePropsSchema } from "./Badge";
 import { Card, cardPropsSchema } from "./Card";
 import { Code, codePropsSchema } from "./Code";
 import { Diff, diffPropsSchema } from "./Diff";
@@ -65,6 +66,7 @@ const entries: readonly ViewComponentEntry[] = [
   }),
   defineViewComponent("Diff", diffPropsSchema, Diff, { childrenTypes: [] }),
   defineViewComponent("Code", codePropsSchema, Code, { childrenTypes: [] }),
+  defineViewComponent("Badge", badgePropsSchema, Badge, { childrenTypes: [] }),
 ];
 
 const catalog = createCatalog(entries.map((e) => e.spec));
