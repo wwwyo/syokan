@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { matchViewId } from "./App";
+import { matchViewId } from "./lib/route";
 
 describe("matchViewId", () => {
   test("extracts id from /views/:id", () => {

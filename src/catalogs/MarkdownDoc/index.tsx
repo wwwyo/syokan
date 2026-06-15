@@ -146,8 +146,14 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
           ),
           tbody: ({ children }) => <TableBody>{children}</TableBody>,
           tr: ({ children }) => <TableRow>{children}</TableRow>,
-          th: ({ children }) => <TableHead>{children}</TableHead>,
-          td: ({ children }) => <TableCell>{children}</TableCell>,
+          // 長文セルの markdown table は data table と違い折り返したい
+          // (shadcn 既定の whitespace-nowrap だと横スクロール送りになる)
+          th: ({ children }) => (
+            <TableHead className="whitespace-normal align-top">{children}</TableHead>
+          ),
+          td: ({ children }) => (
+            <TableCell className="whitespace-normal align-top">{children}</TableCell>
+          ),
           input: ({ checked, type }) =>
             type === "checkbox" ? (
               <Checkbox

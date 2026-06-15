@@ -1,10 +1,14 @@
-import { Ellipsis, Trash2 } from "lucide-react";
+import { Ellipsis, Menu, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  SIDEBAR_ID,
+  useSidebar,
+} from "@/components/PageLayout/sidebarContext";
 import { formatDateTime } from "@/lib/date";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +29,7 @@ export function ViewHeader({
   onDelete,
   fullBleed = false,
 }: ViewHeaderProps) {
+  const sidebar = useSidebar();
   return (
     <header
       data-slot="view-header"
@@ -33,10 +38,23 @@ export function ViewHeader({
       <div
         className={cn(
           "flex items-center justify-between gap-4 py-3 text-xs text-muted-foreground",
-          fullBleed ? "px-4" : "mx-auto max-w-2xl px-6",
+          fullBleed ? "px-4" : "mx-auto max-w-4xl px-6",
         )}
       >
         <div className="flex items-center gap-3">
+          {sidebar ? (
+            <button
+              type="button"
+              data-slot="view-sidebar-toggle"
+              aria-label="ページ一覧"
+              aria-controls={SIDEBAR_ID}
+              aria-expanded={sidebar.open}
+              onClick={sidebar.toggle}
+              className="-ml-1 flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Menu className="size-4" />
+            </button>
+          ) : null}
           <time data-slot="view-created-at" dateTime={createdAt}>
             {formatDateTime(createdAt)}
           </time>

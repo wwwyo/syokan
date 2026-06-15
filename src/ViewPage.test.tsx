@@ -94,11 +94,11 @@ describe("ViewPage", () => {
         },
       },
     });
-    expect(html).not.toContain("max-w-2xl");
+    expect(html).not.toContain("max-w-4xl");
   });
 
-  test("non-resizable root stays width-constrained (max-w-2xl)", () => {
+  test("non-resizable root stays width-constrained (max-w-4xl)", () => {
     const html = render({ kind: "found", envelope });
-    expect(html).toContain("max-w-2xl");
+    expect(html).toContain("max-w-4xl");
   });
 });
