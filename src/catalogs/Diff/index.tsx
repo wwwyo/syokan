@@ -9,7 +9,8 @@ import { useColorScheme } from "@/lib/useColorScheme";
 const diffCommentSchema = z.object({
   // 複数ファイル patch で対象ファイルを指定する。新ファイル名 (例 "src/a.ts")、
   // rename なら旧名でも可。単一ファイルなら省略でき、その唯一のファイルに付く。
-  file: z.string().optional(),
+  // 空文字は「指定あり」だが何にもマッチしないため弾く (省略したいなら未指定にする)。
+  file: z.string().min(1).optional(),
   // 旧ファイル側 (deletions) か新ファイル側 (additions) か。LLM には old/new の方が直感的。
   side: z.enum(["old", "new"]),
   // 対象 side の行番号 (diff の gutter に出る番号)。patch に含まれる行のみ指定可。

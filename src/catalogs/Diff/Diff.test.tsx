@@ -66,6 +66,15 @@ describe("diffPropsSchema", () => {
     expect(parsed.comments?.[2]?.file).toBe("src/a.ts");
   });
 
+  test("rejects an empty-string file (would match no file and drop the comment)", () => {
+    expect(
+      diffPropsSchema.safeParse({
+        patch: PATCH,
+        comments: [{ file: "", side: "new", line: 1, body: "x" }],
+      }).success,
+    ).toBe(false);
+  });
+
   test("rejects invalid comment side / non-positive line / missing body", () => {
     expect(
       diffPropsSchema.safeParse({
