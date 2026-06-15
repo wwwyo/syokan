@@ -12,7 +12,7 @@ export type PageLayoutProps = {
    */
   header?: ReactNode;
   /**
-   * 幅制約 (max-w-2xl) を外し viewport いっぱいに広げる。
+   * 幅制約 (max-w-4xl) を外し viewport いっぱいに広げる。
    * root が resizable Stack のように画面全体を使うレイアウトのとき viewer 側から true にする。
    */
   fullBleed?: boolean;
@@ -80,7 +80,7 @@ export function PageLayout({
             className={cn(
               fullBleed
                 ? "flex w-full flex-1 flex-col px-4 py-4"
-                : "mx-auto w-full max-w-2xl px-6 py-12",
+                : "mx-auto w-full max-w-4xl px-6 py-12",
             )}
           >
             {title ? (

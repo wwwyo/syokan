@@ -38,7 +38,7 @@ export function ViewHeader({
       <div
         className={cn(
           "flex items-center justify-between gap-4 py-3 text-xs text-muted-foreground",
-          fullBleed ? "px-4" : "mx-auto max-w-2xl px-6",
+          fullBleed ? "px-4" : "mx-auto max-w-4xl px-6",
         )}
       >
         <div className="flex items-center gap-3">
