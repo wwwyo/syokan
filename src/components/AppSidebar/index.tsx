@@ -1,5 +1,9 @@
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useSidebar } from "@/components/PageLayout/sidebarContext";
+import {
+  SIDEBAR_ID,
+  useSidebar,
+} from "@/components/PageLayout/sidebarContext";
 import { matchViewId } from "@/lib/route";
 import { cn } from "@/lib/utils";
 import { type ViewSummary, ViewList } from "./ViewList";
@@ -37,6 +41,9 @@ export function AppSidebar() {
           return;
         }
         const data = (await res.json()) as { items: ViewSummary[] };
+        // json 解析中に閉じ→再 open すると別 fetch が走るので、古い結果で
+        // 新しい結果を上書きしないよう解析後にも中断を確認する。
+        if (cancelled) return;
         setState({ kind: "ready", items: data.items });
       })
       .catch(() => {
@@ -49,11 +56,12 @@ export function AppSidebar() {
 
   return (
     <aside
+      id={SIDEBAR_ID}
       data-slot="app-sidebar"
       aria-label="ページ一覧"
       inert={!open}
       className={cn(
-        "shrink-0 overflow-hidden border-border transition-[width] duration-200 ease-in-out",
+        "shrink-0 overflow-hidden border-border transition-[width] duration-200 ease-in-out motion-reduce:transition-none",
         open ? "w-64 border-r" : "w-0",
       )}
     >
@@ -65,6 +73,17 @@ export function AppSidebar() {
           >
             syokan
           </a>
+          {/* ViewHeader が無い状態 (404 / loading / error) でも閉じられるよう sidebar 内にも閉じる操作を置く */}
+          {sidebar ? (
+            <button
+              type="button"
+              aria-label="閉じる"
+              onClick={sidebar.toggle}
+              className="-mr-1 flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
         </div>
         <nav className="flex-1 overflow-y-auto p-2">
           {state.kind === "loading" ? (

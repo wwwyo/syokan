@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { cn } from "@/lib/utils";
 import { SidebarProvider } from "./sidebarContext";
@@ -22,9 +22,15 @@ export type PageLayoutProps = {
 // snapshot をまたいで開閉状態を保つ (リンク遷移は full reload のため state が消える)。
 const SIDEBAR_STORAGE_KEY = "syokan:sidebar-open";
 
+// storage が無効な環境 (sandboxed iframe / storage 制限) では throw しうる。
+// UI 設定の保存失敗で snapshot 閲覧まで壊さないよう握りつぶす。
 function readPersistedOpen(): boolean {
   if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+  try {
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -46,11 +52,20 @@ export function PageLayout({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, open ? "1" : "0");
+    try {
+      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, open ? "1" : "0");
+    } catch {
+      // storage 不可環境では永続化を諦める (機能本体には影響しない)
+    }
   }, [open]);
 
+  const sidebar = useMemo(
+    () => ({ open, toggle: () => setOpen((v) => !v) }),
+    [open],
+  );
+
   return (
-    <SidebarProvider value={{ open, toggle: () => setOpen((v) => !v) }}>
+    <SidebarProvider value={sidebar}>
       <div
         data-slot="page-shell"
         className="flex min-h-svh w-full bg-background text-foreground"

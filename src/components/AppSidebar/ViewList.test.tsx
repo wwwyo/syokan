@@ -28,7 +28,6 @@ describe("ViewList", () => {
     const html = renderToString(
       createElement(ViewList, { items: sample, currentId: "def" }),
     );
-    // active 行だけ aria-current="page" を持つ
     expect(html.match(/aria-current="page"/g)?.length).toBe(1);
   });
 

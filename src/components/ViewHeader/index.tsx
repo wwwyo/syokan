@@ -5,7 +5,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useSidebar } from "@/components/PageLayout/sidebarContext";
+import {
+  SIDEBAR_ID,
+  useSidebar,
+} from "@/components/PageLayout/sidebarContext";
 import { formatDateTime } from "@/lib/date";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +47,7 @@ export function ViewHeader({
               type="button"
               data-slot="view-sidebar-toggle"
               aria-label="ページ一覧"
+              aria-controls={SIDEBAR_ID}
               aria-expanded={sidebar.open}
               onClick={sidebar.toggle}
               className="-ml-1 flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
