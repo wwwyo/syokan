@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type ItemComponent, components, itemSchema, specs } from ".";
+import { Badge } from "./Badge";
 import { Card } from "./Card";
 import { Code } from "./Code";
 import { Diff } from "./Diff";
@@ -27,6 +28,7 @@ describe("catalog", () => {
     expect(specs.get("PlainText")?.type).toBe("PlainText");
     expect(specs.get("Diff")?.type).toBe("Diff");
     expect(specs.get("Code")?.type).toBe("Code");
+    expect(specs.get("Badge")?.type).toBe("Badge");
   });
 
   test("itemSchema parses a Card containing Heading/Text children", () => {
@@ -61,8 +63,9 @@ describe("catalog", () => {
     expect(components.get("PlainText")).toBe(asItem(PlainText));
     expect(components.get("Diff")).toBe(asItem(Diff));
     expect(components.get("Code")).toBe(asItem(Code));
+    expect(components.get("Badge")).toBe(asItem(Badge));
     expect(components.get("Missing")).toBeUndefined();
-    expect(components.size).toBe(10);
+    expect(components.size).toBe(11);
   });
 
   test("Heading requires text and is strict", () => {
@@ -219,6 +222,32 @@ describe("catalog", () => {
     expect(withChild("PlainText", { body: "x" })).toBe(false);
     expect(withChild("Diff", { patch: "diff" })).toBe(false);
     expect(withChild("Code", { code: "x" })).toBe(false);
+    expect(withChild("Badge", { text: "x" })).toBe(false);
+  });
+
+  test("Badge requires text, is strict, and constrains variant", () => {
+    expect(
+      itemSchema.safeParse({ type: "Badge", props: { text: "open" } }).success,
+    ).toBe(true);
+    expect(
+      itemSchema.safeParse({
+        type: "Badge",
+        props: { text: "merged", variant: "secondary" },
+      }).success,
+    ).toBe(true);
+    expect(itemSchema.safeParse({ type: "Badge", props: {} }).success).toBe(
+      false,
+    );
+    expect(
+      itemSchema.safeParse({
+        type: "Badge",
+        props: { text: "x", variant: "ghost" },
+      }).success,
+    ).toBe(false);
+    expect(
+      itemSchema.safeParse({ type: "Badge", props: { text: "x", extra: 1 } })
+        .success,
+    ).toBe(false);
   });
 
   test("Time requires an ISO datetime and is strict", () => {
