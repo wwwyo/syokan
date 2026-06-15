@@ -47,6 +47,11 @@
 }
 
 @theme inline {
+  /* Moralerspace Argon 優先。未導入環境では Source Han Code JP → 汎用 monospace にフォールバック */
+  --font-sans: "Moralerspace Argon", "Source Han Code JP",
+    "源ノ角ゴシック Code JP", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: "Moralerspace Argon", "Source Han Code JP",
+    "源ノ角ゴシック Code JP", ui-monospace, SFMono-Regular, Menlo, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
