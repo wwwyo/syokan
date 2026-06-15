@@ -158,6 +158,17 @@ describe("Diff", () => {
     expect(html.match(/<diffs-container/g)?.length).toBe(2);
   });
 
+  test("surfaces comments that match no file instead of dropping them silently", () => {
+    const html = renderToString(
+      createElement(Diff, {
+        patch: MULTI_FILE_PATCH,
+        // 複数ファイルで file 未指定 → どのファイルにも割り当たらない
+        comments: [{ side: "new", line: 1, body: "orphan" }],
+      }),
+    );
+    expect(html).toContain("表示できませんでした");
+  });
+
   test("falls back when the patch cannot be parsed", () => {
     const html = renderToString(
       createElement(Diff, { patch: "not a diff at all" }),

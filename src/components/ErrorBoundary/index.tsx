@@ -10,9 +10,7 @@ type ErrorBoundaryState = {
 };
 
 /**
- * 1 つの catalog item のレンダリング例外をその item 内に閉じ込め、ツリー全体の
- * クラッシュを防ぐ。例: Diff (PatchDiff) は不正/複数ファイル/空の patch で render 中に
- * throw するため、Render が各 item をこれで包む。
+ * 子の render 例外をこの境界内に閉じ込め、ツリー全体のクラッシュを防ぐ。
  */
 export class ErrorBoundary extends Component<
   ErrorBoundaryProps,

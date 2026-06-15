@@ -1,6 +1,7 @@
 import { type FileDiffMetadata, parsePatchFiles } from "@pierre/diffs";
 import { type DiffLineAnnotation, FileDiff } from "@pierre/diffs/react";
 import { MessageSquare } from "lucide-react";
+import { useMemo } from "react";
 import { z } from "zod";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useColorScheme } from "@/lib/useColorScheme";
@@ -77,6 +78,11 @@ function DiffComment({ body, author }: CommentMeta) {
   );
 }
 
+// props 非依存なので毎レンダリングの再生成を避けてトップレベルに巻き上げる
+const renderDiffAnnotation = (a: DiffLineAnnotation<CommentMeta>) => (
+  <DiffComment {...a.metadata} />
+);
+
 /**
  * patch 文字列 (gh / git 由来) を描画する。`parsePatchFiles` で 1..N ファイルに分解し、
  * ファイルごとに pierre の FileDiff (filename ヘッダ付き) を縦に積む。filename / rename は
@@ -85,7 +91,34 @@ function DiffComment({ body, author }: CommentMeta) {
  */
 export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
   const themeType = useColorScheme();
-  const files = parsePatchFiles(patch).flatMap((p) => p.files);
+  // patch のフルパースは重いので patch 変化時のみ実行する。複数 commit を含む patch は
+  // 各 commit の files を平坦化する (commit 境界は持たないので同名ファイルは複数回出る)。
+  const parsedFiles = useMemo(
+    () => parsePatchFiles(patch).flatMap((p) => p.files),
+    [patch],
+  );
+  const { files, unassigned } = useMemo(() => {
+    const isSoleFile = parsedFiles.length === 1;
+    const assigned = new Set<DiffCommentInput>();
+    const files = parsedFiles.map((file) => {
+      const fileComments = commentsForFile(comments, file, isSoleFile);
+      for (const c of fileComments) assigned.add(c);
+      return { file, annotations: toLineAnnotations(fileComments) };
+    });
+    // どのファイルにも割り当たらなかった comment。黙って消すと producer が
+    // 表示されたと誤認するため、件数を可視化する。
+    const unassigned = (comments ?? []).filter((c) => !assigned.has(c));
+    return { files, unassigned };
+  }, [parsedFiles, comments]);
+  const options = useMemo(
+    () => ({
+      // app の Code (github-light/dark) と syntax color を揃える
+      theme: { dark: "github-dark", light: "github-light" },
+      themeType,
+      diffStyle,
+    }),
+    [themeType, diffStyle],
+  );
 
   if (files.length === 0) {
     return (
@@ -100,40 +133,36 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
 
   return (
     <div data-slot="diff" className="my-4 space-y-4">
-      {files.map((file, i) => {
-        const annotations = toLineAnnotations(
-          commentsForFile(comments, file, files.length === 1),
-        );
-        return (
-          <div
-            // name は重複しうる (rename 等) ため index も混ぜて安定させる
-            key={`${file.name}-${i}`}
-            className="overflow-hidden rounded-lg border border-border"
+      {files.map(({ file, annotations }, i) => (
+        <div
+          // name は重複しうる (rename 等) ため index も混ぜて安定させる
+          key={`${file.name}-${i}`}
+          className="overflow-hidden rounded-lg border border-border"
+        >
+          {/* FileDiff は壊れた metadata で render 中に throw しうる。1 ファイルの
+              失敗が全体を巻き込まないようファイル単位で境界に包む。 */}
+          <ErrorBoundary
+            fallback={
+              <div className="px-4 py-3 text-sm text-muted-foreground">
+                この diff を表示できませんでした。
+              </div>
+            }
           >
-            {/* FileDiff は壊れた metadata で render 中に throw しうる。1 ファイルの
-                失敗が全体を巻き込まないようファイル単位で境界に包む。 */}
-            <ErrorBoundary
-              fallback={
-                <div className="px-4 py-3 text-sm text-muted-foreground">
-                  この diff を表示できませんでした。
-                </div>
-              }
-            >
-              <FileDiff
-                fileDiff={file}
-                lineAnnotations={annotations.length ? annotations : undefined}
-                renderAnnotation={(a) => <DiffComment {...a.metadata} />}
-                options={{
-                  // app の Code (github-light/dark) と syntax color を揃える
-                  theme: { dark: "github-dark", light: "github-light" },
-                  themeType,
-                  diffStyle,
-                }}
-              />
-            </ErrorBoundary>
-          </div>
-        );
-      })}
+            <FileDiff
+              fileDiff={file}
+              lineAnnotations={annotations.length ? annotations : undefined}
+              renderAnnotation={renderDiffAnnotation}
+              options={options}
+            />
+          </ErrorBoundary>
+        </div>
+      ))}
+      {unassigned.length > 0 ? (
+        <div className="rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground">
+          {unassigned.length}{" "}
+          件のコメントを表示できませんでした (file 未指定、または patch 内のファイル名と不一致)。
+        </div>
+      ) : null}
     </div>
   );
 }
