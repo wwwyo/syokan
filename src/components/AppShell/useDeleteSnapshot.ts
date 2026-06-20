@@ -25,7 +25,9 @@ export function useDeleteSnapshot() {
         return;
       }
       // 遷移先は削除前の並びから決める (削除後は隣接位置が失われるため)。
-      const before = state.status === "ready" ? state.items : [];
+      // 一覧未取得 (直接 /views/:id を開いて即削除) のときは先に取得してから決め、
+      // next/prev を取りこぼして home に飛ばさないようにする。
+      const before = state.status === "ready" ? state.items : await refresh();
       const next = nextSnapshotId(before, id);
       if (!(await deleteSnapshot(id))) {
         if (typeof window !== "undefined") window.alert("削除に失敗しました");

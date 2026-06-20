@@ -39,7 +39,7 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
 // 取得中。route の pendingComponent。
 export function ViewPending() {
   return (
-    <PageLayout>
+    <PageLayout header={<ViewHeader />}>
       <p data-slot="view-loading" className="text-muted-foreground">
         Loading…
       </p>
@@ -50,7 +50,7 @@ export function ViewPending() {
 // 存在しない id。route の notFoundComponent。home へは full reload で十分なので素の <a>。
 export function ViewNotFound({ id }: { id: string }) {
   return (
-    <PageLayout>
+    <PageLayout header={<ViewHeader />}>
       <div data-slot="view-not-found">
         <p className="text-muted-foreground">
           404 — Snapshot <code className="font-mono">{id}</code> not found.
@@ -68,7 +68,7 @@ export function ViewNotFound({ id }: { id: string }) {
 // 取得失敗。route の errorComponent。
 export function ViewError({ message }: { message: string }) {
   return (
-    <PageLayout>
+    <PageLayout header={<ViewHeader />}>
       <p data-slot="view-error" className="text-destructive">
         {message}
       </p>
