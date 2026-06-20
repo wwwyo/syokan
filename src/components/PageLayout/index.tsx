@@ -1,11 +1,9 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
-import { cn } from "@/lib/utils";
+import { useScrollRestore } from "@/lib/useScrollRestore";
 import { SidebarProvider } from "./sidebarContext";
 
 export type PageLayoutProps = {
-  /** ページ見出し (envelope.title)。未指定なら見出し帯を出さない */
-  title?: string;
   /**
    * 本文の外側に置く viewer chrome (例: ViewHeader)。
    * schema-driven の render tree には含めず、viewer 側から差し込む。
@@ -35,15 +33,16 @@ function readPersistedOpen(): boolean {
 
 /**
  * snapshot の root に常に適用される共通レイアウト。
- * 背景・最大幅・余白・ページ見出しといった「ページの器」を 1 箇所に集約し、
+ * 背景・最大幅・余白といった「ページの器」を 1 箇所に集約し、
  * catalog component (LLM が JSON で投げる type) からは器の責務を排除する。
+ * 見出しは器に持たせない。root の markdown 等が自前で見出しを持つため、
+ * 器が title を h1 で出すと二重見出しになる。各ページが必要なら自分で出す。
  * fullBleed のときは flex chain で main に残り高さを渡し、中身を画面いっぱいに伸ばす。
  *
  * 左の AppSidebar は非モーダルの flex 兄弟なので、開いても main は操作可能なまま
  * 幅だけ reflow する。
  */
 export function PageLayout({
-  title,
   header,
   fullBleed = false,
   children,
@@ -64,36 +63,43 @@ export function PageLayout({
     [open],
   );
 
+  // 本文 scroll は pathname ごとに保存し、同じ snapshot に戻ったとき位置を復元する
+  // (新しい snapshot は保存が無いので先頭から)。fullBleed は overflow-hidden なので対象外。
+  const mainRef = useRef<HTMLElement>(null);
+  const pathname =
+    typeof window === "undefined" ? "/" : window.location.pathname;
+  useScrollRestore(mainRef, `syokan:scroll:main:${pathname}`);
+
   return (
     <SidebarProvider value={sidebar}>
+      {/* viewport 高に固定し document scroll を殺す。sidebar / header は固定のまま
+          main だけが独立して縦スクロールする (各 region が自前の overflow を持つ)。 */}
       <div
         data-slot="page-shell"
-        className="flex min-h-svh w-full bg-background text-foreground"
+        className="flex h-svh w-full overflow-hidden bg-background text-foreground"
       >
         <AppSidebar />
         <div
           data-slot="page-layout"
-          className="flex min-w-0 flex-1 flex-col"
+          className="flex min-w-0 flex-1 flex-col overflow-hidden"
         >
           {header}
-          <main
-            className={cn(
-              fullBleed
-                ? "flex w-full flex-1 flex-col px-4 py-4"
-                : "mx-auto w-full max-w-4xl px-6 py-12",
-            )}
-          >
-            {title ? (
-              <h1 className="mb-6 text-3xl font-semibold tracking-tight">
-                {title}
-              </h1>
-            ) : null}
-            {fullBleed ? (
+          {fullBleed ? (
+            <main
+              data-slot="page-main"
+              className="flex min-w-0 flex-1 flex-col overflow-hidden px-4 py-4"
+            >
               <div className="min-h-0 flex-1">{children}</div>
-            ) : (
-              children
-            )}
-          </main>
+            </main>
+          ) : (
+            <main
+              ref={mainRef}
+              data-slot="page-main"
+              className="flex-1 overflow-y-auto"
+            >
+              <div className="mx-auto w-full max-w-4xl px-6 py-12">{children}</div>
+            </main>
+          )}
         </div>
       </div>
     </SidebarProvider>

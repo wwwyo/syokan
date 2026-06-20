@@ -4,6 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>syokan</title>
+    <script>
+      // FOUC 防止: React 描画前に保存済み theme/font を <html> へ当てる。
+      // 規則は src/lib/{theme,font}.ts と揃える (import できないため最小限を複製)。
+      (function () {
+        try {
+          var t = localStorage.getItem("syokan:theme");
+          var dark =
+            t === "dark" ||
+            ((!t || t === "system") &&
+              matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+          var f = localStorage.getItem("syokan:font");
+          document.documentElement.dataset.font =
+            f === "geist" || f === "system" ? f : "current";
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>

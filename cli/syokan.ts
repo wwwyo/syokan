@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export type SpawnResult = { pid: number };
@@ -18,6 +18,10 @@ export type StopResult = { stopped: boolean; pid?: number };
 export type CliDeps = {
   fetch: typeof fetch;
   readFile: (path: string) => Promise<string>;
+  // 引数なし起動時の post 入力 (`... | syokan`)
+  readStdin: () => Promise<string>;
+  // 引数なし起動で stdin が pipe / redirect か (端末でないか) の判定
+  stdinIsPipe: () => boolean;
   stdout: (line: string) => void;
   stderr: (line: string) => void;
   baseUrl: string;
@@ -27,6 +31,8 @@ export type CliDeps = {
   stopServer: () => StopResult | Promise<StopResult>;
   // readiness poll の待機 (test では即時 resolve を注入する)
   sleep: (ms: number) => Promise<void>;
+  // 閲覧 URL を OS のデフォルトブラウザに渡す
+  openUrl: (url: string) => void;
 };
 
 export type CliResult = { exitCode: number };
@@ -37,64 +43,6 @@ type PostResult = { ok: boolean; status: number; data: unknown };
 // (15s)。短すぎると ready 直前に server_unavailable を返して server を orphan 化する。
 const READY_RETRIES = 150;
 const READY_INTERVAL_MS = 100;
-
-export function deriveTitle(body: string, file: string): string {
-  for (const raw of body.split("\n")) {
-    const line = raw.trim();
-    const heading = /^#\s+(.+)$/.exec(line);
-    if (heading?.[1]) return heading[1].trim();
-    if (line.length > 0) break;
-  }
-  return basename(file).replace(/\.md$/i, "");
-}
-
-/**
- * deriveTitle が先頭 H1 を title に昇格させた場合、その H1 行を body から除く。
- * 除かないと PageLayout の title と MarkdownDoc の H1 でタイトルが二重表示される。
- */
-export function stripLeadingH1(body: string, title: string): string {
-  const lines = body.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]?.trim() ?? "";
-    const heading = /^#\s+(.+)$/.exec(line);
-    if (heading?.[1]) {
-      if (heading[1].trim() !== title) return body;
-      return [...lines.slice(0, i), ...lines.slice(i + 1)]
-        .join("\n")
-        .replace(/^\n+/, "");
-    }
-    if (line.length > 0) return body;
-  }
-  return body;
-}
-
-export function buildMarkdownPayload(
-  body: string,
-  opts?: { title?: string; sourceLabel?: string },
-): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
-    root: { type: "MarkdownDoc", props: { body } },
-  };
-  if (opts?.title) payload.title = opts.title;
-  if (opts?.sourceLabel) {
-    payload.metadata = { source: { label: opts.sourceLabel } };
-  }
-  return payload;
-}
-
-export function buildTextPayload(
-  body: string,
-  opts?: { title?: string; sourceLabel?: string },
-): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
-    root: { type: "PlainText", props: { body } },
-  };
-  if (opts?.title) payload.title = opts.title;
-  if (opts?.sourceLabel) {
-    payload.metadata = { source: { label: opts.sourceLabel } };
-  }
-  return payload;
-}
 
 async function isHealthy(deps: CliDeps): Promise<boolean> {
   try {
@@ -174,51 +122,10 @@ async function postWithServer(
   return result.ok ? reportSuccess(deps, result.data) : reportFailure(deps, result);
 }
 
-// 入力種別を識別する。拡張子を最優先で見る: .json は中身が壊れていても JSON
-// として扱い (markdown に化けて MarkdownDoc 投稿される事故を防ぎ、invalid_json を
-// 返す)、.md / .markdown は markdown、.txt / .log は整形しない PlainText。
-// 拡張子が無いときだけ中身で判定する: JSON envelope は必ず object なので、trim 後の
-// 先頭が `{` なら json、それ以外は markdown とみなす (議事録/メモは markdown 期待が多い)。
-export function classifyInput(
-  file: string,
-  text: string,
-): "json" | "markdown" | "text" {
-  const lower = file.toLowerCase();
-  if (lower.endsWith(".json")) return "json";
-  if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
-  if (lower.endsWith(".txt") || lower.endsWith(".log")) return "text";
-  return text.trimStart().startsWith("{") ? "json" : "markdown";
-}
-
-// 単一 post コマンド。markdown は MarkdownDoc envelope に包み、JSON はそのまま
-// envelope として投げる。種別は classifyInput で決める。
-export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
-  let text: string;
-  try {
-    text = await deps.readFile(file);
-  } catch (err) {
-    deps.stderr(JSON.stringify({ error: "read_failed", message: String(err) }));
-    return { exitCode: 1 };
-  }
-
-  const kind = classifyInput(file, text);
-  if (kind === "markdown") {
-    const title = deriveTitle(text, file);
-    const payload = buildMarkdownPayload(stripLeadingH1(text, title), {
-      title,
-      sourceLabel: "manual-cli",
-    });
-    return postWithServer(deps, payload);
-  }
-  if (kind === "text") {
-    // plain text / log は markdown の H1 抽出が効かないので title は file 名にする
-    const payload = buildTextPayload(text, {
-      title: basename(file),
-      sourceLabel: "manual-cli",
-    });
-    return postWithServer(deps, payload);
-  }
-
+// 入力は JSON envelope のみ。markdown / plain text を表示したい場合も MarkdownDoc /
+// PlainText catalog を使って envelope の中で表現する。source の label など metadata も
+// envelope に書く (CLI 側では一切付与しない)。
+async function postText(text: string, deps: CliDeps): Promise<CliResult> {
   let payload: unknown;
   try {
     payload = JSON.parse(text);
@@ -227,6 +134,49 @@ export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
     return { exitCode: 1 };
   }
   return postWithServer(deps, payload);
+}
+
+export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
+  let text: string;
+  try {
+    text = await deps.readFile(file);
+  } catch (err) {
+    deps.stderr(JSON.stringify({ error: "read_failed", message: String(err) }));
+    return { exitCode: 1 };
+  }
+  return postText(text, deps);
+}
+
+// open に渡された引数を閲覧 URL に正規化する。post の出力 (フル URL / `/views/:id`)
+// と bare id のどれを渡してもそのまま開けるようにする。
+export function resolveViewUrl(idOrUrl: string, baseUrl: string): string {
+  if (/^https?:\/\//.test(idOrUrl)) return idOrUrl;
+  const path = idOrUrl.startsWith("/")
+    ? idOrUrl
+    : `/views/${encodeURIComponent(idOrUrl)}`;
+  return `${baseUrl}${path}`;
+}
+
+// ブラウザで開く。閲覧には server が必要なので post と同じく lazy-spawn する。
+// id 省略時は home (snapshot 一覧) を開く。
+export async function runOpen(
+  idOrUrl: string | undefined,
+  deps: CliDeps,
+): Promise<CliResult> {
+  const ensured = await ensureServerRunning(deps);
+  if (!ensured.ok) {
+    deps.stderr(
+      JSON.stringify({ error: "server_unavailable", message: ensured.error }),
+    );
+    return { exitCode: 1 };
+  }
+  if (ensured.spawned) {
+    deps.stderr(`syokan: started server at ${deps.baseUrl}`);
+  }
+  const url = idOrUrl ? resolveViewUrl(idOrUrl, deps.baseUrl) : deps.baseUrl;
+  deps.openUrl(url);
+  deps.stdout(url);
+  return { exitCode: 0 };
 }
 
 export async function runStop(deps: CliDeps): Promise<CliResult> {
@@ -239,42 +189,26 @@ export async function runStop(deps: CliDeps): Promise<CliResult> {
   return { exitCode: 0 };
 }
 
-type Command = {
-  arg?: string; // 必須の位置引数名 (省略 = 引数不要)
-  run: (
-    deps: CliDeps,
-    file: string,
-  ) => CliResult | Promise<CliResult>;
-};
-
-const COMMANDS: Record<string, Command> = {
-  post: {
-    arg: "<file.md|file.json>",
-    run: (deps, file) => runPost(file, deps),
-  },
-  stop: {
-    run: (deps) => runStop(deps),
-  },
-};
-
+// post を default action にする (サブコマンド名は不要)。第一引数を見て分岐する:
+//   syokan              → stdin に JSON が流れていれば post、無ければ home を開く
+//   syokan <file>       → file を post
+//   syokan open [id]    → id (省略時 home) を開く
+//   syokan stop         → server 停止
+// open / stop 以外の第一引数はファイルパスとして post する (= 専用の unknown 扱いはしない)。
 export async function main(
   argv: readonly string[],
   deps: CliDeps,
 ): Promise<CliResult> {
-  const [command, file] = argv;
-  const entry = command ? COMMANDS[command] : undefined;
-  if (!entry) {
-    const names = Object.keys(COMMANDS).join("|");
-    deps.stderr(
-      `unknown command: ${command ?? "(none)"}\nusage: syokan <${names}> [file]`,
-    );
-    return { exitCode: 2 };
+  const [first, second] = argv;
+  if (first === "open") return runOpen(second, deps);
+  if (first === "stop") return runStop(deps);
+  if (first === undefined) {
+    // isTTY は pipe でも /dev/null でも falsy なので、空入力は home を開く方に倒す
+    // (素打ち = open。実際に中身が流れたときだけ post)。
+    const piped = deps.stdinIsPipe() ? await deps.readStdin() : "";
+    return piped.trim() ? postText(piped, deps) : runOpen(undefined, deps);
   }
-  if (entry.arg && !file) {
-    deps.stderr(`usage: syokan ${command} ${entry.arg}`);
-    return { exitCode: 2 };
-  }
-  return entry.run(deps, file ?? "");
+  return runPost(first, deps);
 }
 
 // ---- real deps (only when executed directly) ----
@@ -363,6 +297,8 @@ if (import.meta.main) {
   const deps: CliDeps = {
     fetch: globalThis.fetch,
     readFile: (path) => readFile(path, "utf8"),
+    readStdin: () => Bun.stdin.text(),
+    stdinIsPipe: () => !process.stdin.isTTY,
     stdout: (line) => {
       process.stdout.write(`${line}\n`);
     },
@@ -373,6 +309,15 @@ if (import.meta.main) {
     spawnServer: () => realSpawnServer(baseUrl),
     stopServer: () => realStopServer(baseUrl),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    openUrl: (url) => {
+      // macOS の open でデフォルトブラウザに渡す。CLI が exit しても
+      // 切られないよう unref する。
+      Bun.spawn(["open", url], {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      }).unref();
+    },
   };
   const { exitCode } = await main(process.argv.slice(2), deps);
   process.exit(exitCode);

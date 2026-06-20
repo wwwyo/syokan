@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { deleteView, nextViewId } from "@/lib/views";
 import type { SnapshotEnvelope } from "@/schema";
 import { ViewPage, type ViewPageState } from "./ViewPage";
 
@@ -41,15 +42,22 @@ export function ViewPageContainer({ id }: ViewPageContainerProps) {
         ? true
         : window.confirm("Delete this snapshot? This cannot be undone.");
     if (!confirmed) return;
-    const res = await fetch(`/api/views/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
-    if (res.ok || res.status === 404) {
-      // 同じ URL を再度開くと 404 になる状態に揃える
-      setState({ kind: "not-found", id });
-    } else {
-      setState({ kind: "error", message: `Delete failed (${res.status})` });
+    // 削除後に隣 (次→前) へ自動遷移する。位置を失わないよう削除前の並びから決める。
+    let next: string | null = null;
+    try {
+      const res = await fetch("/api/views");
+      if (res.ok) {
+        const data = (await res.json()) as { items: { id: string }[] };
+        next = nextViewId(data.items, id);
+      }
+    } catch {
+      // 一覧が取れなければ home に戻す
     }
+    if (!(await deleteView(id))) {
+      setState({ kind: "error", message: "Delete failed" });
+      return;
+    }
+    window.location.href = next ? `/views/${encodeURIComponent(next)}` : "/";
   }, [id]);
 
   return <ViewPage state={state} onDelete={handleDelete} />;
