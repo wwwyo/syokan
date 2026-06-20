@@ -32,14 +32,16 @@ export function useDeleteSnapshot() {
         return;
       }
       const after = await refresh();
-      if (!isCurrent) return;
-      // 算出した遷移先が削除後の一覧にまだ在るときだけ開く。無ければ home へ。
-      const target = next && after.some((i) => i.id === next) ? next : null;
-      if (target) {
-        await router.navigate({ to: "/views/$id", params: { id: target } });
-      } else {
-        await router.navigate({ to: "/" });
+      if (isCurrent) {
+        // 算出した遷移先が削除後の一覧にまだ在るときだけ開く。無ければ home へ。
+        const target = next && after.some((i) => i.id === next) ? next : null;
+        await router.navigate(
+          target ? { to: "/views/$id", params: { id: target } } : { to: "/" },
+        );
       }
+      // 削除済み snapshot の loader cache を捨てる (戻る / intent preload 経由で
+      // 消えた snapshot を一瞬出さないため)。
+      router.invalidate();
     },
     [router, state, refresh],
   );

@@ -37,13 +37,30 @@ export function SnapshotListProvider({ children }: { children: ReactNode }) {
       setState({ status: "ready", items });
       return items;
     } catch {
-      setState({ status: "error" });
+      // 既に一覧を持っているなら、focus 時の transient な失敗で消さない (初回だけ error)。
+      setState((prev) => (prev.status === "ready" ? prev : { status: "error" }));
       return [];
     }
   }, []);
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  // 作成は外 (CLI/LLM) で起きるため in-app の契機が無い。tab に戻った / 可視化した
+  // タイミングで取り直し、開いたままのアプリにも新しい snapshot を反映する。
+  // refresh は loading に落とさないので一覧のちらつきは出ない。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onActive = () => {
+      if (document.visibilityState !== "hidden") void refresh();
+    };
+    window.addEventListener("focus", onActive);
+    document.addEventListener("visibilitychange", onActive);
+    return () => {
+      window.removeEventListener("focus", onActive);
+      document.removeEventListener("visibilitychange", onActive);
+    };
   }, [refresh]);
 
   return (

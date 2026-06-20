@@ -7,11 +7,28 @@ import {
 } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useDeleteSnapshot } from "@/components/AppShell/useDeleteSnapshot";
+import { PageLayout } from "@/components/PageLayout";
 import { fetchSnapshotEnvelope } from "@/lib/snapshots";
 import { Home } from "./Home";
 import { ViewError, ViewNotFound, ViewPage, ViewPending } from "./ViewPage";
 
-const rootRoute = createRootRoute({ component: AppShell });
+// どの route にも一致しないパス (URL の打ち間違い等)。常駐 shell 内に出す。
+// home へは full reload で十分なので素の <a>。
+const rootRoute = createRootRoute({
+  component: AppShell,
+  notFoundComponent: () => (
+    <PageLayout>
+      <div data-slot="route-not-found">
+        <p className="text-muted-foreground">ページが見つかりません。</p>
+        <p className="mt-6">
+          <a className="text-primary underline underline-offset-4" href="/">
+            Back to home
+          </a>
+        </p>
+      </div>
+    </PageLayout>
+  ),
+});
 
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
