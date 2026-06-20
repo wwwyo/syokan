@@ -30,6 +30,15 @@ export type SnapshotEnvelope = {
   metadata?: SnapshotMetadata;
 };
 
+// 一覧 (GET /api/snapshots) の 1 行。envelope から root を落とした軽量サマリ。
+// server (store) と client (sidebar) の契約を 1 箇所に置き drift を防ぐ。
+export type SnapshotSummary = {
+  id: string;
+  title?: string;
+  createdAt: string;
+  source?: { label: string };
+};
+
 export function createSnapshotEnvelopeSchema(itemSchema: z.ZodType<Item>) {
   return z
     .object({

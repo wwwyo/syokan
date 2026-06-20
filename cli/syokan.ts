@@ -72,7 +72,7 @@ export async function ensureServerRunning(
 }
 
 async function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
-  const res = await deps.fetch(`${deps.baseUrl}/api/items`, {
+  const res = await deps.fetch(`${deps.baseUrl}/api/snapshots`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),

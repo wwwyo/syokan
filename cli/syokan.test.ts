@@ -118,7 +118,7 @@ describe("cli main: post (default action)", () => {
     const result = await main(["items.json"], deps);
     expect(result.exitCode).toBe(0);
     expect(out).toEqual(["http://localhost:5173/views/xyz"]);
-    expect(calls[0]?.url).toBe("http://localhost:5173/api/items");
+    expect(calls[0]?.url).toBe("http://localhost:5173/api/snapshots");
     const body = calls[0]?.body as { root: { type: string } };
     expect(body.root.type).toBe("Heading");
   });
@@ -212,7 +212,7 @@ describe("cli main: bare invocation", () => {
     expect(result.exitCode).toBe(0);
     expect(h.opened).toEqual(["http://localhost:5173"]);
     expect(h.out[0]).toBe("http://localhost:5173");
-    // home を開くだけで /api/items への POST は走らない
+    // home を開くだけで /api/snapshots への POST は走らない
     expect(h.calls.length).toBe(0);
   });
 
@@ -224,7 +224,7 @@ describe("cli main: bare invocation", () => {
     const result = await main([], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.opened).toEqual([]);
-    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/items");
+    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/snapshots");
   });
 
   test("no args + empty/blank stdin opens home (not an invalid_json error)", async () => {
@@ -356,7 +356,7 @@ describe("cli main: lazy-spawn integration", () => {
     expect(h.err.some((l) => l.includes("started server"))).toBe(true);
     // health は calls に積まれず、POST だけが記録される
     expect(h.calls.length).toBe(1);
-    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/items");
+    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/snapshots");
   });
 
   test("post does not spawn when the server is already up", async () => {

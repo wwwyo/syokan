@@ -40,9 +40,9 @@ describe("api routes", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  test("POST /api/items accepts a valid envelope and returns id + url", async () => {
-    const res = await api.postItems(
-      makeRequest("/api/items", {
+  test("POST /api/snapshots accepts a valid envelope and returns id + url", async () => {
+    const res = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -57,9 +57,9 @@ describe("api routes", () => {
     expect(data.url).toBe(`/views/${data.id}`);
   });
 
-  test("POST /api/items returns 400 with issues on invalid root", async () => {
-    const res = await api.postItems(
-      makeRequest("/api/items", {
+  test("POST /api/snapshots returns 400 with issues on invalid root", async () => {
+    const res = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ root: { type: "Bogus", props: {} } }),
@@ -76,9 +76,9 @@ describe("api routes", () => {
     expect(data.issues.length).toBeGreaterThan(0);
   });
 
-  test("POST /api/items returns 400 for non-JSON body", async () => {
-    const res = await api.postItems(
-      makeRequest("/api/items", {
+  test("POST /api/snapshots returns 400 for non-JSON body", async () => {
+    const res = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: "{not json",
@@ -89,9 +89,9 @@ describe("api routes", () => {
     expect(data.error).toBe("invalid_json");
   });
 
-  test("POST /api/items: required props missing -> 400 with path + expected", async () => {
-    const res = await api.postItems(
-      makeRequest("/api/items", {
+  test("POST /api/snapshots: required props missing -> 400 with path + expected", async () => {
+    const res = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -109,17 +109,17 @@ describe("api routes", () => {
     expect(textIssue).toBeDefined();
   });
 
-  test("GET /api/views/:id returns the snapshot after POST", async () => {
-    const post = await api.postItems(
-      makeRequest("/api/items", {
+  test("GET /api/snapshots/:id returns the snapshot after POST", async () => {
+    const post = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({ root: baseInput.root }),
       }),
     );
     const { id } = (await post.json()) as { id: string };
 
-    const get = await api.getView(
-      makeParamRequest(`/api/views/${id}`, { id }) as never,
+    const get = await api.getSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
     );
     expect(get.status).toBe(200);
     const env = (await get.json()) as { id: string; root: { type: string } };
@@ -127,32 +127,32 @@ describe("api routes", () => {
     expect(env.root.type).toBe("Stack");
   });
 
-  test("GET /api/views/:id returns 404 for unknown id", async () => {
-    const res = await api.getView(
-      makeParamRequest("/api/views/missing", { id: "missing" }) as never,
+  test("GET /api/snapshots/:id returns 404 for unknown id", async () => {
+    const res = await api.getSnapshot(
+      makeParamRequest("/api/snapshots/missing", { id: "missing" }) as never,
     );
     expect(res.status).toBe(404);
   });
 
-  test("GET /api/views/:id returns 404 for prototype-chain ids (no proto leak)", async () => {
+  test("GET /api/snapshots/:id returns 404 for prototype-chain ids (no proto leak)", async () => {
     for (const id of ["constructor", "toString", "__proto__"]) {
-      const res = await api.getView(
-        makeParamRequest(`/api/views/${id}`, { id }) as never,
+      const res = await api.getSnapshot(
+        makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
       );
       expect(res.status).toBe(404);
     }
   });
 
-  test("DELETE /api/views/:id returns 404 for prototype-chain ids", async () => {
-    const res = await api.deleteView(
-      makeParamRequest("/api/views/constructor", { id: "constructor" }) as never,
+  test("DELETE /api/snapshots/:id returns 404 for prototype-chain ids", async () => {
+    const res = await api.deleteSnapshot(
+      makeParamRequest("/api/snapshots/constructor", { id: "constructor" }) as never,
     );
     expect(res.status).toBe(404);
   });
 
   test("server restart simulation: new store sees previously-created snapshots", async () => {
-    const post = await api.postItems(
-      makeRequest("/api/items", {
+    const post = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({ root: baseInput.root }),
       }),
@@ -162,15 +162,15 @@ describe("api routes", () => {
     // simulate a fresh process by constructing a new store over the same dir
     const next = new SnapshotStore(dir);
     const nextApi = createApiHandlers(next);
-    const res = await nextApi.getView(
-      makeParamRequest(`/api/views/${id}`, { id }) as never,
+    const res = await nextApi.getSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
     );
     expect(res.status).toBe(200);
   });
 
   test("idempotencyKey: same key replays the same id", async () => {
-    const first = await api.postItems(
-      makeRequest("/api/items", {
+    const first = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({
           root: baseInput.root,
@@ -179,8 +179,8 @@ describe("api routes", () => {
       }),
     );
     const a = (await first.json()) as { id: string };
-    const second = await api.postItems(
-      makeRequest("/api/items", {
+    const second = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({
           root: baseInput.root,
@@ -193,8 +193,8 @@ describe("api routes", () => {
   });
 
   test("idempotencyKey: different keys produce different ids", async () => {
-    const first = await api.postItems(
-      makeRequest("/api/items", {
+    const first = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({
           root: baseInput.root,
@@ -203,8 +203,8 @@ describe("api routes", () => {
       }),
     );
     const a = (await first.json()) as { id: string };
-    const second = await api.postItems(
-      makeRequest("/api/items", {
+    const second = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({
           root: baseInput.root,
@@ -217,14 +217,14 @@ describe("api routes", () => {
   });
 
   test("idempotencyKey: omitting it always creates a new id", async () => {
-    const r1 = await api.postItems(
-      makeRequest("/api/items", {
+    const r1 = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({ root: baseInput.root }),
       }),
     );
-    const r2 = await api.postItems(
-      makeRequest("/api/items", {
+    const r2 = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({ root: baseInput.root }),
       }),
@@ -234,20 +234,20 @@ describe("api routes", () => {
     expect(b.id).not.toBe(a.id);
   });
 
-  test("GET /api/views lists id/title/createdAt", async () => {
-    await api.postItems(
-      makeRequest("/api/items", {
+  test("GET /api/snapshots lists id/title/createdAt", async () => {
+    await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({ root: baseInput.root, title: "A" }),
       }),
     );
-    await api.postItems(
-      makeRequest("/api/items", {
+    await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({ root: baseInput.root, title: "B" }),
       }),
     );
-    const res = await api.listViews();
+    const res = await api.listSnapshots();
     expect(res.status).toBe(200);
     const data = (await res.json()) as {
       items: Array<{ id: string; title?: string; createdAt: string }>;
@@ -258,40 +258,40 @@ describe("api routes", () => {
     expect(data.items.map((i) => i.title).sort()).toEqual(["A", "B"]);
   });
 
-  test("GET /api/views returns empty array when store is empty", async () => {
-    const res = await api.listViews();
+  test("GET /api/snapshots returns empty array when store is empty", async () => {
+    const res = await api.listSnapshots();
     const data = (await res.json()) as { items: unknown[] };
     expect(data.items).toEqual([]);
   });
 
-  test("DELETE /api/views/:id removes the snapshot; subsequent GET returns 404", async () => {
-    const post = await api.postItems(
-      makeRequest("/api/items", {
+  test("DELETE /api/snapshots/:id removes the snapshot; subsequent GET returns 404", async () => {
+    const post = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({ root: baseInput.root }),
       }),
     );
     const { id } = (await post.json()) as { id: string };
-    const del = await api.deleteView(
-      makeParamRequest(`/api/views/${id}`, { id }) as never,
+    const del = await api.deleteSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
     );
     expect(del.status).toBe(200);
-    const get = await api.getView(
-      makeParamRequest(`/api/views/${id}`, { id }) as never,
+    const get = await api.getSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
     );
     expect(get.status).toBe(404);
   });
 
-  test("DELETE /api/views/:id returns 404 for unknown id", async () => {
-    const del = await api.deleteView(
-      makeParamRequest("/api/views/missing", { id: "missing" }) as never,
+  test("DELETE /api/snapshots/:id returns 404 for unknown id", async () => {
+    const del = await api.deleteSnapshot(
+      makeParamRequest("/api/snapshots/missing", { id: "missing" }) as never,
     );
     expect(del.status).toBe(404);
   });
 
-  test("POST /api/items: unknown component type response is JSON with content-type", async () => {
-    const res = await api.postItems(
-      makeRequest("/api/items", {
+  test("POST /api/snapshots: unknown component type response is JSON with content-type", async () => {
+    const res = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ root: { type: "Bogus", props: {} } }),

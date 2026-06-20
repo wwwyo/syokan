@@ -12,6 +12,7 @@ export {
 export {
   type SnapshotEnvelope,
   type SnapshotMetadata,
+  type SnapshotSummary,
   CURRENT_SCHEMA_VERSION,
   createSnapshotEnvelopeSchema,
   snapshotMetadataSchema,

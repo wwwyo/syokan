@@ -18,26 +18,23 @@ const api = createApiHandlers(store);
 
 const server = serve({
   routes: {
-    // SPA: home と view page は同じ HTML を返し、client が pathname を見て描画を分岐する。
-    // trailing slash 有無の両方を受ける (client の matchViewId は両形を受理するため)
-    "/": index,
-    "/views/:id": index,
-    "/views/:id/": index,
     // liveness probe
     "/api/health": () => Response.json({ ok: true }),
-    // snapshot を新規作成し id / view URL を返す
-    "/api/items": {
-      POST: api.postItems,
+    // snapshot リソース (作成 / 一覧 / 取得 / 削除) を 1 パスに統一。
+    "/api/snapshots": {
+      POST: api.createSnapshot,
+      GET: api.listSnapshots,
     },
-    // snapshot 一覧 (id / title / createdAt / source.label)
-    "/api/views": {
-      GET: api.listViews,
+    "/api/snapshots/:id": {
+      GET: api.getSnapshot,
+      DELETE: api.deleteSnapshot,
     },
-    // 単一 snapshot の取得 / 削除
-    "/api/views/:id": {
-      GET: api.getView,
-      DELETE: api.deleteView,
-    },
+    // 未知の API は HTML ではなく JSON 404 を返す (client routing の SPA fallback に
+    // 落とさない)。static > param > wildcard の順で評価されるので上記が優先される。
+    "/api/*": () =>
+      Response.json({ error: "not_found" }, { status: 404 }),
+    // SPA fallback: API 以外の任意パスは同じ HTML を返し、client router が描画を分岐する。
+    "/*": index,
   },
   development: process.env.NODE_ENV !== "production",
   port,

@@ -43,15 +43,15 @@ async function readJsonBody(req: Request): Promise<
 }
 
 export type ApiHandlers = {
-  postItems: (req: Request) => Promise<Response>;
-  listViews: () => Promise<Response>;
-  getView: (req: BunRequest<"/api/views/:id">) => Promise<Response>;
-  deleteView: (req: BunRequest<"/api/views/:id">) => Promise<Response>;
+  createSnapshot: (req: Request) => Promise<Response>;
+  listSnapshots: () => Promise<Response>;
+  getSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
+  deleteSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
 };
 
 export function createApiHandlers(store: SnapshotStore): ApiHandlers {
   return {
-    async postItems(req) {
+    async createSnapshot(req) {
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = postInputSchema.safeParse(body.value);
@@ -79,12 +79,12 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       );
     },
 
-    async listViews() {
+    async listSnapshots() {
       const items = await store.list();
       return Response.json({ items });
     },
 
-    async getView(req) {
+    async getSnapshot(req) {
       const id = req.params.id;
       const env = await store.get(id);
       if (!env) {
@@ -96,7 +96,7 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       return Response.json(env);
     },
 
-    async deleteView(req) {
+    async deleteSnapshot(req) {
       const id = req.params.id;
       const ok = await store.delete(id);
       if (!ok) {

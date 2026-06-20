@@ -5,6 +5,7 @@ import {
   type Item,
   type SnapshotEnvelope,
   type SnapshotMetadata,
+  type SnapshotSummary,
 } from "@/schema";
 
 type StoreFile = {
@@ -17,13 +18,6 @@ export type CreateInput = {
   root: Item;
   metadata?: SnapshotMetadata;
   idempotencyKey?: string;
-};
-
-export type ViewSummary = {
-  id: string;
-  title?: string;
-  createdAt: string;
-  source?: { label: string };
 };
 
 const LOCK_TIMEOUT_MS = 5_000;
@@ -206,10 +200,10 @@ export class SnapshotStore {
     return data.snapshots[id];
   }
 
-  async list(): Promise<ViewSummary[]> {
+  async list(): Promise<SnapshotSummary[]> {
     const data = await this.read();
     const items = Object.values(data.snapshots).map((env) => {
-      const summary: ViewSummary = {
+      const summary: SnapshotSummary = {
         id: env.id,
         createdAt: env.createdAt,
       };
