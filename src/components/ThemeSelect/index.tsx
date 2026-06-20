@@ -21,7 +21,7 @@ export function ThemeSelect() {
   const { theme, setTheme } = useTheme();
   return (
     <div
-      role="radiogroup"
+      role="group"
       aria-label="テーマ"
       data-slot="theme-select"
       className="inline-flex items-center gap-1 rounded-lg border border-border bg-card p-1"
@@ -32,8 +32,7 @@ export function ThemeSelect() {
           <button
             key={value}
             type="button"
-            role="radio"
-            aria-checked={active}
+            aria-pressed={active}
             onClick={() => setTheme(value)}
             className={cn(
               "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",

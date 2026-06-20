@@ -53,7 +53,11 @@ export function useScrollRestore(
       }
     };
 
-    if (!done) {
+    // Observer 非対応環境では伸長を待てないので即時試行のみ (new で ReferenceError を出さない)。
+    const canObserve =
+      typeof ResizeObserver !== "undefined" &&
+      typeof MutationObserver !== "undefined";
+    if (!done && canObserve) {
       resize = new ResizeObserver(tryRestore);
       const observeChildren = () => {
         resize?.disconnect();
@@ -66,6 +70,8 @@ export function useScrollRestore(
       mutation.observe(el, { childList: true });
       observeChildren();
       tryRestore(); // 既に十分な高さなら即復元 (Home / cache 済み)
+    } else if (!done) {
+      tryRestore();
     }
 
     const onScroll = () => {

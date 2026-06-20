@@ -22,7 +22,7 @@ export function FontSelect() {
   const { font, setFont } = useFont();
   return (
     <div
-      role="radiogroup"
+      role="group"
       aria-label="フォント"
       data-slot="font-select"
       className="inline-flex items-center gap-1 rounded-lg border border-border bg-card p-1"
@@ -33,8 +33,7 @@ export function FontSelect() {
           <button
             key={value}
             type="button"
-            role="radio"
-            aria-checked={active}
+            aria-pressed={active}
             onClick={() => setFont(value)}
             style={{ fontFamily: preview } as CSSProperties}
             className={cn(

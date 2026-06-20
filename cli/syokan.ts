@@ -306,9 +306,14 @@ if (import.meta.main) {
     stopServer: () => realStopServer(baseUrl),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     openUrl: (url) => {
-      // macOS の open でデフォルトブラウザに渡す。CLI が exit しても
-      // 切られないよう unref する。
-      Bun.spawn(["open", url], {
+      // OS ごとの opener でデフォルトブラウザに渡す。CLI が exit しても切られないよう unref。
+      const cmd =
+        process.platform === "darwin"
+          ? ["open", url]
+          : process.platform === "win32"
+            ? ["cmd", "/c", "start", "", url]
+            : ["xdg-open", url];
+      Bun.spawn(cmd, {
         stdin: "ignore",
         stdout: "ignore",
         stderr: "ignore",
