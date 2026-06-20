@@ -20,9 +20,8 @@ type Story = StoryObj<typeof meta>;
 // root は常に PageLayout でラップ。中身は single root (Stack) で束ね、
 // 記事カードは Card + Heading + Text の合成で表現する (ArticleCard は廃止)。
 export const Dashboard: Story = {
-  args: { title: "2026-05-31 のダッシュボード" },
-  render: (args) => (
-    <PageLayout {...args}>
+  render: () => (
+    <PageLayout>
       <Stack>
         <Heading text="今日のRSS" level={2} />
         <Stack>
@@ -46,18 +45,6 @@ export const Dashboard: Story = {
         <MarkdownDoc
           body={"## 決定事項\n\n- catalog を合成可能なプリミティブに再構成\n"}
         />
-      </Stack>
-    </PageLayout>
-  ),
-};
-
-export const Untitled: Story = {
-  args: { title: undefined },
-  render: (args) => (
-    <PageLayout {...args}>
-      <Stack>
-        <Heading text="title 無しの PageLayout" level={2} />
-        <Text body="title を渡さない場合は見出し帯を出さず本文だけになる。" muted />
       </Stack>
     </PageLayout>
   ),

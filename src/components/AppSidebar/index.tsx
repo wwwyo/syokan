@@ -1,11 +1,13 @@
 import { X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   SIDEBAR_ID,
   useSidebar,
 } from "@/components/PageLayout/sidebarContext";
 import { matchViewId } from "@/lib/route";
+import { useScrollRestore } from "@/lib/useScrollRestore";
 import { cn } from "@/lib/utils";
+import { deleteView, nextViewId } from "@/lib/views";
 import { type ViewSummary, ViewList } from "./ViewList";
 
 type ListState =
@@ -28,6 +30,9 @@ export function AppSidebar() {
   const sidebar = useSidebar();
   const open = sidebar?.open ?? false;
   const [state, setState] = useState<ListState>({ kind: "loading" });
+  // 一覧は full-reload 遷移をまたいでも見ていた位置を保つ (sidebar 共通なので固定 key)。
+  const navRef = useRef<HTMLElement>(null);
+  useScrollRestore(navRef, "syokan:scroll:sidebar");
 
   useEffect(() => {
     if (!open) return;
@@ -54,6 +59,26 @@ export function AppSidebar() {
     };
   }, [open]);
 
+  // 表示中を消したら隣 (次→前) へ遷移し、それ以外は一覧から除くだけ。
+  // 遷移先は削除前の並びから決める必要があるので削除より先に算出する。
+  async function handleDelete(id: string) {
+    if (typeof window !== "undefined") {
+      if (!window.confirm("この snapshot を削除しますか？")) return;
+    }
+    const items = state.kind === "ready" ? state.items : [];
+    const next = nextViewId(items, id);
+    if (!(await deleteView(id))) return;
+    if (id === currentViewId()) {
+      window.location.href = next ? `/views/${encodeURIComponent(next)}` : "/";
+      return;
+    }
+    setState((s) =>
+      s.kind === "ready"
+        ? { kind: "ready", items: s.items.filter((i) => i.id !== id) }
+        : s,
+    );
+  }
+
   return (
     <aside
       id={SIDEBAR_ID}
@@ -65,7 +90,7 @@ export function AppSidebar() {
         open ? "w-64 border-r" : "w-0",
       )}
     >
-      <div className="sticky top-0 flex h-svh w-64 flex-col">
+      <div className="flex h-full w-64 flex-col">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <a
             href="/"
@@ -85,7 +110,7 @@ export function AppSidebar() {
             </button>
           ) : null}
         </div>
-        <nav className="flex-1 overflow-y-auto p-2">
+        <nav ref={navRef} className="flex-1 overflow-y-auto p-2">
           {state.kind === "loading" ? (
             <p className="px-3 py-2 text-sm text-muted-foreground">読み込み中…</p>
           ) : state.kind === "error" ? (
@@ -93,7 +118,11 @@ export function AppSidebar() {
               一覧の取得に失敗しました
             </p>
           ) : (
-            <ViewList items={state.items} currentId={currentViewId()} />
+            <ViewList
+              items={state.items}
+              currentId={currentViewId()}
+              onDelete={handleDelete}
+            />
           )}
         </nav>
       </div>

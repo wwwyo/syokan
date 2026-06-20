@@ -27,10 +27,11 @@ export function ViewPage({ state, onDelete }: ViewPageProps) {
 
   if (state.kind === "not-found") {
     return (
-      <PageLayout title="404">
+      <PageLayout>
         <div data-slot="view-not-found">
           <p className="text-muted-foreground">
-            Snapshot <code className="font-mono">{state.id}</code> not found.
+            404 — Snapshot <code className="font-mono">{state.id}</code> not
+            found.
           </p>
           <p className="mt-6">
             <a className="text-primary underline underline-offset-4" href="/">
@@ -44,7 +45,7 @@ export function ViewPage({ state, onDelete }: ViewPageProps) {
 
   if (state.kind === "error") {
     return (
-      <PageLayout title="Error">
+      <PageLayout>
         <p data-slot="view-error" className="text-destructive">
           {state.message}
         </p>
@@ -62,11 +63,9 @@ export function ViewPage({ state, onDelete }: ViewPageProps) {
 
   return (
     <PageLayout
-      title={env.title}
       fullBleed={fullBleed}
       header={
         <ViewHeader
-          createdAt={env.createdAt}
           sourceLabel={env.metadata?.source?.label}
           onDelete={onDelete}
           fullBleed={fullBleed}

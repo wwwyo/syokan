@@ -34,12 +34,6 @@ describe("ViewPage", () => {
     expect(html).toContain("Intro");
   });
 
-  test("displays createdAt", () => {
-    const html = render({ kind: "found", envelope });
-    expect(html).toContain("<time");
-    expect(html).toContain('dateTime="2026-05-21T03:04:00Z"');
-  });
-
   test("displays metadata.source.label when present", () => {
     const html = render({
       kind: "found",
