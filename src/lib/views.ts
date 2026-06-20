@@ -11,10 +11,16 @@ export function nextViewId(
   return items[i + 1]?.id ?? items[i - 1]?.id ?? null;
 }
 
-/** snapshot を削除する。既に無い (404) 場合も成功扱いにする (冪等)。 */
+/** snapshot を削除する。既に無い (404) も成功扱い (冪等)。network 断は false を返す。 */
 export async function deleteView(id: string): Promise<boolean> {
-  const res = await fetch(`/api/views/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-  return res.ok || res.status === 404;
+  try {
+    const res = await fetch(`/api/views/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    return res.ok || res.status === 404;
+  } catch {
+    // fetch reject (オフライン等) を握って false にし、呼び出し側の floating promise を
+    // unhandled rejection にしない (UI は「失敗」として扱える)。
+    return false;
+  }
 }

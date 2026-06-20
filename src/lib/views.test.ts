@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { nextViewId } from "./views";
+import { afterEach, describe, expect, test } from "bun:test";
+import { deleteView, nextViewId } from "./views";
 
 describe("nextViewId", () => {
   const items = [{ id: "a" }, { id: "b" }, { id: "c" }];
@@ -19,5 +19,28 @@ describe("nextViewId", () => {
 
   test("returns null when the deleted id is not in the list", () => {
     expect(nextViewId(items, "missing")).toBeNull();
+  });
+});
+
+describe("deleteView", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  test("ok / 404 は成功 (冪等)、それ以外は失敗", async () => {
+    globalThis.fetch = (async () => new Response(null, { status: 200 })) as unknown as typeof fetch;
+    expect(await deleteView("a")).toBe(true);
+    globalThis.fetch = (async () => new Response(null, { status: 404 })) as unknown as typeof fetch;
+    expect(await deleteView("a")).toBe(true);
+    globalThis.fetch = (async () => new Response(null, { status: 500 })) as unknown as typeof fetch;
+    expect(await deleteView("a")).toBe(false);
+  });
+
+  test("network 断 (fetch reject) を握って false を返す", async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    expect(await deleteView("a")).toBe(false);
   });
 });

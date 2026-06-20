@@ -40,7 +40,7 @@ export function ViewPageContainer({ id }: ViewPageContainerProps) {
     const confirmed =
       typeof window === "undefined"
         ? true
-        : window.confirm("Delete this snapshot? This cannot be undone.");
+        : window.confirm("この snapshot を削除しますか？");
     if (!confirmed) return;
     // 削除後に隣 (次→前) へ自動遷移する。位置を失わないよう削除前の並びから決める。
     let next: string | null = null;
@@ -54,7 +54,7 @@ export function ViewPageContainer({ id }: ViewPageContainerProps) {
       // 一覧が取れなければ home に戻す
     }
     if (!(await deleteView(id))) {
-      setState({ kind: "error", message: "Delete failed" });
+      setState({ kind: "error", message: "削除に失敗しました" });
       return;
     }
     window.location.href = next ? `/views/${encodeURIComponent(next)}` : "/";

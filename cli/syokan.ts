@@ -189,12 +189,8 @@ export async function runStop(deps: CliDeps): Promise<CliResult> {
   return { exitCode: 0 };
 }
 
-// post を default action にする (サブコマンド名は不要)。第一引数を見て分岐する:
-//   syokan              → stdin に JSON が流れていれば post、無ければ home を開く
-//   syokan <file>       → file を post
-//   syokan open [id]    → id (省略時 home) を開く
-//   syokan stop         → server 停止
-// open / stop 以外の第一引数はファイルパスとして post する (= 専用の unknown 扱いはしない)。
+// post を default action にする: open / stop 以外の第一引数はファイルパスとして post し、
+// 専用の unknown-command 扱いはしない。引数なしの振り分けは下の inline コメント参照。
 export async function main(
   argv: readonly string[],
   deps: CliDeps,
