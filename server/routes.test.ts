@@ -54,7 +54,7 @@ describe("api routes", () => {
     expect(res.status).toBe(201);
     const data = (await res.json()) as { id: string; url: string };
     expect(data.id).toMatch(/[0-9a-f-]{36}/);
-    expect(data.url).toBe(`/views/${data.id}`);
+    expect(data.url).toBe(`/snapshots/${data.id}`);
   });
 
   test("POST /api/snapshots returns 400 with issues on invalid root", async () => {

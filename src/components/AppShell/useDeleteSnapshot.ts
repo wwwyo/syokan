@@ -25,7 +25,7 @@ export function useDeleteSnapshot() {
         return;
       }
       // 遷移先は削除前の並びから決める (削除後は隣接位置が失われるため)。
-      // 一覧未取得 (直接 /views/:id を開いて即削除) のときは先に取得してから決め、
+      // 一覧未取得 (直接 /snapshots/:id を開いて即削除) のときは先に取得してから決め、
       // next/prev を取りこぼして home に飛ばさないようにする。
       const before = state.status === "ready" ? state.items : await refresh();
       const next = nextSnapshotId(before, id);
@@ -38,7 +38,7 @@ export function useDeleteSnapshot() {
         // 算出した遷移先が削除後の一覧にまだ在るときだけ開く。無ければ home へ。
         const target = next && after.some((i) => i.id === next) ? next : null;
         await router.navigate(
-          target ? { to: "/views/$id", params: { id: target } } : { to: "/" },
+          target ? { to: "/snapshots/$id", params: { id: target } } : { to: "/" },
         );
       }
       // 削除済み snapshot の loader cache を捨てる (戻る / intent preload 経由で

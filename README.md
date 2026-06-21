@@ -17,7 +17,7 @@ You send a snapshot as a JSON tree. Each node is `{ type, props, children? }`, w
           catalog["Heading"]  →  <Heading text="Today" />
 ```
 
-syokan is a CSR single-page app with client-side routing (TanStack Router): `/` is the home and `/views/:id` renders one snapshot. The server returns the same SPA HTML for any non-API path, so deep links and reloads work; unknown `/api/*` paths return a JSON `404`.
+syokan is a CSR single-page app with client-side routing (TanStack Router): `/` is the home and `/snapshots/:id` renders one snapshot. The server returns the same SPA HTML for any non-API path, so deep links and reloads work; unknown `/api/*` paths return a JSON `404`.
 
 ## Setup
 
@@ -55,7 +55,7 @@ The body is a snapshot **envelope** — and it must be **JSON**. syokan does not
 The server assigns `id` and `createdAt`, then responds `201` with:
 
 ```json
-{ "id": "<uuid>", "url": "/views/<uuid>", "snapshot": { /* full envelope */ } }
+{ "id": "<uuid>", "url": "/snapshots/<uuid>", "snapshot": { /* full envelope */ } }
 ```
 
 Errors are `400` with `{ "error": "invalid_json" }` (body isn't JSON) or `{ "error": "validation_failed", "issues": [...] }` (body doesn't satisfy the schema).

@@ -32,7 +32,7 @@ ${FENCE}
 ${FENCE}json
 {
   "id": "k3f9q2",
-  "url": "/views/k3f9q2",
+  "url": "/snapshots/k3f9q2",
   "snapshot": { "schemaVersion": 1, "id": "k3f9q2", ... }
 }
 ${FENCE}

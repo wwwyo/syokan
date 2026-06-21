@@ -36,7 +36,7 @@ const defaultRenderLink = ({
   children,
 }: RenderLinkArgs): ReactElement => (
   <a
-    href={`/views/${encodeURIComponent(id)}`}
+    href={`/snapshots/${encodeURIComponent(id)}`}
     aria-current={active ? "page" : undefined}
     className={className}
   >

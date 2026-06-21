@@ -42,6 +42,12 @@ const FILE_OPTIONS = {
  * ハイライトは @pierre/diffs の File に委譲し Diff と同じ Shiki スタックに統一する。
  * コード面は File 自身のテーマ背景を唯一のサーフェスとし、filename / CopyButton は
  * その上に重ねる chrome として持つ。lang 未指定/未知は "text" として素のテキストで見せる。
+ *
+ * 既知の制約 (dev のみ): grammar が cold の初回描画では File が空プレースホルダ (高さ0) を
+ * 出し、非同期ハイライト完了時の再描画 callback で本文に差し替える。React StrictMode は
+ * mount→unmount→remount するため、その callback が unmount で cleanUp 済み (enabled=false) の
+ * 旧インスタンスに届き no-op になり、高さ0 のまま潰れる (tab 内は決定的、ViewPage は時々)。
+ * warm (grammar キャッシュ済) や本番 (StrictMode 無効) では同期描画され問題ない。
  */
 export function Code({ code, lang, filename }: CodeProps) {
   const themeType = useColorScheme();

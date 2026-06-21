@@ -72,7 +72,7 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       return Response.json(
         {
           id: envelope.id,
-          url: `/views/${envelope.id}`,
+          url: `/snapshots/${envelope.id}`,
           snapshot: envelope,
         },
         { status: 201 },

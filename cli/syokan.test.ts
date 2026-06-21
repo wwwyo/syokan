@@ -91,7 +91,7 @@ function makeDeps(opts: {
 
 function okResponse(id = "generated-id"): Response {
   return Response.json(
-    { id, url: `/views/${id}`, snapshot: { id } },
+    { id, url: `/snapshots/${id}`, snapshot: { id } },
     { status: 201 },
   );
 }
@@ -117,7 +117,7 @@ describe("cli main: post (default action)", () => {
     });
     const result = await main(["items.json"], deps);
     expect(result.exitCode).toBe(0);
-    expect(out).toEqual(["http://localhost:5173/views/xyz"]);
+    expect(out).toEqual(["http://localhost:5173/snapshots/xyz"]);
     expect(calls[0]?.url).toBe("http://localhost:5173/api/snapshots");
     const body = calls[0]?.body as { root: { type: string } };
     expect(body.root.type).toBe("Heading");
@@ -133,7 +133,7 @@ describe("cli main: post (default action)", () => {
     });
     const result = await main([], deps);
     expect(result.exitCode).toBe(0);
-    expect(out).toEqual(["http://localhost:5173/views/piped-1"]);
+    expect(out).toEqual(["http://localhost:5173/snapshots/piped-1"]);
     const body = calls[0]?.body as { root: { props: { text: string } } };
     expect(body.root.props.text).toBe("piped");
   });
@@ -239,23 +239,23 @@ describe("cli main: bare invocation", () => {
 describe("resolveViewUrl", () => {
   const base = "http://localhost:5173";
 
-  test("builds a /views/:id URL from a bare id", () => {
-    expect(resolveViewUrl("abc123", base)).toBe(`${base}/views/abc123`);
+  test("builds a /snapshots/:id URL from a bare id", () => {
+    expect(resolveViewUrl("abc123", base)).toBe(`${base}/snapshots/abc123`);
   });
 
   test("encodes id segments that need escaping", () => {
-    expect(resolveViewUrl("a/b", base)).toBe(`${base}/views/a%2Fb`);
+    expect(resolveViewUrl("a/b", base)).toBe(`${base}/snapshots/a%2Fb`);
   });
 
   test("prefixes a path with the base url", () => {
-    expect(resolveViewUrl("/views/abc123", base)).toBe(
-      `${base}/views/abc123`,
+    expect(resolveViewUrl("/snapshots/abc123", base)).toBe(
+      `${base}/snapshots/abc123`,
     );
   });
 
   test("passes a full URL through unchanged (post output)", () => {
-    expect(resolveViewUrl(`${base}/views/abc123`, base)).toBe(
-      `${base}/views/abc123`,
+    expect(resolveViewUrl(`${base}/snapshots/abc123`, base)).toBe(
+      `${base}/snapshots/abc123`,
     );
   });
 });
@@ -265,8 +265,8 @@ describe("cli main: open", () => {
     const h = makeDeps({ respond: () => okResponse() });
     const result = await main(["open", "abc123"], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.opened).toEqual(["http://localhost:5173/views/abc123"]);
-    expect(h.out[0]).toBe("http://localhost:5173/views/abc123");
+    expect(h.opened).toEqual(["http://localhost:5173/snapshots/abc123"]);
+    expect(h.out[0]).toBe("http://localhost:5173/snapshots/abc123");
   });
 
   test("lazy-spawns the server before opening when it is down", async () => {
@@ -282,7 +282,7 @@ describe("cli main: open", () => {
     const result = await main(["open", "abc123"], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.spawnCount()).toBe(1);
-    expect(h.opened).toEqual(["http://localhost:5173/views/abc123"]);
+    expect(h.opened).toEqual(["http://localhost:5173/snapshots/abc123"]);
   });
 
   test("opens home when no id is given", async () => {
@@ -352,7 +352,7 @@ describe("cli main: lazy-spawn integration", () => {
     const result = await main(["items.json"], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.spawnCount()).toBe(1);
-    expect(h.out).toEqual(["http://localhost:5173/views/spawned-1"]);
+    expect(h.out).toEqual(["http://localhost:5173/snapshots/spawned-1"]);
     expect(h.err.some((l) => l.includes("started server"))).toBe(true);
     // health は calls に積まれず、POST だけが記録される
     expect(h.calls.length).toBe(1);
@@ -368,7 +368,7 @@ describe("cli main: lazy-spawn integration", () => {
     const result = await main(["items.json"], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.spawnCount()).toBe(0);
-    expect(h.out).toEqual(["http://localhost:5173/views/reuse-1"]);
+    expect(h.out).toEqual(["http://localhost:5173/snapshots/reuse-1"]);
   });
 
   test("post reports server_unavailable if it never comes up", async () => {

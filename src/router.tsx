@@ -36,11 +36,11 @@ const homeRoute = createRoute({
   component: Home,
 });
 
-// 人間が見るページ URL は据え置き (/views/:id)。取得は loader が担い、
-// pending / not-found / error の出し分けは route の各 component に委ねる。
+// 人間が見るページ URL は /snapshots/:id (API の /api/snapshots と揃える)。取得は
+// loader が担い、pending / not-found / error の出し分けは route の各 component に委ねる。
 const viewRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/views/$id",
+  path: "/snapshots/$id",
   loader: async ({ params }) => {
     const envelope = await fetchSnapshotEnvelope(params.id);
     if (!envelope) throw notFound();

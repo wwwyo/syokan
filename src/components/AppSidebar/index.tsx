@@ -70,7 +70,7 @@ export function AppSidebar() {
               onDelete={(id) => del(id, { isCurrent: id === currentId })}
               renderLink={({ id, active, className, children }) => (
                 <Link
-                  to="/views/$id"
+                  to="/snapshots/$id"
                   params={{ id }}
                   aria-current={active ? "page" : undefined}
                   className={className}

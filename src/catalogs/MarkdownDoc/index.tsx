@@ -111,6 +111,9 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
           pre: ({ node, children }) => {
             const extracted = extractCodeFromPre(node);
             if (extracted) {
+              // コードフェンスは catalog の Code に委譲し、単独 Code / Diff と同じ
+              // @pierre/diffs スタックで一貫させる。dev (StrictMode) では cold 初回に
+              // 潰れる既知の制約があるが詳細と理由は Code 側コメント参照。
               return (
                 <Code
                   code={extracted.code}

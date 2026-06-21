@@ -104,7 +104,7 @@ syokan/
 │   └── syokan.ts            # CLI。第一引数で分岐 (file/pipe=post / open / stop)、server を lazy-spawn。同居 test
 ├── src/
 │   ├── frontend.tsx         # RouterProvider mount (TanStack Router)
-│   ├── router.tsx           # code-based route tree (root=AppShell / `/`=Home / `/views/$id`=loader+pending/notFound/error)
+│   ├── router.tsx           # code-based route tree (root=AppShell / `/`=Home / `/snapshots/$id`=loader+pending/notFound/error)
 │   ├── Home.tsx             # home (snapshot 一覧)
 │   ├── ViewPage.tsx         # 1 snapshot の表示 (presentational) + ViewPending/ViewNotFound/ViewError
 │   ├── Render.tsx           # JSON tree → React 再帰 renderer
@@ -171,6 +171,17 @@ Storybook は catalog component の視覚レビュー基盤。`<Name>/<Name>.sto
 - **Routing (server)**: `Bun.serve` の routes patterns (`/api/snapshots` ハンドラ + `/*` SPA fallback)
 - **Routing (client)**: TanStack Router (code-based route、Vite プラグイン不使用)。loader / scrollRestoration / pending・notFound・error / 常駐レイアウトの要求を満たす選定
 - **Component catalog**: Storybook (`@storybook/react-vite` + `@tailwindcss/vite`)。catalog を story 化して視覚レビュー。builder は Vite だが **Storybook 専用の devDep** で、アプリ本体の「Vite を使わない」方針はアプリ bundle に限った話（Bun ネイティブの Storybook builder が無いため代替なし）
+
+## 既知の落とし穴
+
+### catalog `Code` / `Diff` は dev (StrictMode) で潰れる
+
+`@pierre/diffs` の `File`（catalog の `Code` / `Diff`、および `Code` に委譲する `MarkdownDoc` のコードフェンス）は、**`bun run dev`（React StrictMode）で grammar が cold の初回描画時に高さ0に潰れる**。tab 内や client 遷移で踏みやすい（home「使い方」tab は決定的、ViewPage は時々）。
+
+- **原因**: File は cold 初回に空プレースホルダ（高さ0）を出し、非同期ハイライト完了時の再描画 callback で本文に差し替える。StrictMode の mount→unmount→remount で、その callback が unmount 時に `cleanUp` 済み（`enabled=false`）の旧インスタンスに届き no-op になるため、潰れたまま固まる。
+- **影響は dev のみ**。warm（grammar キャッシュ済）や本番ビルド（StrictMode 無効）では正常に描画される。`disableWorkerPool` / mount 遅延 / ResizeObserver パッチ除去 / default tab 変更はいずれも効かない（核心は非同期 callback × ライフサイクルのため）。
+- **方針**: ハイライト不要な静的コード片は `components/CodeSnippet`（素の `<pre>`、初回計測に依存せず潰れない）を使う。ハイライトが要る doc は catalog `Code` のまま（dev での見え方は割り切り、本番で出る）。詳細は `src/catalogs/Code/index.tsx` のコメント参照。
+- **上流**: pierre 側が StrictMode 再マウント後に非同期ハイライトの完了 callback を新インスタンスへ張り直さない堅牢性バグ。upstream issue 候補。
 
 ## コミュニケーション方針
 
