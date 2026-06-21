@@ -16,7 +16,7 @@ export const Shell: Story = {
 
 export const Multiline: Story = {
   args: {
-    code: `curl -X POST http://localhost:5173/api/items \\
+    code: `curl -X POST http://localhost:5173/api/snapshots \\
   -H "content-type: application/json" \\
   -d '{ "root": { "type": "Heading", "props": { "text": "hi" } } }'`,
   },

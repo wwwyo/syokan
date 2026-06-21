@@ -14,12 +14,12 @@ const sample = [
 ];
 
 describe("ViewList", () => {
-  test("renders one link per snapshot pointing at /views/:id", () => {
+  test("renders one link per snapshot pointing at /snapshots/:id", () => {
     const html = renderToString(
       createElement(ViewList, { items: sample, currentId: null }),
     );
-    expect(html).toContain('href="/views/abc"');
-    expect(html).toContain('href="/views/def"');
+    expect(html).toContain('href="/snapshots/abc"');
+    expect(html).toContain('href="/snapshots/def"');
     expect(html).toContain("今日のRSS");
     expect(html).toContain("PR review");
   });

@@ -1,11 +1,18 @@
+import { MarkdownDoc } from "@/catalogs/MarkdownDoc";
 import { SidebarToggle } from "@/components/AppSidebar/SidebarToggle";
-import { CodeSnippet } from "@/components/CodeSnippet";
 import { FontSelect } from "@/components/FontSelect";
 import { PageLayout } from "@/components/PageLayout";
 import { ThemeSelect } from "@/components/ThemeSelect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const POST_EXAMPLE = `curl -X POST http://localhost:5173/api/items \\
+const FENCE = "```";
+
+const USAGE_DOC = `## 1. snapshot を作る — \`POST /api/snapshots\`
+
+\`root\` に catalog の type で組んだ tree を渡す。応答に \`id\` が返る。
+
+${FENCE}bash
+curl -X POST http://localhost:5173/api/snapshots \\
   -H "content-type: application/json" \\
   -d '{
     "title": "今日のRSS",
@@ -17,13 +24,33 @@ const POST_EXAMPLE = `curl -X POST http://localhost:5173/api/items \\
         { "type": "Text", "props": { "text": "気になった記事をここに並べる" } }
       ]
     }
-  }'`;
+  }'
+${FENCE}
 
-const RESPONSE_EXAMPLE = `{
+応答:
+
+${FENCE}json
+{
   "id": "k3f9q2",
-  "url": "/views/k3f9q2",
+  "url": "/snapshots/k3f9q2",
   "snapshot": { "schemaVersion": 1, "id": "k3f9q2", ... }
-}`;
+}
+${FENCE}
+
+## 2. 開く — \`syokan open <id>\`
+
+返ってきた \`id\` を渡すとブラウザで開く（server が無ければ自動起動）。作った
+snapshot は左上の **メニュー** からも辿れる。
+
+${FENCE}bash
+syokan open k3f9q2
+${FENCE}
+
+## 投げられる type
+
+\`Stack\` / \`Card\` / \`Heading\` / \`Text\` / \`Link\` / \`Badge\` / \`Time\` /
+\`Code\` / \`Diff\` / \`MarkdownDoc\` / \`PlainText\`。各 type の props は Storybook
+で確認できる。schema に合わない tree は 400 で弾かれる。`;
 
 export function Home() {
   return (
@@ -73,43 +100,7 @@ export function Home() {
         </TabsContent>
 
         <TabsContent value="usage">
-          <h2 className="font-medium">
-            1. snapshot を作る —{" "}
-            <code className="font-mono text-sm">POST /api/items</code>
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            <code className="font-mono">root</code> に catalog の type で組んだ tree
-            を渡す。応答に <code className="font-mono">id</code> が返る。
-          </p>
-          <CodeSnippet code={POST_EXAMPLE} />
-          <CodeSnippet code={RESPONSE_EXAMPLE} />
-
-          <h2 className="mt-6 font-medium">
-            2. 開く — <code className="font-mono text-sm">syokan open &lt;id&gt;</code>
-          </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            返ってきた <code className="font-mono">id</code> を渡すとブラウザで開く
-            （server が無ければ自動起動）。作った snapshot は左上の{" "}
-            <span className="font-medium text-foreground">メニュー</span>{" "}
-            からも辿れる。
-          </p>
-          <CodeSnippet code="syokan open k3f9q2" />
-
-          <h2 className="mt-6 font-medium">投げられる type</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            <code className="font-mono">Stack</code> /{" "}
-            <code className="font-mono">Card</code> /{" "}
-            <code className="font-mono">Heading</code> /{" "}
-            <code className="font-mono">Text</code> /{" "}
-            <code className="font-mono">Link</code> /{" "}
-            <code className="font-mono">Badge</code> /{" "}
-            <code className="font-mono">Time</code> /{" "}
-            <code className="font-mono">Code</code> /{" "}
-            <code className="font-mono">Diff</code> /{" "}
-            <code className="font-mono">MarkdownDoc</code> /{" "}
-            <code className="font-mono">PlainText</code>。各 type の props は Storybook
-            で確認できる。schema に合わない tree は 400 で弾かれる。
-          </p>
+          <MarkdownDoc body={USAGE_DOC} />
         </TabsContent>
       </Tabs>
     </PageLayout>

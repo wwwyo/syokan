@@ -3,76 +3,75 @@ import { PageLayout } from "./components/PageLayout";
 import { ViewHeader } from "./components/ViewHeader";
 import { Render } from "./Render";
 
-export type ViewPageState =
-  | { kind: "loading" }
-  | { kind: "not-found"; id: string }
-  | { kind: "error"; message: string }
-  | { kind: "found"; envelope: SnapshotEnvelope };
+// root が resizable Stack のときだけ幅制約を外して全画面に広げる。
+// 通常の縦積み (非 resizable / 記事一覧) は読みやすい max-w-4xl を維持する。
+function isFullBleed(env: SnapshotEnvelope): boolean {
+  const root = env.root;
+  return (
+    root.type === "Stack" &&
+    (root.props as { resizable?: boolean }).resizable === true
+  );
+}
 
 export type ViewPageProps = {
-  state: ViewPageState;
+  envelope: SnapshotEnvelope;
   onDelete?: () => void;
 };
 
-export function ViewPage({ state, onDelete }: ViewPageProps) {
-  if (state.kind === "loading") {
-    return (
-      <PageLayout>
-        <p data-slot="view-loading" className="text-muted-foreground">
-          Loading…
-        </p>
-      </PageLayout>
-    );
-  }
-
-  if (state.kind === "not-found") {
-    return (
-      <PageLayout>
-        <div data-slot="view-not-found">
-          <p className="text-muted-foreground">
-            404 — Snapshot <code className="font-mono">{state.id}</code> not
-            found.
-          </p>
-          <p className="mt-6">
-            <a className="text-primary underline underline-offset-4" href="/">
-              Back to home
-            </a>
-          </p>
-        </div>
-      </PageLayout>
-    );
-  }
-
-  if (state.kind === "error") {
-    return (
-      <PageLayout>
-        <p data-slot="view-error" className="text-destructive">
-          {state.message}
-        </p>
-      </PageLayout>
-    );
-  }
-
-  const env = state.envelope;
-  const root = env.root;
-  // root が resizable Stack のときだけ幅制約を外して全画面に広げる。
-  // 通常の縦積み (非 resizable / 記事一覧) は読みやすい max-w-2xl を維持する。
-  const fullBleed =
-    root.type === "Stack" &&
-    (root.props as { resizable?: boolean }).resizable === true;
-
+export function ViewPage({ envelope, onDelete }: ViewPageProps) {
+  const fullBleed = isFullBleed(envelope);
   return (
     <PageLayout
       fullBleed={fullBleed}
       header={
         <ViewHeader
-          sourceLabel={env.metadata?.source?.label}
+          sourceLabel={envelope.metadata?.source?.label}
           onDelete={onDelete}
           fullBleed={fullBleed}
         />
       }
     >
-      <Render item={root} />
+      <Render item={envelope.root} />
+    </PageLayout>
+  );
+}
+
+// 取得中。route の pendingComponent。
+export function ViewPending() {
+  return (
+    <PageLayout header={<ViewHeader />}>
+      <p data-slot="view-loading" className="text-muted-foreground">
+        Loading…
+      </p>
+    </PageLayout>
+  );
+}
+
+// 存在しない id。route の notFoundComponent。home へは full reload で十分なので素の <a>。
+export function ViewNotFound({ id }: { id: string }) {
+  return (
+    <PageLayout header={<ViewHeader />}>
+      <div data-slot="view-not-found">
+        <p className="text-muted-foreground">
+          404 — Snapshot <code className="font-mono">{id}</code> not found.
+        </p>
+        <p className="mt-6">
+          <a className="text-primary underline underline-offset-4" href="/">
+            Back to home
+          </a>
+        </p>
+      </div>
+    </PageLayout>
+  );
+}
+
+// 取得失敗。route の errorComponent。
+export function ViewError({ message }: { message: string }) {
+  return (
+    <PageLayout header={<ViewHeader />}>
+      <p data-slot="view-error" className="text-destructive">
+        {message}
+      </p>
     </PageLayout>
   );
 }

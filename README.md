@@ -17,7 +17,7 @@ You send a snapshot as a JSON tree. Each node is `{ type, props, children? }`, w
           catalog["Heading"]  →  <Heading text="Today" />
 ```
 
-There is no client-side routing: `/` is the home (snapshot list) and `/views/:id` renders one snapshot.
+syokan is a CSR single-page app with client-side routing (TanStack Router): `/` is the home and `/snapshots/:id` renders one snapshot. The server returns the same SPA HTML for any non-API path, so deep links and reloads work; unknown `/api/*` paths return a JSON `404`.
 
 ## Setup
 
@@ -33,10 +33,10 @@ bun run dev    # Bun.serve + HMR
 
 ### Posting a snapshot
 
-Everything funnels through one endpoint:
+Snapshots are a single REST resource at `/api/snapshots` — create (`POST`), list (`GET`), fetch (`GET /:id`), delete (`DELETE /:id`). Creation funnels through one endpoint:
 
 ```
-POST /api/items
+POST /api/snapshots
 Content-Type: application/json
 ```
 
@@ -55,7 +55,7 @@ The body is a snapshot **envelope** — and it must be **JSON**. syokan does not
 The server assigns `id` and `createdAt`, then responds `201` with:
 
 ```json
-{ "id": "<uuid>", "url": "/views/<uuid>", "snapshot": { /* full envelope */ } }
+{ "id": "<uuid>", "url": "/snapshots/<uuid>", "snapshot": { /* full envelope */ } }
 ```
 
 Errors are `400` with `{ "error": "invalid_json" }` (body isn't JSON) or `{ "error": "validation_failed", "issues": [...] }` (body doesn't satisfy the schema).
@@ -72,7 +72,7 @@ The `syokan` binary (`cli/syokan.ts`, also runnable as `bun cli/syokan.ts`) lazy
 | `syokan open [id]` | Opens a snapshot in the browser; with no `id`, opens home. |
 | `syokan stop` | Stops the server that the CLI lazy-spawned. |
 
-On a successful post the CLI prints the view URL. The file form and the stdin form are equivalent — both just stream a JSON envelope to `/api/items`.
+On a successful post the CLI prints the view URL. The file form and the stdin form are equivalent — both just stream a JSON envelope to `/api/snapshots`.
 
 ### Catalog types
 

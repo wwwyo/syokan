@@ -72,7 +72,7 @@ export async function ensureServerRunning(
 }
 
 async function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
-  const res = await deps.fetch(`${deps.baseUrl}/api/items`, {
+  const res = await deps.fetch(`${deps.baseUrl}/api/snapshots`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
@@ -147,13 +147,13 @@ export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
   return postText(text, deps);
 }
 
-// open に渡された引数を閲覧 URL に正規化する。post の出力 (フル URL / `/views/:id`)
+// open に渡された引数を閲覧 URL に正規化する。post の出力 (フル URL / `/snapshots/:id`)
 // と bare id のどれを渡してもそのまま開けるようにする。
 export function resolveViewUrl(idOrUrl: string, baseUrl: string): string {
   if (/^https?:\/\//.test(idOrUrl)) return idOrUrl;
   const path = idOrUrl.startsWith("/")
     ? idOrUrl
-    : `/views/${encodeURIComponent(idOrUrl)}`;
+    : `/snapshots/${encodeURIComponent(idOrUrl)}`;
   return `${baseUrl}${path}`;
 }
 

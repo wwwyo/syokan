@@ -10,7 +10,7 @@ const meta = {
   title: "Components/PageLayout",
   component: PageLayout,
   tags: ["autodocs"],
-  // PageLayout 自身が min-h-screen / max-w を持つので canvas いっぱいに見せる
+  // PageLayout は本文カラム (max-w + 余白) を組む。canvas いっぱいに見せて確認する
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof PageLayout>;
 
