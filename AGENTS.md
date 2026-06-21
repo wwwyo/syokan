@@ -99,46 +99,17 @@ LLM に「JSXを書かせる」のではなく、**schema を満たす JSON tree
 
 ```
 syokan/
-├── index.html               # Bun.serve の HTML import entry
-├── cli/
-│   └── syokan.ts            # CLI。第一引数で分岐 (file/pipe=post / open / stop)、server を lazy-spawn。同居 test
+├── cli/syokan.ts        # CLI (post / open / stop)。server を lazy-spawn
 ├── src/
-│   ├── frontend.tsx         # RouterProvider mount (TanStack Router)
-│   ├── router.tsx           # code-based route tree (root=AppShell / `/`=Home / `/snapshots/$id`=loader+pending/notFound/error)
-│   ├── Home.tsx             # home (snapshot 一覧)
-│   ├── ViewPage.tsx         # 1 snapshot の表示 (presentational) + ViewPending/ViewNotFound/ViewError
-│   ├── Render.tsx           # JSON tree → React 再帰 renderer
-│   ├── styles.css           # Tailwind v4 + shadcn CSS variables
-│   ├── schema/             # ★ schema layer: catalog.ts (Item / createCatalog) / snapshot.ts (envelope / SnapshotSummary) / error.ts (validation 整形) / index.ts (barrel)
-│   ├── lib/                 # utils.ts (cn) / date.ts / code.ts (Shiki lang allowlist) / snapshots.ts (fetch/delete/next 一覧操作) / url.ts (href 検証) / theme.ts / font.ts / useColorScheme.ts
-│   ├── catalogs/            # ★ catalog 公開 component (LLM が JSON で投げられる type)
-│   │   ├── index.ts         #   registry: type 名 → (props schema, component) + itemSchema
-│   │   ├── Card/            #   各 component は <Name>/index.tsx + 同居 test/story
-│   │   │   ├── index.tsx
-│   │   │   ├── Card.test.tsx
-│   │   │   └── Card.stories.tsx  # Storybook (catalog の視覚レビュー用)
-│   │   ├── Code/            #   @pierre/diffs ベースの code 表示。内部専用 CopyButton/ を配下にネスト
-│   │   └── ...              #   Stack / Heading / Link / Text / Time / Badge / MarkdownDoc / PlainText / Diff
-│   └── components/          # catalog 非登録の UI (LLM が JSON で投げられない内部部品)
-│       ├── ui/              #   shadcn primitives (CLI 経由で生成・更新。Dir 化しない)
-│       ├── AppShell/        #   root route の常駐 shell (sidebar + Outlet)。sidebar 開閉 / snapshot 一覧 provider / delete hook を同居
-│       ├── AppSidebar/      #   snapshot 一覧 sidebar (header のトグルで開閉)。一覧は AppShell の provider 由来
-│       ├── PageLayout/      #   本文カラムの per-route レイアウト (header + main)。背景/sidebar は shell の責務
-│       ├── ViewHeader/      #   viewer chrome (snapshot メタ帯 / source label)
-│       ├── ThemeSelect/     #   テーマ切り替え (→ lib/theme.ts)
-│       ├── FontSelect/      #   フォント切り替え (→ lib/font.ts)
-│       ├── CodeSnippet/     #   素の pre による静的 code 片 (tab 内でも潰れない)
-│       ├── ErrorBoundary/   #   描画時例外の握り
-│       └── UnknownComponent/ #  Render が未知 type に出すフォールバック
-├── .storybook/              # Storybook 設定 (main.ts / preview.tsx) — catalog レビュー基盤
-├── server/
-│   ├── index.ts             # Bun.serve({ routes }) — /api/snapshots はハンドラ、未知 /api/* は JSON 404、/* は SPA HTML fallback。store を ~/.syokan/data に配線
-│   ├── routes.ts            #   /api/snapshots ハンドラ (create/list/get/delete。envelope validation → store)
-│   └── store.ts             #   snapshot を snapshots.json に保存 (ephemeral 前提の disposable。O_EXCL lock で書き込み排他)
-├── bunfig.toml              # bun-plugin-tailwind + install policy
-├── components.json          # shadcn config (style: base-nova)
-├── mise.toml                # Bun version 固定
-└── package.json
+│   ├── frontend.tsx     # RouterProvider mount
+│   ├── router.tsx       # TanStack Router の route tree (root=AppShell)
+│   ├── Home.tsx / ViewPage.tsx / Render.tsx  # 各 route の本文 + JSON tree 再帰 renderer
+│   ├── schema/          # Zod schema (catalog Item / envelope / validation 整形)
+│   ├── lib/             # 横断 util (cn / date / code / snapshots / url / theme / font ...)
+│   ├── catalogs/        # ★ LLM が JSON で投げる公開 type。index.ts が registry
+│   └── components/      # catalog 非登録の内部 UI (ui=shadcn / AppShell / AppSidebar / PageLayout ...)
+├── server/             # Bun.serve。routes.ts=/api/snapshots、store.ts=~/.syokan/data (ephemeral)
+└── .storybook/         # catalog 視覚レビュー基盤
 ```
 
 クライアント側ルーティングは **TanStack Router** で行う (code-based route、Vite プラグインは使わず Bun の bundler に載せる)。常駐 shell (AppShell) が sidebar と本文の置き場を 1 度だけ mount し、route 遷移では `<Outlet />` の中身だけ差し替える。これにより sidebar の開閉・スクロール位置・取得済み一覧が遷移をまたいで残り、本文の読書位置は router の `scrollRestoration` が復元する。直接 URL / reload / 戻る進む は server の SPA fallback (`/*` → HTML) で成立する。どの route にも一致しないパスは root の `notFoundComponent` で受ける。
