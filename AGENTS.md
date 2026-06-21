@@ -141,7 +141,9 @@ syokan/
 └── package.json
 ```
 
-クライアント側ルーティングは **TanStack Router** で行う (code-based route、Vite プラグインは使わず Bun の bundler に載せる)。常駐 shell (AppShell) が sidebar と本文の置き場を 1 度だけ mount し、route 遷移では `<Outlet />` の中身だけ差し替える。これにより sidebar の開閉・スクロール位置・取得済み一覧が遷移をまたいで残り、本文の読書位置は router の `scrollRestoration` が復元する。直接 URL / reload / 戻る進む は server の SPA fallback (`/*` → HTML) で成立する。
+クライアント側ルーティングは **TanStack Router** で行う (code-based route、Vite プラグインは使わず Bun の bundler に載せる)。常駐 shell (AppShell) が sidebar と本文の置き場を 1 度だけ mount し、route 遷移では `<Outlet />` の中身だけ差し替える。これにより sidebar の開閉・スクロール位置・取得済み一覧が遷移をまたいで残り、本文の読書位置は router の `scrollRestoration` が復元する。直接 URL / reload / 戻る進む は server の SPA fallback (`/*` → HTML) で成立する。どの route にも一致しないパスは root の `notFoundComponent` で受ける。
+
+snapshot 一覧は常駐 provider が保持し、遷移ごとには取り直さない (loading のちらつきを出さない)。最新化の契機は 2 つ: in-app の削除後 (`refresh()`) と、tab への復帰 (`focus` / `visibilitychange`)。作成は外 (CLI / LLM) で起きるため in-app の契機が無く、開いたままのアプリには tab 復帰時の取り直しで反映する。
 
 > MVP 当初は「ページ間で引き継ぐ状態が無い」前提でフルリロードを採用していた。状態を持つ chrome (sidebar) の追加でその前提が崩れたため、意図的に client routing へ転換した (旧方針「採用しない」からの変更。経緯は `.agent/prd/client-routing/`)。
 
