@@ -14,6 +14,9 @@ const result = await Bun.build({
   compile: { outfile },
   plugins: [tailwind],
   minify: true,
+  // compile 時の ambient NODE_ENV が server の development 判定に焼き込まれるのを防ぐ。
+  // バイナリは常に production (HMR 無効・埋め込み frontend を配信) に固定する。
+  define: { "process.env.NODE_ENV": JSON.stringify("production") },
 });
 
 if (!result.success) {

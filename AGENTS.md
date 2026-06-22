@@ -139,7 +139,7 @@ Storybook は catalog component の視覚レビュー基盤。`<Name>/<Name>.sto
 - **Runtime / Bundler / HMR / TS 実行**: Bun (1 つに集約。Vite / Hono / React Router は使わない)
 - **Frontend**: React + TypeScript (Bun の HTML import + JSX/TSX ネイティブで bundle)
 - **UI**: shadcn/ui (`base-nova` style) + `@base-ui/react` + Tailwind CSS v4
-- **Backend**: `Bun.serve({ routes })` — prod は prebuild した `dist/` を配信、dev は `/` を HTML import で on-the-fly bundle。`/api/*` は同一プロセス内で同居
+- **Backend**: `Bun.serve({ routes })` — frontend は `index.html` の import で供給 (dev は on-the-fly bundle + HMR、compile 時はバイナリへ埋め込み)。`/api/*` は同一プロセス内で同居
 - **Validation**: Zod
 - **Routing (server)**: `Bun.serve` の routes patterns (`/api/snapshots` ハンドラ + `/*` SPA fallback)
 - **Routing (client)**: TanStack Router (code-based route、Vite プラグイン不使用)。loader / scrollRestoration / pending・notFound・error / 常駐レイアウトの要求を満たす選定
