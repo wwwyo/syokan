@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export type SpawnResult = { pid: number };
@@ -97,8 +97,10 @@ function reportSuccess(deps: CliDeps, data: unknown): CliResult {
 }
 
 function reportFailure(deps: CliDeps, result: PostResult): CliResult {
-  const payload =
-    result.data ?? { error: "request_failed", status: result.status };
+  const payload = result.data ?? {
+    error: "request_failed",
+    status: result.status,
+  };
   deps.stderr(JSON.stringify(payload));
   return { exitCode: 1 };
 }
@@ -119,7 +121,9 @@ async function postWithServer(
     deps.stderr(`syokan: started server at ${deps.baseUrl}`);
   }
   const result = await postItems(deps, payload);
-  return result.ok ? reportSuccess(deps, result.data) : reportFailure(deps, result);
+  return result.ok
+    ? reportSuccess(deps, result.data)
+    : reportFailure(deps, result);
 }
 
 // 入力は JSON envelope のみ。markdown / plain text を表示したい場合も MarkdownDoc /
@@ -130,7 +134,9 @@ async function postText(text: string, deps: CliDeps): Promise<CliResult> {
   try {
     payload = JSON.parse(text);
   } catch (err) {
-    deps.stderr(JSON.stringify({ error: "invalid_json", message: String(err) }));
+    deps.stderr(
+      JSON.stringify({ error: "invalid_json", message: String(err) }),
+    );
     return { exitCode: 1 };
   }
   return postWithServer(deps, payload);
@@ -226,16 +232,30 @@ function pidFilePath(port: number): string {
   return join(runtimeDir(), `server-${port}.json`);
 }
 
+// 単体バイナリでは process.execPath が自前バイナリ、dev は bun runtime を指す。
+// spawn 方法 (自分を再 exec か、bun でソースを起動か) の判定に使う。
+function isCompiledBinary(): boolean {
+  return basename(process.execPath).replace(/\.exe$/i, "") !== "bun";
+}
+
 function realSpawnServer(baseUrl: string): SpawnResult {
   const port = portFromBaseUrl(baseUrl);
-  const serverEntry = fileURLToPath(
-    new URL("../server/index.ts", import.meta.url),
-  );
   const dir = runtimeDir();
   mkdirSync(dir, { recursive: true });
   const logFd = openSync(join(dir, `server-${port}.log`), "a");
-  const proc = Bun.spawn(["bun", serverEntry], {
-    env: { ...process.env, PORT: String(port) },
+  // 単体バイナリは自分自身 (process.execPath) を server モードで再 exec、dev は bun で
+  // ソースを起動する。entry が SYOKAN_SERVE を見て分岐する。
+  const cmd = isCompiledBinary()
+    ? [process.execPath]
+    : ["bun", fileURLToPath(new URL("../server/index.ts", import.meta.url))];
+  const proc = Bun.spawn(cmd, {
+    // global の lazy-spawn は既定 prod。dev で起こすときは NODE_ENV=development を明示する。
+    env: {
+      ...process.env,
+      PORT: String(port),
+      NODE_ENV: process.env.NODE_ENV ?? "production",
+      SYOKAN_SERVE: "1",
+    },
     stdout: logFd,
     stderr: logFd,
     stdin: "ignore",
@@ -288,7 +308,9 @@ async function realStopServer(baseUrl: string): Promise<StopResult> {
   return { stopped: true, pid };
 }
 
-if (import.meta.main) {
+// 実行時 deps を組んで CLI を回す。entry.ts (単体バイナリの dual-mode) と
+// 直接実行 (`bun cli/syokan.ts`) の両方から呼ぶ。
+export async function runCli(): Promise<void> {
   const baseUrl = process.env.SYOKAN_BASE_URL ?? "http://localhost:5173";
   const deps: CliDeps = {
     fetch: globalThis.fetch,
@@ -320,6 +342,11 @@ if (import.meta.main) {
       }).unref();
     },
   };
+  // 単体バイナリも argv は [exe, <embedded entry>, ...args] と dev と同形なので slice(2)。
   const { exitCode } = await main(process.argv.slice(2), deps);
   process.exit(exitCode);
+}
+
+if (import.meta.main) {
+  await runCli();
 }

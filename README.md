@@ -27,7 +27,9 @@ bun install    # also pulls portless (devDep)
 bun run dev    # Bun.serve + HMR
 ```
 
-`dev` runs behind [portless](https://github.com/vercel-labs/portless): the app is pinned to port `5173`, and the proxy serves it at both `https://syokan.localhost` and `http://localhost:5173`. The first run needs sudo (port 443) and registers a local CA. To bypass the proxy, run `PORTLESS=0 bun run dev`. Stop the proxy daemon with `bunx portless proxy stop`.
+`dev` runs behind [portless](https://github.com/vercel-labs/portless): `--app-port 5273` pins the dev app to port `5273` (portless injects it via `PORT`) and the proxy serves it at `https://syokan.localhost`. It uses a **separate, repo-local data dir** (`./.syokan-dev/`, gitignored) and port from the global install (`~/.syokan/`, port `5173`), so a running `bun run dev` and the everyday `syokan` binary never share a server or mix snapshots. The first run needs sudo (port 443) and registers a local CA. To bypass the proxy, run `PORTLESS=0 bun run dev` — without portless there's no `PORT` injection, so the server falls back to its default port `5173`. Stop the proxy daemon with `bunx portless proxy stop`.
+
+While developing, post to the **dev** server by pointing the CLI at it: `SYOKAN_BASE_URL=http://localhost:5273 bun cli/syokan.ts <file.json>`. The bare `syokan` binary always talks to the **global install** on `5173`, so you see your latest local renderer in dev and the published one everywhere else.
 
 ## Usage
 
@@ -86,6 +88,19 @@ Each component's props are defined and validated by its Zod schema in `src/catal
 ### Source label
 
 A snapshot may carry `metadata.source.label` — an optional, non-empty string naming where the data came from (`"daily-rss"`, `"gh-review"`, …). When present it shows up in the sidebar list and the view header; when absent, no label is shown. The CLI never injects one — the label lives in the envelope, so it's entirely caller-controlled. The `source` object is loose, so extra fields like `url` or `fetchedAt` are preserved alongside `label`.
+
+## Build (standalone binary)
+
+The global tool is a **self-contained executable** — no Bun, Node, or npm needed to run it. `bun run compile` bundles the CLI, server, and frontend (Tailwind included) into one binary via `Bun.build({ compile })`:
+
+```bash
+bun run compile               # → dist/syokan (a standalone binary)
+cp dist/syokan ~/.local/bin/  # put it on PATH; then `syokan`, `syokan open`, `syokan <file.json>` …
+```
+
+The binary is **dual-mode** ([entry.ts](./entry.ts)): invoked normally it's the CLI; to run its server it re-execs *itself* with `SYOKAN_SERVE=1` (instead of shelling out to `bun`). The global binary uses port `5173` and data in `~/.syokan/`. To update, re-run `bun run compile` and replace the binary.
+
+On macOS a locally built binary runs as-is; if Gatekeeper blocks it after copying, ad-hoc sign it once: `codesign --sign - dist/syokan`. Cross-compile for another OS/arch with `--target` (see `bun build --help`).
 
 ## Storybook
 
