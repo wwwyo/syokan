@@ -149,7 +149,7 @@ Storybook は catalog component の視覚レビュー基盤。`<Name>/<Name>.sto
 
 global ツールは **単体実行ファイル** (`bun run compile` → `dist/syokan`)。bun/node/npm 無しで動く。「開発中は最新を見たい / 普段使いは確定版」という分離を、CLI でも server でもなく **実行形態** (バイナリ vs `bun run dev`) で成立させている。
 
-- **dual-mode entry**: compile 後は cli + server + frontend が 1 バイナリに同居する。[entry.ts](./entry.ts) が `SYOKAN_SERVE` で CLI / server を分岐。lazy-spawn は「ソースが disk に在れば `bun server/index.ts`、無ければ自分自身 (`process.execPath`) を `SYOKAN_SERVE=1` で再 exec」する。dev/compiled の判定と CLI 引数の argv オフセット吸収は `sourceServerEntry()`(ソースの有無) で行う。
+- **dual-mode entry**: compile 後は cli + server + frontend が 1 バイナリに同居する。[entry.ts](./entry.ts) が `SYOKAN_SERVE` で CLI / server を分岐。lazy-spawn は「単体バイナリなら自分自身 (`process.execPath`) を `SYOKAN_SERVE=1` で再 exec、dev なら `bun server/index.ts`」する。dev/compiled の判定は `isCompiledBinary()`(execPath の basename が `bun` か) で行う。CLI 引数は両モードとも `argv.slice(2)` (compiled も argv[1] に embedded entry が入る)。
 - **frontend は static `import index from "../index.html"`**。dev は on-the-fly bundle + HMR、compile 時は Bun が frontend を bundle してバイナリへ埋め込む (同一の静的 import で両立)。
 - **tailwind / bun-plugin-tailwind は devDep**。`bun build --compile` (CLI) は plugin を受け取れないため、`build.ts` が `Bun.build({ compile, plugins:[tailwind] })` で明示配線して compile 時に CSS を展開する。
 - **dev / global 分離**: global = `5173` / `~/.syokan`、dev = `5273` / repo ローカルの `.syokan-dev/` (gitignore 済み)。port が別なので両者の lazy-spawn server は衝突しない。

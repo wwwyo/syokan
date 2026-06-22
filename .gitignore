@@ -29,7 +29,7 @@ yarn-error.log*
 # Ephemeral state (syokan は data を持たない設計、念のため除外)
 .syokan-state/
 data/
-# dev server のローカル snapshot store / pidfile / log (SYOKAN_DATA_DIR=.syokan-dev/data)
+# dev server のローカル snapshot store (SYOKAN_DATA_DIR=.syokan-dev/data)
 .syokan-dev/
 
 # TypeScript

@@ -249,7 +249,9 @@ function realSpawnServer(baseUrl: string): SpawnResult {
     ? [process.execPath]
     : ["bun", fileURLToPath(new URL("../server/index.ts", import.meta.url))];
   const proc = Bun.spawn(cmd, {
-    // global の lazy-spawn は既定 prod。dev で起こすときは NODE_ENV=development を明示する。
+    // 親 CLI 終了後も生かすため別 process group に切り離す (unref だけだと親の
+    // session 終了で SIGHUP を受けて落ちうる)。NODE_ENV 未設定なら prod 既定。
+    detached: true,
     env: {
       ...process.env,
       PORT: String(port),
@@ -260,7 +262,7 @@ function realSpawnServer(baseUrl: string): SpawnResult {
     stderr: logFd,
     stdin: "ignore",
   });
-  // CLI が exit しても server を生かす
+  // 親の event loop から参照を外し、CLI が即 exit できるようにする
   proc.unref();
   writeFileSync(
     pidFilePath(port),
