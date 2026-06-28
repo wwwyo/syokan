@@ -1,12 +1,8 @@
 // 宣言的な極小 CLI ルータ。getopt は使わず、第一引数 (argv[0]) を「コマンド名 or
 // その別名」で引いて分岐するだけ。短縮形 (`-v` 等) やフラグ形 (`--version`) は alias
 // として宣言する。Ctx (依存) / Res (戻り値) は呼び出し側で決める汎用。
-//
-// 評価順:
-//   1. argv 空            → noArgs
-//   2. 既知トークン一致    → その command.run(残りの引数)
-//   3. 未知の `-` 始まり   → onUnknownOption (flag をファイル扱いしない)
-//   4. それ以外           → fallback (positional。例: ファイルパス)
+// 非自明な点: 既知コマンドに一致しない `-` 始まりは fallback(=ファイル) でなく
+// onUnknownOption へ回す (未知フラグを誤ってファイル名として読まないため)。
 
 export type Command<Ctx, Res> = {
   /** 正準名 (コマンド本体・help 表示用) */

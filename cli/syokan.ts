@@ -374,8 +374,8 @@ export async function runTemplates(
 
 // --help の単一ソース。text と --json はどちらもここから導出するので drift しない。
 // agent はこれを読めばコマンド・env・exit code・出力形式を把握でき、静的 doc に依存しない。
-// CLI コマンド宣言 = router 登録と help の SSOT。help 用の usage/details もここに持たせ、
-// コマンド一覧を二重管理しない (help は下の helpManifest がここから生成する)。
+// router 登録と help の出所を 1 箇所に集約する宣言 (help は下の helpManifest が
+// これを map して生成する)。help 用の usage/details も併せて持たせる。
 const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
   {
     name: "help",
@@ -426,8 +426,8 @@ const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
   },
 ];
 
-// help の静的メタ。「コマンドでない既定の使い方」は forms、コマンド一覧は COMMANDS
-// から生成する (commands を二重管理しない)。
+// help の静的メタ。コマンドでない既定の使い方 (file/stdin/bare) は commands と区別して
+// forms に分けて持つ。
 export const helpManifest = {
   name: "syokan",
   version: pkg.version,
@@ -509,8 +509,6 @@ export function runHelp(argv: readonly string[], deps: CliDeps): CliResult {
   return { exitCode: 0 };
 }
 
-// コマンドは宣言的に登録し、分岐は cli/router.ts に委譲する。短縮形 (`-v` 等) は
-// alias、予約語にも flag にも一致しない第一引数はファイルパスとして post (fallback)。
 const cli = createRouter<CliDeps, CliResult | Promise<CliResult>>({
   commands: COMMANDS,
   // 引数なし: stdin に中身が流れていれば post、無ければ home を開く
