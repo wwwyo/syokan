@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { runtimeDir } from "@/lib/paths";
 // compile 時に JSON ごとバイナリへ埋め込まれる (= そのバイナリのバージョン)
 import pkg from "../package.json";
+import { type Command, createRouter } from "./router";
 
 export type SpawnResult = { pid: number };
 export type StopResult = { stopped: boolean; pid?: number };
@@ -373,13 +374,67 @@ export async function runTemplates(
 
 // --help の単一ソース。text と --json はどちらもここから導出するので drift しない。
 // agent はこれを読めばコマンド・env・exit code・出力形式を把握でき、静的 doc に依存しない。
+// CLI コマンド宣言 = router 登録と help の SSOT。help 用の usage/details もここに持たせ、
+// コマンド一覧を二重管理しない (help は下の helpManifest がここから生成する)。
+const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
+  {
+    name: "help",
+    aliases: ["--help", "-h"],
+    usage: "syokan --help [--json]",
+    summary: "この help を表示する (--json で manifest を JSON 出力)",
+    run: (rest, deps) => runHelp(rest, deps),
+  },
+  {
+    name: "version",
+    aliases: ["--version", "-v"],
+    usage: "syokan --version",
+    summary: "バージョンを表示する",
+    run: (_rest, deps) => {
+      deps.stdout(pkg.version);
+      return { exitCode: 0 };
+    },
+  },
+  {
+    name: "open",
+    usage: "syokan open [id]",
+    summary: "snapshot をブラウザで開く (id 省略で home)",
+    run: (rest, deps) => runOpen(rest[0], deps),
+  },
+  {
+    name: "stop",
+    usage: "syokan stop",
+    summary: "lazy-spawn した server を止める",
+    run: (_rest, deps) => runStop(deps),
+  },
+  {
+    name: "catalog",
+    usage: "syokan catalog",
+    summary: "catalog manifest (type + JSON Schema props) を JSON 出力",
+    run: (_rest, deps) => runCatalog(deps),
+  },
+  {
+    name: "templates",
+    usage: "syokan templates [list|add|get|rm]",
+    summary: "保存した template を操作する",
+    details: [
+      "syokan templates                       一覧 (id/title/description) を JSON 出力",
+      "syokan templates add --title <t> [--description <d>] <file|->",
+      "syokan templates get <id>",
+      "syokan templates rm <id>",
+    ],
+    run: (rest, deps) => runTemplates(rest, deps),
+  },
+];
+
+// help の静的メタ。「コマンドでない既定の使い方」は forms、コマンド一覧は COMMANDS
+// から生成する (commands を二重管理しない)。
 export const helpManifest = {
   name: "syokan",
   version: pkg.version,
   summary:
     "Personal schema-driven view layer. Post a JSON snapshot envelope and it renders with predefined catalog components.",
   usage: "syokan [command] [args]   |   <json> | syokan",
-  commands: [
+  forms: [
     {
       usage: "syokan <file.json>",
       summary: "Post a snapshot envelope from a file; prints the view URL",
@@ -389,35 +444,12 @@ export const helpManifest = {
       usage: "syokan",
       summary: "Open the home page (or post stdin when JSON is piped)",
     },
-    {
-      usage: "syokan open [id]",
-      summary: "Open a snapshot in the browser; no id opens home",
-    },
-    { usage: "syokan stop", summary: "Stop the lazy-spawned server" },
-    {
-      usage: "syokan catalog",
-      summary:
-        "Print the catalog manifest (types + JSON Schema props + childrenTypes) as JSON",
-    },
-    {
-      usage: "syokan templates",
-      summary: "List saved templates (id/title/description) as JSON",
-    },
-    {
-      usage: "syokan templates add --title <t> [--description <d>] <file|->",
-      summary: "Save a template from a file or stdin; prints the new id",
-    },
-    {
-      usage: "syokan templates get <id>",
-      summary: "Print one template (incl. its json) as JSON",
-    },
-    { usage: "syokan templates rm <id>", summary: "Delete a template" },
-    {
-      usage: "syokan --help [--json]",
-      summary: "Show this help; --json emits this manifest verbatim",
-    },
-    { usage: "syokan --version", summary: "Print the version" },
   ],
+  commands: COMMANDS.map((c) => ({
+    usage: c.usage ?? [c.name, ...(c.aliases ?? [])].join(", "),
+    summary: c.summary ?? "",
+    details: c.details ?? [],
+  })),
   env: [
     {
       name: "SYOKAN_BASE_URL",
@@ -445,7 +477,7 @@ export const helpManifest = {
         "error: invalid_json | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand",
     },
   ],
-} as const;
+};
 
 function renderHelpText(): string {
   const h = helpManifest;
@@ -454,9 +486,14 @@ function renderHelpText(): string {
     "",
     `Usage: ${h.usage}`,
     "",
-    "Commands:",
+    "Forms:",
   ];
-  for (const c of h.commands) lines.push(`  ${c.usage}`, `      ${c.summary}`);
+  for (const f of h.forms) lines.push(`  ${f.usage}`, `      ${f.summary}`);
+  lines.push("", "Commands:");
+  for (const c of h.commands) {
+    lines.push(`  ${c.usage}`, `      ${c.summary}`);
+    for (const d of c.details) lines.push(`      ${d}`);
+  }
   lines.push("", "Environment:");
   for (const e of h.env) lines.push(`  ${e.name}`, `      ${e.summary}`);
   lines.push("", `Output: ${h.output}`, "", "Exit codes:");
@@ -472,36 +509,30 @@ export function runHelp(argv: readonly string[], deps: CliDeps): CliResult {
   return { exitCode: 0 };
 }
 
-// post を default action にする: 予約語 (open / stop / catalog / templates) 以外の
-// 第一引数はファイルパスとして post する。引数なしの振り分けは下の inline コメント参照。
+// コマンドは宣言的に登録し、分岐は cli/router.ts に委譲する。短縮形 (`-v` 等) は
+// alias、予約語にも flag にも一致しない第一引数はファイルパスとして post (fallback)。
+const cli = createRouter<CliDeps, CliResult | Promise<CliResult>>({
+  commands: COMMANDS,
+  // 引数なし: stdin に中身が流れていれば post、無ければ home を開く
+  // (isTTY は pipe でも /dev/null でも falsy なので、空入力は home に倒す)。
+  noArgs: async (deps) => {
+    const piped = deps.stdinIsPipe() ? await deps.readStdin() : "";
+    return piped.trim() ? postText(piped, deps) : runOpen(undefined, deps);
+  },
+  // 予約語でも flag でもない第一引数はファイルパスとして post する。
+  fallback: (first, _rest, deps) => runPost(first, deps),
+  // 未知の `-` 始まりはファイル扱いせず明示エラー (ENOENT を避ける)。
+  onUnknownOption: (token, deps) => {
+    deps.stderr(`syokan: unknown option '${token}' (try 'syokan --help')`);
+    return { exitCode: 1 };
+  },
+});
+
 export async function main(
   argv: readonly string[],
   deps: CliDeps,
 ): Promise<CliResult> {
-  const [first, second] = argv;
-  if (first === "--help" || first === "-h" || first === "help") {
-    return runHelp(argv, deps);
-  }
-  if (first === "--version" || first === "-v" || first === "version") {
-    deps.stdout(pkg.version);
-    return { exitCode: 0 };
-  }
-  if (first === "open") return runOpen(second, deps);
-  if (first === "stop") return runStop(deps);
-  if (first === "catalog") return runCatalog(deps);
-  if (first === "templates") return runTemplates(argv.slice(1), deps);
-  if (first === undefined) {
-    // isTTY は pipe でも /dev/null でも falsy なので、空入力は home を開く方に倒す
-    // (素打ち = open。実際に中身が流れたときだけ post)。
-    const piped = deps.stdinIsPipe() ? await deps.readStdin() : "";
-    return piped.trim() ? postText(piped, deps) : runOpen(undefined, deps);
-  }
-  // 未知のフラグをファイルパス扱いして ENOENT を出さない (open/file は `-` 始まりにしない)
-  if (first.startsWith("-")) {
-    deps.stderr(`syokan: unknown option '${first}' (try 'syokan --help')`);
-    return { exitCode: 1 };
-  }
-  return runPost(first, deps);
+  return cli(argv, deps);
 }
 
 // ---- real deps (only when executed directly) ----
