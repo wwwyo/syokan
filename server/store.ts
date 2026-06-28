@@ -1,5 +1,6 @@
-import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { writeJsonAtomic } from "@/lib/fsAtomic";
 import {
   CURRENT_SCHEMA_VERSION,
   type Item,
@@ -145,11 +146,8 @@ export class SnapshotStore {
     }
   }
 
-  private async write(data: StoreFile): Promise<void> {
-    await mkdir(dirname(this.file), { recursive: true });
-    const tmp = `${this.file}.${crypto.randomUUID()}.tmp`;
-    await writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
-    await rename(tmp, this.file);
+  private write(data: StoreFile): Promise<void> {
+    return writeJsonAtomic(this.file, data);
   }
 
   // 直前の書き込み完了を待ってから fn を実行する (in-process mutex)。

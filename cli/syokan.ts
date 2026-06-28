@@ -8,9 +8,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runtimeDir } from "@/lib/paths";
+// compile 時に JSON ごとバイナリへ埋め込まれる (= そのバイナリのバージョン)
+import pkg from "../package.json";
 
 export type SpawnResult = { pid: number };
 export type StopResult = { stopped: boolean; pid?: number };
@@ -44,24 +46,48 @@ type PostResult = { ok: boolean; status: number; data: unknown };
 const READY_RETRIES = 150;
 const READY_INTERVAL_MS = 100;
 
-async function isHealthy(deps: CliDeps): Promise<boolean> {
+// absent=居ない / compatible=この build と同系 / incompatible=旧 build が居る。
+// 旧 build は health に version を返さない。新 CLI がそれを黙って再利用すると
+// catalog/templates が 404 になり、stop も別 pidfile を見て止められないため区別する。
+type ServerProbe = "absent" | "compatible" | "incompatible";
+
+async function probeServer(deps: CliDeps): Promise<ServerProbe> {
+  let res: Response;
   try {
-    const res = await deps.fetch(`${deps.baseUrl}/api/health`);
-    return res.ok;
+    res = await deps.fetch(`${deps.baseUrl}/api/health`);
   } catch {
-    return false;
+    return "absent";
   }
+  if (!res.ok) return "absent";
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  const version = (body as { version?: unknown } | null)?.version;
+  return typeof version === "string" ? "compatible" : "incompatible";
 }
 
-// lazy-spawn: server が既に居れば使い、居なければ起動して ready になるまで待つ
+// lazy-spawn: server が既に居れば使い、居なければ起動して ready になるまで待つ。
+// 旧 build が同じ port に居る場合は黙って再利用せず、停止を促すエラーを返す。
 export async function ensureServerRunning(
   deps: CliDeps,
 ): Promise<{ ok: true; spawned: boolean } | { ok: false; error: string }> {
-  if (await isHealthy(deps)) return { ok: true, spawned: false };
+  const probe = await probeServer(deps);
+  if (probe === "compatible") return { ok: true, spawned: false };
+  if (probe === "incompatible") {
+    return {
+      ok: false,
+      error: `an older syokan server is already running at ${deps.baseUrl}; stop it first (kill the process on its port, or run the previous build's 'syokan stop')`,
+    };
+  }
   deps.spawnServer();
   for (let i = 0; i < READY_RETRIES; i++) {
     await deps.sleep(READY_INTERVAL_MS);
-    if (await isHealthy(deps)) return { ok: true, spawned: true };
+    if ((await probeServer(deps)) === "compatible") {
+      return { ok: true, spawned: true };
+    }
   }
   return {
     ok: false,
@@ -71,12 +97,13 @@ export async function ensureServerRunning(
   };
 }
 
-async function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
-  const res = await deps.fetch(`${deps.baseUrl}/api/snapshots`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+// API を叩いて本文を JSON として読む共通処理。本文が JSON でなければ data=null。
+async function apiCall(
+  deps: CliDeps,
+  path: string,
+  init?: RequestInit,
+): Promise<PostResult> {
+  const res = await deps.fetch(`${deps.baseUrl}${path}`, init);
   let data: unknown = null;
   try {
     data = await res.json();
@@ -84,6 +111,14 @@ async function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
     data = null;
   }
   return { ok: res.ok, status: res.status, data };
+}
+
+function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
+  return apiCall(deps, "/api/snapshots", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 function reportSuccess(deps: CliDeps, data: unknown): CliResult {
@@ -195,20 +230,276 @@ export async function runStop(deps: CliDeps): Promise<CliResult> {
   return { exitCode: 0 };
 }
 
-// post を default action にする: open / stop 以外の第一引数はファイルパスとして post し、
-// 専用の unknown-command 扱いはしない。引数なしの振り分けは下の inline コメント参照。
+// catalog / templates は server を要する API なので post と同じく lazy-spawn する。
+// 起動できなければ server_unavailable を返し、ここで処理を打ち切る。
+async function ensureOrFail(deps: CliDeps): Promise<CliResult | null> {
+  const ensured = await ensureServerRunning(deps);
+  if (!ensured.ok) {
+    deps.stderr(
+      JSON.stringify({ error: "server_unavailable", message: ensured.error }),
+    );
+    return { exitCode: 1 };
+  }
+  if (ensured.spawned) {
+    deps.stderr(`syokan: started server at ${deps.baseUrl}`);
+  }
+  return null;
+}
+
+// 引数欠落を統一フォーマットの error JSON で返す。
+function argError(deps: CliDeps, error: string, message: string): CliResult {
+  deps.stderr(JSON.stringify({ error, message }));
+  return { exitCode: 1 };
+}
+
+// GET 系 API を server ensure 後に叩き、本文 (JSON) を stdout に出す共通処理。
+async function getJson(deps: CliDeps, path: string): Promise<CliResult> {
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(deps, path);
+  if (!result.ok) return reportFailure(deps, result);
+  deps.stdout(JSON.stringify(result.data));
+  return { exitCode: 0 };
+}
+
+// catalog は src/catalogs が SSOT。LLM はこの出力を見て props を組む。
+export async function runCatalog(deps: CliDeps): Promise<CliResult> {
+  return getJson(deps, "/api/catalog");
+}
+
+async function runTemplateAdd(
+  args: readonly string[],
+  deps: CliDeps,
+): Promise<CliResult> {
+  let title: string | undefined;
+  let description: string | undefined;
+  let source: string | undefined;
+  // agent の誤入力 (option 値の欠落・未知 flag・source の重複) を正常入力として
+  // 飲み込まず、明示エラーにする。値が次の flag を巻き込むのを防ぐ。
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === undefined) continue;
+    if (a === "--title" || a === "--description") {
+      const v = args[i + 1];
+      if (v === undefined || v.startsWith("--")) {
+        return argError(deps, "missing_option_value", `${a} needs a value`);
+      }
+      if (a === "--title") title = v;
+      else description = v;
+      i++;
+    } else if (a.startsWith("--")) {
+      return argError(deps, "unknown_option", a);
+    } else if (source !== undefined) {
+      return argError(deps, "too_many_args", `unexpected argument: ${a}`);
+    } else {
+      source = a;
+    }
+  }
+  if (!title) return argError(deps, "missing_title", "--title is required");
+  // 雛形 JSON は file か stdin。`-` / 省略は stdin (post と同じく流し込めるように)。
+  let text: string;
+  if (source === undefined || source === "-") {
+    text = await deps.readStdin();
+  } else {
+    try {
+      text = await deps.readFile(source);
+    } catch (err) {
+      deps.stderr(
+        JSON.stringify({ error: "read_failed", message: String(err) }),
+      );
+      return { exitCode: 1 };
+    }
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (err) {
+    deps.stderr(
+      JSON.stringify({ error: "invalid_json", message: String(err) }),
+    );
+    return { exitCode: 1 };
+  }
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(deps, "/api/templates", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title, json, ...(description ? { description } : {}) }),
+  });
+  if (!result.ok) return reportFailure(deps, result);
+  const id = (result.data as { id?: string } | null)?.id;
+  deps.stdout(id ?? JSON.stringify(result.data));
+  return { exitCode: 0 };
+}
+
+async function runTemplateDelete(
+  id: string | undefined,
+  deps: CliDeps,
+): Promise<CliResult> {
+  if (!id) return argError(deps, "missing_id", "template id is required");
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(
+    deps,
+    `/api/templates/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+  if (!result.ok) return reportFailure(deps, result);
+  deps.stdout(JSON.stringify(result.data));
+  return { exitCode: 0 };
+}
+
+// templates: 一覧 (省略 / list)、add、get <id>、rm <id>。すべて API 経由。
+export async function runTemplates(
+  args: readonly string[],
+  deps: CliDeps,
+): Promise<CliResult> {
+  const [sub, ...rest] = args;
+  if (sub === undefined || sub === "list") return getJson(deps, "/api/templates");
+  if (sub === "add") return runTemplateAdd(rest, deps);
+  if (sub === "get") {
+    if (!rest[0]) return argError(deps, "missing_id", "template id is required");
+    return getJson(deps, `/api/templates/${encodeURIComponent(rest[0])}`);
+  }
+  if (sub === "rm") return runTemplateDelete(rest[0], deps);
+  deps.stderr(
+    JSON.stringify({
+      error: "unknown_subcommand",
+      message: `templates ${sub}`,
+    }),
+  );
+  return { exitCode: 1 };
+}
+
+// --help の単一ソース。text と --json はどちらもここから導出するので drift しない。
+// agent はこれを読めばコマンド・env・exit code・出力形式を把握でき、静的 doc に依存しない。
+export const helpManifest = {
+  name: "syokan",
+  version: pkg.version,
+  summary:
+    "Personal schema-driven view layer. Post a JSON snapshot envelope and it renders with predefined catalog components.",
+  usage: "syokan [command] [args]   |   <json> | syokan",
+  commands: [
+    {
+      usage: "syokan <file.json>",
+      summary: "Post a snapshot envelope from a file; prints the view URL",
+    },
+    { usage: "<json> | syokan", summary: "Post a snapshot envelope from stdin" },
+    {
+      usage: "syokan",
+      summary: "Open the home page (or post stdin when JSON is piped)",
+    },
+    {
+      usage: "syokan open [id]",
+      summary: "Open a snapshot in the browser; no id opens home",
+    },
+    { usage: "syokan stop", summary: "Stop the lazy-spawned server" },
+    {
+      usage: "syokan catalog",
+      summary:
+        "Print the catalog manifest (types + JSON Schema props + childrenTypes) as JSON",
+    },
+    {
+      usage: "syokan templates",
+      summary: "List saved templates (id/title/description) as JSON",
+    },
+    {
+      usage: "syokan templates add --title <t> [--description <d>] <file|->",
+      summary: "Save a template from a file or stdin; prints the new id",
+    },
+    {
+      usage: "syokan templates get <id>",
+      summary: "Print one template (incl. its json) as JSON",
+    },
+    { usage: "syokan templates rm <id>", summary: "Delete a template" },
+    {
+      usage: "syokan --help [--json]",
+      summary: "Show this help; --json emits this manifest verbatim",
+    },
+    { usage: "syokan --version", summary: "Print the version" },
+  ],
+  env: [
+    {
+      name: "SYOKAN_BASE_URL",
+      summary: "Server base URL (default http://localhost:5173)",
+    },
+    {
+      name: "XDG_CONFIG_HOME",
+      summary:
+        "Config root (default ~/.config); data and templates live under <root>/syokan",
+    },
+    { name: "SYOKAN_DATA_DIR", summary: "Override the snapshot data dir" },
+    { name: "SYOKAN_TEMPLATES_DIR", summary: "Override the templates dir" },
+    {
+      name: "SYOKAN_RUNTIME_DIR",
+      summary: "Override the server pidfile/log dir",
+    },
+  ],
+  output:
+    "catalog/templates print JSON to stdout; post prints the view URL; every error prints a JSON object to stderr.",
+  exitCodes: [
+    { code: 0, summary: "success" },
+    {
+      code: 1,
+      summary:
+        "error: invalid_json | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand",
+    },
+  ],
+} as const;
+
+function renderHelpText(): string {
+  const h = helpManifest;
+  const lines = [
+    `${h.name} ${h.version} — ${h.summary}`,
+    "",
+    `Usage: ${h.usage}`,
+    "",
+    "Commands:",
+  ];
+  for (const c of h.commands) lines.push(`  ${c.usage}`, `      ${c.summary}`);
+  lines.push("", "Environment:");
+  for (const e of h.env) lines.push(`  ${e.name}`, `      ${e.summary}`);
+  lines.push("", `Output: ${h.output}`, "", "Exit codes:");
+  for (const x of h.exitCodes) lines.push(`  ${x.code}  ${x.summary}`);
+  lines.push("", "Machine-readable help: syokan --help --json");
+  return lines.join("\n");
+}
+
+// help は純粋にローカル出力。server を起こさず即返す。--json で manifest をそのまま出す。
+export function runHelp(argv: readonly string[], deps: CliDeps): CliResult {
+  const asJson = argv.includes("--json");
+  deps.stdout(asJson ? JSON.stringify(helpManifest) : renderHelpText());
+  return { exitCode: 0 };
+}
+
+// post を default action にする: 予約語 (open / stop / catalog / templates) 以外の
+// 第一引数はファイルパスとして post する。引数なしの振り分けは下の inline コメント参照。
 export async function main(
   argv: readonly string[],
   deps: CliDeps,
 ): Promise<CliResult> {
   const [first, second] = argv;
+  if (first === "--help" || first === "-h" || first === "help") {
+    return runHelp(argv, deps);
+  }
+  if (first === "--version" || first === "-v" || first === "version") {
+    deps.stdout(pkg.version);
+    return { exitCode: 0 };
+  }
   if (first === "open") return runOpen(second, deps);
   if (first === "stop") return runStop(deps);
+  if (first === "catalog") return runCatalog(deps);
+  if (first === "templates") return runTemplates(argv.slice(1), deps);
   if (first === undefined) {
     // isTTY は pipe でも /dev/null でも falsy なので、空入力は home を開く方に倒す
     // (素打ち = open。実際に中身が流れたときだけ post)。
     const piped = deps.stdinIsPipe() ? await deps.readStdin() : "";
     return piped.trim() ? postText(piped, deps) : runOpen(undefined, deps);
+  }
+  // 未知のフラグをファイルパス扱いして ENOENT を出さない (open/file は `-` 始まりにしない)
+  if (first.startsWith("-")) {
+    deps.stderr(`syokan: unknown option '${first}' (try 'syokan --help')`);
+    return { exitCode: 1 };
   }
   return runPost(first, deps);
 }
@@ -222,10 +513,6 @@ function portFromBaseUrl(baseUrl: string): number {
   } catch {
     return 5173;
   }
-}
-
-function runtimeDir(): string {
-  return process.env.SYOKAN_RUNTIME_DIR ?? join(homedir(), ".syokan");
 }
 
 function pidFilePath(port: number): string {
