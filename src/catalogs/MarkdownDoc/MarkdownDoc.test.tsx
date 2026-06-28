@@ -53,6 +53,16 @@ describe("MarkdownDoc", () => {
     expect(html).not.toContain('data-slot="code-filename"');
   });
 
+  test("renders ```mermaid fences via Mermaid (raw chart in SSR fallback, not Code)", () => {
+    const body = "```mermaid\ngraph TD\n  A --> B\n```";
+    const html = renderToString(createElement(MarkdownDoc, { body }));
+    // mermaid は client 描画。SSR/mount 前は生のコードを <pre data-slot="mermaid"> で出す
+    expect(html).toContain('data-slot="mermaid"');
+    expect(html).toContain("graph TD");
+    // Code (pierre File) には委譲しない
+    expect(html).not.toContain("<diffs-container");
+  });
+
   test("renders inline links as anchors with href", () => {
     const body = "see [example](https://example.com) here";
     const html = renderToString(createElement(MarkdownDoc, { body }));

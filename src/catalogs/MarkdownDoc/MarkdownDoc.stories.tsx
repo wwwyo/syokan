@@ -62,6 +62,30 @@ export const TableOnly: Story = {
   },
 };
 
+export const Mermaid: Story = {
+  args: {
+    body: `# Mermaid
+
+文中の \`\`\`mermaid フェンスは図として描画する。
+
+\`\`\`mermaid
+graph TD
+  A[Claude Code] -->|JSON tree| B(POST /api/snapshots)
+  B --> C{catalog}
+  C --> D[React render]
+\`\`\`
+
+シーケンス図も同じ。
+
+\`\`\`mermaid
+sequenceDiagram
+  CLI->>Server: POST snapshot
+  Server-->>CLI: 201 id
+\`\`\`
+`,
+  },
+};
+
 export const Empty: Story = {
   args: { body: "" },
 };
