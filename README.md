@@ -1,8 +1,6 @@
 # syokan
 
-個人用の schema 駆動 **view layer**。JSX を書く代わりに、LLM（Claude Code / scheduled agent / CLI）が **JSON tree** を投げ、syokan が事前定義した React component で描画する。snapshot は **ephemeral** — 残したいものは [meml](https://github.com/wwwyo/meml) へ昇格する。
-
-> 照鑑 / 抄観 — 自分の周りで何が起きているかを、抄して観るための場所。
+個人用の schema 駆動 **view layer**。JSX を書く代わりに、LLM（Claude Code / scheduled agent / CLI）が **JSON tree** を投げ、syokan が事前定義した React component で描画する。snapshot は **ephemeral** — 残し続ける前提のデータは置かない。
 
 設計の意図・ディレクトリ構成・開発規約は [AGENTS.md](./AGENTS.md)。この README は **使い方**。
 
@@ -21,7 +19,7 @@ client-side routing（TanStack Router）の CSR app。`/` が home、`/snapshots
 普段使いの `syokan` は **単体バイナリ**（Bun/Node 不要、server も自動 lazy-spawn）。
 
 ```bash
-mise use -g ubi:wwwyo/syokan@latest   # ubi backend で install
+mise use -g github:wwwyo/syokan@latest   # github backend で install
 syokan --help                         # コマンド確認（機械可読は --help --json）
 ```
 
@@ -81,9 +79,8 @@ bun run compile       # → dist/syokan（CLI+server+frontend を 1 バイナリ
 bun run compile:all   # → dist/syokan-<os>-<arch>（cross-compile、Release 配布用）
 ```
 
-dual-mode（[entry.ts](./entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173` / `~/.config/syokan/`（`XDG_CONFIG_HOME` で上書き可）。配布は Release に asset を上げて `mise use -g ubi:wwwyo/syokan@<ver>`。
+dual-mode（[entry.ts](./entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173` / `~/.config/syokan/`（`XDG_CONFIG_HOME` で上書き可）。配布は Release に asset を上げて `mise use -g github:wwwyo/syokan@latest`。
 
 ## その他
 
 - 設計の意図・ディレクトリ構成・開発規約: [AGENTS.md](./AGENTS.md)
-- long-term memory layer（昇格先）: [meml](https://github.com/wwwyo/meml)

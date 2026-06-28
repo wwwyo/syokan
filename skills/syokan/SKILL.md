@@ -10,7 +10,7 @@ syokan は schema 駆動の view layer。
 JSX を書かず、catalog component に対応する JSON tree を投げると、syokan が事前定義の component で描画する。
 あなたの仕事は、見せたいデータを envelope に組み立てて syokan に POST すること。
 
-まだ syokan が install されていない（`syokan --help` が通らない）、または「onboarding」「セットアップして」「初めて使う」と言われたら、install から最初の snapshot までを [references/onboarding.md](references/onboarding.md) の手順で伴走する。
+まだ syokan が install されていない（`syokan --help` が通らない）、または「onboarding」「セットアップして」「初めて使う」と言われたら、[references/onboarding.md](references/onboarding.md) の手順で最初の snapshot まで伴走する。ただし install などの環境を変える操作は黙って実行せず、未 install を伝えたうえで実行前にユーザーの承認を取る（勝手に install しない）。
 
 ## 守るべき前提
 

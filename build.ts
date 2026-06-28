@@ -2,7 +2,7 @@
 // frontend を埋め込んだ単体実行ファイルを compile する。
 //   引数なし  : host 向け 1 つ (dist/syokan) — ローカル利用・動作確認用
 //   --release : 配布用に各 OS/arch を cross-compile (dist/syokan-<os>-<arch>)
-//               名前は mise の ubi backend が GitHub Release から OS/arch を判別できる形にする
+//               名前は mise の github backend が GitHub Release から OS/arch を判別できる形にする
 // CLI の `bun build --compile` は plugin を渡せないため、Bun.build({compile}) で
 // tailwind plugin を明示配線する。
 import { fileURLToPath } from "node:url";
