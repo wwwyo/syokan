@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TemplateStore } from "./templates";
@@ -41,6 +41,14 @@ describe("TemplateStore", () => {
   test("list returns [] when the dir does not exist yet", async () => {
     const empty = new TemplateStore(join(dir, "nope"));
     expect(await empty.list()).toEqual([]);
+  });
+
+  test("list skips valid-JSON files with a malformed shape (no throw)", async () => {
+    const good = await store.add({ title: "Good", json: {} });
+    // 手置きされた foreign file。valid JSON だが Template の shape ではない。
+    await writeFile(join(dir, "notes.json"), JSON.stringify({ foo: 1 }), "utf8");
+    const items = await store.list();
+    expect(items.map((i) => i.id)).toEqual([good.id]);
   });
 
   test("get returns undefined for unknown or malformed id", async () => {

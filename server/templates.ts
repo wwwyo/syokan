@@ -1,12 +1,6 @@
-import {
-  mkdir,
-  readFile,
-  readdir,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { writeJsonAtomic } from "@/lib/fsAtomic";
 
 // テンプレは「LLM が組んだ envelope を保存し、後で土台に使う」ための保管庫。
 // syokan は中身 (json) を解釈しない。snapshot (ephemeral) と違い残す前提。
@@ -44,7 +38,6 @@ export class TemplateStore {
   }
 
   async add(input: TemplateInput): Promise<Template> {
-    await mkdir(this.dir, { recursive: true });
     const template: Template = {
       id: crypto.randomUUID(),
       title: input.title,
@@ -54,10 +47,7 @@ export class TemplateStore {
         : {}),
       json: input.json,
     };
-    const path = this.file(template.id);
-    const tmp = `${path}.${crypto.randomUUID()}.tmp`;
-    await writeFile(tmp, JSON.stringify(template, null, 2), "utf8");
-    await rename(tmp, path);
+    await writeJsonAtomic(this.file(template.id), template);
     return template;
   }
 
@@ -85,7 +75,17 @@ export class TemplateStore {
       if (!name.endsWith(".json")) continue;
       try {
         const text = await readFile(join(this.dir, name), "utf8");
-        const { json: _json, ...summary } = JSON.parse(text) as Template;
+        const parsed = JSON.parse(text) as Partial<Template>;
+        // 手置きの foreign file 等、shape が崩れたものは sort で落ちる前に除外する
+        // (壊れた JSON と同じ扱い)。id/title/createdAt が string でなければ skip。
+        if (
+          typeof parsed.id !== "string" ||
+          typeof parsed.title !== "string" ||
+          typeof parsed.createdAt !== "string"
+        ) {
+          continue;
+        }
+        const { json: _json, ...summary } = parsed as Template;
         summaries.push(summary);
       } catch {
         // 壊れた / 書き込み途中の tmp は一覧から黙って除外する

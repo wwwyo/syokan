@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import pkg from "../package.json";
 import {
   type CliDeps,
   ensureServerRunning,
@@ -497,6 +498,30 @@ describe("cli main: templates", () => {
     expect(err.error).toBe("missing_title");
   });
 
+  test("add rejects an option whose value is swallowed by the next flag", async () => {
+    const h = makeDeps({ respond: () => okResponse() });
+    const result = await main(
+      ["templates", "add", "--title", "--description", "foo", "t.json"],
+      h.deps,
+    );
+    expect(result.exitCode).toBe(1);
+    expect(h.calls.length).toBe(0);
+    const err = JSON.parse(h.err[0] as string) as { error: string };
+    expect(err.error).toBe("missing_option_value");
+  });
+
+  test("add rejects an unknown option and duplicate sources", async () => {
+    for (const args of [
+      ["templates", "add", "--title", "x", "--bogus", "t.json"],
+      ["templates", "add", "--title", "x", "a.json", "b.json"],
+    ]) {
+      const h = makeDeps({ respond: () => okResponse() });
+      const result = await main(args, h.deps);
+      expect(result.exitCode).toBe(1);
+      expect(h.calls.length).toBe(0);
+    }
+  });
+
   test("get <id> GETs the template", async () => {
     const h = makeDeps({
       respond: () => Response.json({ id: "x", title: "X", json: {} }),
@@ -538,5 +563,26 @@ describe("cli main: stop", () => {
     const result = await main(["stop"], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.err[0]).toContain("no syokan-managed server");
+  });
+});
+
+describe("cli main: version / unknown option", () => {
+  test.each(["--version", "-v", "version"])(
+    "%s prints the package version without spawning a server",
+    async (flag) => {
+      const h = makeDeps({ respond: () => okResponse() });
+      const result = await main([flag], h.deps);
+      expect(result.exitCode).toBe(0);
+      expect(h.out).toEqual([pkg.version]);
+      expect(h.spawnCount()).toBe(0);
+    },
+  );
+
+  test("an unknown flag errors cleanly instead of reading it as a file", async () => {
+    const h = makeDeps({ respond: () => okResponse() });
+    const result = await main(["--bogus"], h.deps);
+    expect(result.exitCode).toBe(1);
+    expect(h.err[0]).toContain("unknown option '--bogus'");
+    expect(h.err[0]).not.toContain("ENOENT");
   });
 });

@@ -11,6 +11,8 @@ import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runtimeDir } from "@/lib/paths";
+// compile 時に JSON ごとバイナリへ埋め込まれる (= そのバイナリのバージョン)
+import pkg from "../package.json";
 
 export type SpawnResult = { pid: number };
 export type StopResult = { stopped: boolean; pid?: number };
@@ -71,12 +73,13 @@ export async function ensureServerRunning(
   };
 }
 
-async function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
-  const res = await deps.fetch(`${deps.baseUrl}/api/snapshots`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+// API を叩いて本文を JSON として読む共通処理。本文が JSON でなければ data=null。
+async function apiCall(
+  deps: CliDeps,
+  path: string,
+  init?: RequestInit,
+): Promise<PostResult> {
+  const res = await deps.fetch(`${deps.baseUrl}${path}`, init);
   let data: unknown = null;
   try {
     data = await res.json();
@@ -84,6 +87,14 @@ async function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
     data = null;
   }
   return { ok: res.ok, status: res.status, data };
+}
+
+function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
+  return apiCall(deps, "/api/snapshots", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 function reportSuccess(deps: CliDeps, data: unknown): CliResult {
@@ -211,24 +222,19 @@ async function ensureOrFail(deps: CliDeps): Promise<CliResult | null> {
   return null;
 }
 
+// 引数欠落を統一フォーマットの error JSON で返す。
+function argError(deps: CliDeps, error: string, message: string): CliResult {
+  deps.stderr(JSON.stringify({ error, message }));
+  return { exitCode: 1 };
+}
+
 // GET 系 API を server ensure 後に叩き、本文 (JSON) を stdout に出す共通処理。
 async function getJson(deps: CliDeps, path: string): Promise<CliResult> {
   const fail = await ensureOrFail(deps);
   if (fail) return fail;
-  const res = await deps.fetch(`${deps.baseUrl}${path}`);
-  let data: unknown = null;
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
-  }
-  if (!res.ok) {
-    deps.stderr(
-      JSON.stringify(data ?? { error: "request_failed", status: res.status }),
-    );
-    return { exitCode: 1 };
-  }
-  deps.stdout(JSON.stringify(data));
+  const result = await apiCall(deps, path);
+  if (!result.ok) return reportFailure(deps, result);
+  deps.stdout(JSON.stringify(result.data));
   return { exitCode: 0 };
 }
 
@@ -244,22 +250,28 @@ async function runTemplateAdd(
   let title: string | undefined;
   let description: string | undefined;
   let source: string | undefined;
+  // agent の誤入力 (option 値の欠落・未知 flag・source の重複) を正常入力として
+  // 飲み込まず、明示エラーにする。値が次の flag を巻き込むのを防ぐ。
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === "--title") {
-      title = args[++i];
-    } else if (a === "--description") {
-      description = args[++i];
+    if (a === undefined) continue;
+    if (a === "--title" || a === "--description") {
+      const v = args[i + 1];
+      if (v === undefined || v.startsWith("--")) {
+        return argError(deps, "missing_option_value", `${a} needs a value`);
+      }
+      if (a === "--title") title = v;
+      else description = v;
+      i++;
+    } else if (a.startsWith("--")) {
+      return argError(deps, "unknown_option", a);
+    } else if (source !== undefined) {
+      return argError(deps, "too_many_args", `unexpected argument: ${a}`);
     } else {
       source = a;
     }
   }
-  if (!title) {
-    deps.stderr(
-      JSON.stringify({ error: "missing_title", message: "--title is required" }),
-    );
-    return { exitCode: 1 };
-  }
+  if (!title) return argError(deps, "missing_title", "--title is required");
   // 雛形 JSON は file か stdin。`-` / 省略は stdin (post と同じく流し込めるように)。
   let text: string;
   if (source === undefined || source === "-") {
@@ -285,25 +297,14 @@ async function runTemplateAdd(
   }
   const fail = await ensureOrFail(deps);
   if (fail) return fail;
-  const res = await deps.fetch(`${deps.baseUrl}/api/templates`, {
+  const result = await apiCall(deps, "/api/templates", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ title, json, ...(description ? { description } : {}) }),
   });
-  let data: unknown = null;
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
-  }
-  if (!res.ok) {
-    deps.stderr(
-      JSON.stringify(data ?? { error: "request_failed", status: res.status }),
-    );
-    return { exitCode: 1 };
-  }
-  const id = (data as { id?: string } | null)?.id;
-  deps.stdout(id ?? JSON.stringify(data));
+  if (!result.ok) return reportFailure(deps, result);
+  const id = (result.data as { id?: string } | null)?.id;
+  deps.stdout(id ?? JSON.stringify(result.data));
   return { exitCode: 0 };
 }
 
@@ -311,31 +312,16 @@ async function runTemplateDelete(
   id: string | undefined,
   deps: CliDeps,
 ): Promise<CliResult> {
-  if (!id) {
-    deps.stderr(
-      JSON.stringify({ error: "missing_id", message: "template id is required" }),
-    );
-    return { exitCode: 1 };
-  }
+  if (!id) return argError(deps, "missing_id", "template id is required");
   const fail = await ensureOrFail(deps);
   if (fail) return fail;
-  const res = await deps.fetch(
-    `${deps.baseUrl}/api/templates/${encodeURIComponent(id)}`,
+  const result = await apiCall(
+    deps,
+    `/api/templates/${encodeURIComponent(id)}`,
     { method: "DELETE" },
   );
-  let data: unknown = null;
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
-  }
-  if (!res.ok) {
-    deps.stderr(
-      JSON.stringify(data ?? { error: "request_failed", status: res.status }),
-    );
-    return { exitCode: 1 };
-  }
-  deps.stdout(JSON.stringify(data));
+  if (!result.ok) return reportFailure(deps, result);
+  deps.stdout(JSON.stringify(result.data));
   return { exitCode: 0 };
 }
 
@@ -348,15 +334,7 @@ export async function runTemplates(
   if (sub === undefined || sub === "list") return getJson(deps, "/api/templates");
   if (sub === "add") return runTemplateAdd(rest, deps);
   if (sub === "get") {
-    if (!rest[0]) {
-      deps.stderr(
-        JSON.stringify({
-          error: "missing_id",
-          message: "template id is required",
-        }),
-      );
-      return { exitCode: 1 };
-    }
+    if (!rest[0]) return argError(deps, "missing_id", "template id is required");
     return getJson(deps, `/api/templates/${encodeURIComponent(rest[0])}`);
   }
   if (sub === "rm") return runTemplateDelete(rest[0], deps);
@@ -373,6 +351,7 @@ export async function runTemplates(
 // agent はこれを読めばコマンド・env・exit code・出力形式を把握でき、静的 doc に依存しない。
 export const helpManifest = {
   name: "syokan",
+  version: pkg.version,
   summary:
     "Personal schema-driven view layer. Post a JSON snapshot envelope and it renders with predefined catalog components.",
   usage: "syokan [command] [args]   |   <json> | syokan",
@@ -413,6 +392,7 @@ export const helpManifest = {
       usage: "syokan --help [--json]",
       summary: "Show this help; --json emits this manifest verbatim",
     },
+    { usage: "syokan --version", summary: "Print the version" },
   ],
   env: [
     {
@@ -441,7 +421,13 @@ export const helpManifest = {
 
 function renderHelpText(): string {
   const h = helpManifest;
-  const lines = [`${h.name} — ${h.summary}`, "", `Usage: ${h.usage}`, "", "Commands:"];
+  const lines = [
+    `${h.name} ${h.version} — ${h.summary}`,
+    "",
+    `Usage: ${h.usage}`,
+    "",
+    "Commands:",
+  ];
   for (const c of h.commands) lines.push(`  ${c.usage}`, `      ${c.summary}`);
   lines.push("", "Environment:");
   for (const e of h.env) lines.push(`  ${e.name}`, `      ${e.summary}`);
@@ -468,6 +454,10 @@ export async function main(
   if (first === "--help" || first === "-h" || first === "help") {
     return runHelp(argv, deps);
   }
+  if (first === "--version" || first === "-v" || first === "version") {
+    deps.stdout(pkg.version);
+    return { exitCode: 0 };
+  }
   if (first === "open") return runOpen(second, deps);
   if (first === "stop") return runStop(deps);
   if (first === "catalog") return runCatalog(deps);
@@ -477,6 +467,11 @@ export async function main(
     // (素打ち = open。実際に中身が流れたときだけ post)。
     const piped = deps.stdinIsPipe() ? await deps.readStdin() : "";
     return piped.trim() ? postText(piped, deps) : runOpen(undefined, deps);
+  }
+  // 未知のフラグをファイルパス扱いして ENOENT を出さない (open/file は `-` 始まりにしない)
+  if (first.startsWith("-")) {
+    deps.stderr(`syokan: unknown option '${first}' (try 'syokan --help')`);
+    return { exitCode: 1 };
   }
   return runPost(first, deps);
 }
