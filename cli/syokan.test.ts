@@ -28,6 +28,8 @@ function makeDeps(opts: {
   respond: (captured: Captured) => Response;
   // /api/health の応答を制御する。未指定なら常に healthy (= server 起動済み扱い)
   health?: () => boolean;
+  // true で health から version を落とし、旧 build の server を模す (= incompatible)
+  legacyServer?: boolean;
   stopped?: boolean;
   // stdin の中身。指定すると pipe 扱い (stdinIsPipe=true) になる
   stdin?: string;
@@ -70,7 +72,11 @@ function makeDeps(opts: {
     fetch: (async (input: string | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/health")) {
-        return new Response(null, { status: healthFn() ? 200 : 503 });
+        if (!healthFn()) return new Response(null, { status: 503 });
+        // 旧 build は version を返さない。新 build は version 付きで compatible 扱い。
+        return opts.legacyServer
+          ? Response.json({ ok: true })
+          : Response.json({ ok: true, version: "test" });
       }
       const captured: Captured = {
         url,
@@ -336,6 +342,14 @@ describe("ensureServerRunning (lazy-spawn)", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("did not become ready");
     expect(h.spawnCount()).toBe(1);
+  });
+
+  test("refuses an incompatible (pre-version) server without spawning", async () => {
+    const h = makeDeps({ respond: () => okResponse(), legacyServer: true });
+    const result = await ensureServerRunning(h.deps);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("older syokan server");
+    expect(h.spawnCount()).toBe(0);
   });
 });
 

@@ -46,24 +46,48 @@ type PostResult = { ok: boolean; status: number; data: unknown };
 const READY_RETRIES = 150;
 const READY_INTERVAL_MS = 100;
 
-async function isHealthy(deps: CliDeps): Promise<boolean> {
+// absent=居ない / compatible=この build と同系 / incompatible=旧 build が居る。
+// 旧 build は health に version を返さない。新 CLI がそれを黙って再利用すると
+// catalog/templates が 404 になり、stop も別 pidfile を見て止められないため区別する。
+type ServerProbe = "absent" | "compatible" | "incompatible";
+
+async function probeServer(deps: CliDeps): Promise<ServerProbe> {
+  let res: Response;
   try {
-    const res = await deps.fetch(`${deps.baseUrl}/api/health`);
-    return res.ok;
+    res = await deps.fetch(`${deps.baseUrl}/api/health`);
   } catch {
-    return false;
+    return "absent";
   }
+  if (!res.ok) return "absent";
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  const version = (body as { version?: unknown } | null)?.version;
+  return typeof version === "string" ? "compatible" : "incompatible";
 }
 
-// lazy-spawn: server が既に居れば使い、居なければ起動して ready になるまで待つ
+// lazy-spawn: server が既に居れば使い、居なければ起動して ready になるまで待つ。
+// 旧 build が同じ port に居る場合は黙って再利用せず、停止を促すエラーを返す。
 export async function ensureServerRunning(
   deps: CliDeps,
 ): Promise<{ ok: true; spawned: boolean } | { ok: false; error: string }> {
-  if (await isHealthy(deps)) return { ok: true, spawned: false };
+  const probe = await probeServer(deps);
+  if (probe === "compatible") return { ok: true, spawned: false };
+  if (probe === "incompatible") {
+    return {
+      ok: false,
+      error: `an older syokan server is already running at ${deps.baseUrl}; stop it first (kill the process on its port, or run the previous build's 'syokan stop')`,
+    };
+  }
   deps.spawnServer();
   for (let i = 0; i < READY_RETRIES; i++) {
     await deps.sleep(READY_INTERVAL_MS);
-    if (await isHealthy(deps)) return { ok: true, spawned: true };
+    if ((await probeServer(deps)) === "compatible") {
+      return { ok: true, spawned: true };
+    }
   }
   return {
     ok: false,
