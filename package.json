@@ -1,14 +1,13 @@
 {
   "name": "syokan",
-  "version": "0.1.0",
+  "version": "0.0.1",
+  "description": "Personal, schema-driven view layer. Post a JSON tree, render it with pre-defined React components.",
   "type": "module",
   "private": true,
-  "bin": {
-    "syokan": "cli/syokan.ts"
-  },
   "scripts": {
-    "dev": "portless run --app-port 5173 bun --hot server/index.ts",
-    "start": "NODE_ENV=production bun server/index.ts",
+    "dev": "SYOKAN_DATA_DIR=.syokan-dev/data portless run --app-port 5273 bun --hot server/index.ts",
+    "compile": "bun build.ts",
+    "compile:all": "bun build.ts --release",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "storybook": "storybook dev -p 6006",

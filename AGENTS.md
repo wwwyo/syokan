@@ -99,7 +99,9 @@ LLM に「JSXを書かせる」のではなく、**schema を満たす JSON tree
 
 ```
 syokan/
-├── cli/syokan.ts        # CLI (post / open / stop)。server を lazy-spawn
+├── entry.ts             # 単体バイナリの dual-mode entry (SYOKAN_SERVE で cli/server 分岐)
+├── cli/syokan.ts        # CLI (post / open / stop)。server を lazy-spawn (compiled は自分自身)
+├── build.ts             # compile script (host=dist/syokan、--release で各 OS/arch を cross-compile)
 ├── src/
 │   ├── frontend.tsx     # RouterProvider mount
 │   ├── router.tsx       # TanStack Router の route tree (root=AppShell)
@@ -137,11 +139,22 @@ Storybook は catalog component の視覚レビュー基盤。`<Name>/<Name>.sto
 - **Runtime / Bundler / HMR / TS 実行**: Bun (1 つに集約。Vite / Hono / React Router は使わない)
 - **Frontend**: React + TypeScript (Bun の HTML import + JSX/TSX ネイティブで bundle)
 - **UI**: shadcn/ui (`base-nova` style) + `@base-ui/react` + Tailwind CSS v4
-- **Backend**: `Bun.serve({ routes })` — `/` は HTML import、`/api/*` は同一プロセス内で同居
+- **Backend**: `Bun.serve({ routes })` — frontend は `index.html` の import で供給 (dev は on-the-fly bundle + HMR、compile 時はバイナリへ埋め込み)。`/api/*` は同一プロセス内で同居
 - **Validation**: Zod
 - **Routing (server)**: `Bun.serve` の routes patterns (`/api/snapshots` ハンドラ + `/*` SPA fallback)
 - **Routing (client)**: TanStack Router (code-based route、Vite プラグイン不使用)。loader / scrollRestoration / pending・notFound・error / 常駐レイアウトの要求を満たす選定
 - **Component catalog**: Storybook (`@storybook/react-vite` + `@tailwindcss/vite`)。catalog を story 化して視覚レビュー。builder は Vite だが **Storybook 専用の devDep** で、アプリ本体の「Vite を使わない」方針はアプリ bundle に限った話（Bun ネイティブの Storybook builder が無いため代替なし）
+
+## 配布 (compile / dev・global 分離)
+
+global ツールは **単体実行ファイル** (`bun run compile` → `dist/syokan`)。bun/node/npm 無しで動く。「開発中は最新を見たい / 普段使いは確定版」という分離を、CLI でも server でもなく **実行形態** (バイナリ vs `bun run dev`) で成立させている。
+
+- **dual-mode entry**: compile 後は cli + server + frontend が 1 バイナリに同居する。[entry.ts](./entry.ts) が `SYOKAN_SERVE` で CLI / server を分岐。lazy-spawn は「単体バイナリなら自分自身 (`process.execPath`) を `SYOKAN_SERVE=1` で再 exec、dev なら `bun server/index.ts`」する。dev/compiled の判定は `isCompiledBinary()`(execPath の basename が `bun` か) で行う。CLI 引数は両モードとも `argv.slice(2)` (compiled も argv[1] に embedded entry が入る)。
+- **frontend は static `import index from "../index.html"`**。dev は on-the-fly bundle + HMR、compile 時は Bun が frontend を bundle してバイナリへ埋め込む (同一の静的 import で両立)。
+- **tailwind / bun-plugin-tailwind は devDep**。`bun build --compile` (CLI) は plugin を受け取れないため、`build.ts` が `Bun.build({ compile, plugins:[tailwind] })` で明示配線して compile 時に CSS を展開する。
+- **dev / global 分離**: global = `5173` / `~/.syokan`、dev = `5273` / repo ローカルの `.syokan-dev/` (gitignore 済み)。port が別なので両者の lazy-spawn server は衝突しない。
+- macOS の未署名バイナリは Gatekeeper が止めることがある。ローカルビルドはそのまま動くが、配布/コピー後に弾かれたら `codesign --sign - dist/syokan`。
+- **配布**: `bun run compile:all`(=`build.ts --release`) が各 OS/arch を cross-compile し `dist/syokan-<os>-<arch>` を吐く (名前は mise の `ubi` backend が OS/arch を判別できる形)。GitHub Release に上げ、`mise use -g ubi:wwwyo/syokan@<ver>` で install/pin する。cross-compile は対象の bun runtime を都度 download する。
 
 ## 既知の落とし穴
 
