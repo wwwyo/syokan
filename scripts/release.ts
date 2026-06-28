@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // bun run release — 対話的に bump 種別を選び、version bump + tag + push する。
-// 押した tag を .github/workflows/release.yml が拾って binary を draft release する。
+// 押した tag を .github/workflows/release.yml が拾って binary を release(publish) する。
 import { $ } from "bun";
 
 type Bump = "patch" | "minor" | "major";
@@ -44,4 +44,4 @@ if (prompt(`\nv${pkg.version} → v${nextVersion} で bump して push? [y/N]:`)
 // dirty な working tree だと bun pm version 自身が止める (release 前のガードとして妥当)。
 await $`bun pm version ${choice.key}`;
 await $`git push --follow-tags`;
-console.log(`\n✓ v${nextVersion} を push。CI が draft release を作成します。`);
+console.log(`\n✓ v${nextVersion} を push。CI が release を publish します。`);
