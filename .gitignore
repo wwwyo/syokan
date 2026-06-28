@@ -34,3 +34,8 @@ data/
 
 # TypeScript
 *.tsbuildinfo
+
+# Installed (third-party) agent skills — vendored/symlinked, 他者のコンテンツを publish しない
+.agents/skills/
+.claude/skills/
+.codex/skills/
