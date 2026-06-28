@@ -154,7 +154,7 @@ global ツールは **単体実行ファイル** (`bun run compile` → `dist/sy
 - **tailwind / bun-plugin-tailwind は devDep**。`bun build --compile` (CLI) は plugin を受け取れないため、`build.ts` が `Bun.build({ compile, plugins:[tailwind] })` で明示配線して compile 時に CSS を展開する。
 - **dev / global 分離**: global = `5173` / `~/.syokan`、dev = `5273` / repo ローカルの `.syokan-dev/` (gitignore 済み)。port が別なので両者の lazy-spawn server は衝突しない。
 - macOS の未署名バイナリは Gatekeeper が止めることがある。ローカルビルドはそのまま動くが、配布/コピー後に弾かれたら `codesign --sign - dist/syokan`。
-- **配布**: `bun run dist`(=`build.ts --release`) が各 OS/arch を cross-compile し `dist/syokan-<os>-<arch>` を吐く (名前は mise の `ubi` backend が OS/arch を判別できる形)。GitHub Release に上げ、`mise use -g ubi:wwwyo/syokan@<ver>` で install/pin する。cross-compile は対象の bun runtime を都度 download する。
+- **配布**: `bun run compile:all`(=`build.ts --release`) が各 OS/arch を cross-compile し `dist/syokan-<os>-<arch>` を吐く (名前は mise の `ubi` backend が OS/arch を判別できる形)。GitHub Release に上げ、`mise use -g ubi:wwwyo/syokan@<ver>` で install/pin する。cross-compile は対象の bun runtime を都度 download する。
 
 ## 既知の落とし穴
 

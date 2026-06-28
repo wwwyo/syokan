@@ -104,10 +104,10 @@ On macOS a locally built binary runs as-is; if Gatekeeper blocks it after copyin
 
 ### Distribute via mise (ubi)
 
-`bun run dist` cross-compiles per-platform binaries named so mise's [ubi](https://mise.jdx.dev/dev-tools/backends/ubi.html) backend can detect OS/arch:
+`bun run compile:all` cross-compiles per-platform binaries named so mise's [ubi](https://mise.jdx.dev/dev-tools/backends/ubi.html) backend can detect OS/arch:
 
 ```bash
-bun run dist   # → dist/syokan-{darwin-arm64,darwin-x64,linux-x64,linux-arm64}
+bun run compile:all   # → dist/syokan-{darwin-arm64,darwin-x64,linux-x64,linux-arm64}
 ```
 
 (Each target downloads its Bun runtime once.) Attach those to a GitHub Release, then install/pin with mise:
