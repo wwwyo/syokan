@@ -2,8 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createApiHandlers } from "./routes";
+import {
+  createApiHandlers,
+  createTemplateHandlers,
+  getCatalog,
+} from "./routes";
 import { SnapshotStore } from "./store";
+import { TemplateStore } from "./templates";
 
 const baseInput = {
   root: {
@@ -306,5 +311,114 @@ describe("api routes", () => {
       (i) => i.path.includes("root") && i.path.includes("type"),
     );
     expect(typeIssue).toBeDefined();
+  });
+});
+
+describe("GET /api/catalog", () => {
+  test("returns the catalog manifest derived from src/catalogs", async () => {
+    const res = getCatalog();
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      items: Array<{ type: string; props: unknown; childrenTypes: unknown }>;
+    };
+    const types = data.items.map((i) => i.type);
+    expect(types).toContain("Stack");
+    expect(types).toContain("Heading");
+    const heading = data.items.find((i) => i.type === "Heading");
+    expect((heading?.props as { type?: string }).type).toBe("object");
+    expect(heading?.childrenTypes).toEqual([]);
+  });
+});
+
+describe("template routes", () => {
+  let dir: string;
+  let templates: ReturnType<typeof createTemplateHandlers>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "syokan-tmpl-api-"));
+    templates = createTemplateHandlers(new TemplateStore(dir));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("POST creates a template and returns id; GET round-trips it", async () => {
+    const post = await templates.createTemplate(
+      makeRequest("/api/templates", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "RSS",
+          description: "daily feed",
+          json: { root: { type: "Stack", props: {} } },
+        }),
+      }),
+    );
+    expect(post.status).toBe(201);
+    const { id } = (await post.json()) as { id: string };
+    expect(id).toMatch(/[0-9a-f-]{36}/);
+
+    const get = await templates.getTemplate(
+      makeParamRequest(`/api/templates/${id}`, { id }) as never,
+    );
+    expect(get.status).toBe(200);
+    const t = (await get.json()) as { title: string; json: unknown };
+    expect(t.title).toBe("RSS");
+    expect(t.json).toEqual({ root: { type: "Stack", props: {} } });
+  });
+
+  test("POST returns 400 when title is missing", async () => {
+    const res = await templates.createTemplate(
+      makeRequest("/api/templates", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ json: { a: 1 } }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toBe("validation_failed");
+  });
+
+  test("GET list returns summaries without json", async () => {
+    await templates.createTemplate(
+      makeRequest("/api/templates", {
+        method: "POST",
+        body: JSON.stringify({ title: "A", json: { a: 1 } }),
+      }),
+    );
+    const res = await templates.listTemplates();
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      items: Array<{ title: string; json?: unknown }>;
+    };
+    expect(data.items.length).toBe(1);
+    expect(data.items[0]?.json).toBeUndefined();
+  });
+
+  test("GET unknown id returns 404", async () => {
+    const res = await templates.getTemplate(
+      makeParamRequest("/api/templates/missing", { id: "missing" }) as never,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  test("DELETE removes the template; subsequent GET returns 404", async () => {
+    const post = await templates.createTemplate(
+      makeRequest("/api/templates", {
+        method: "POST",
+        body: JSON.stringify({ title: "X", json: {} }),
+      }),
+    );
+    const { id } = (await post.json()) as { id: string };
+    const del = await templates.deleteTemplate(
+      makeParamRequest(`/api/templates/${id}`, { id }) as never,
+    );
+    expect(del.status).toBe(200);
+    const get = await templates.getTemplate(
+      makeParamRequest(`/api/templates/${id}`, { id }) as never,
+    );
+    expect(get.status).toBe(404);
   });
 });

@@ -8,6 +8,7 @@ import {
 
 type Captured = {
   url: string;
+  method: string;
   body: unknown;
 };
 
@@ -72,6 +73,7 @@ function makeDeps(opts: {
       }
       const captured: Captured = {
         url,
+        method: init?.method ?? "GET",
         body: init?.body ? JSON.parse(init.body as string) : undefined,
       };
       calls.push(captured);
@@ -384,6 +386,141 @@ describe("cli main: lazy-spawn integration", () => {
     expect(h.out).toEqual([]);
     const parsed = JSON.parse(h.err.at(-1) as string) as { error: string };
     expect(parsed.error).toBe("server_unavailable");
+  });
+});
+
+describe("cli main: help", () => {
+  test("--help prints text help without touching the server", async () => {
+    const h = makeDeps({ respond: () => okResponse() });
+    const result = await main(["--help"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.calls.length).toBe(0);
+    expect(h.spawnCount()).toBe(0);
+    const text = h.out[0] as string;
+    expect(text).toContain("Usage:");
+    expect(text).toContain("syokan catalog");
+    expect(text).toContain("syokan templates add");
+  });
+
+  test("-h and help are aliases", async () => {
+    for (const arg of ["-h", "help"]) {
+      const h = makeDeps({ respond: () => okResponse() });
+      const result = await main([arg], h.deps);
+      expect(result.exitCode).toBe(0);
+      expect(h.out[0]).toContain("Usage:");
+    }
+  });
+
+  test("--help --json emits a machine-readable manifest", async () => {
+    const h = makeDeps({ respond: () => okResponse() });
+    const result = await main(["--help", "--json"], h.deps);
+    expect(result.exitCode).toBe(0);
+    const manifest = JSON.parse(h.out[0] as string) as {
+      name: string;
+      commands: Array<{ usage: string }>;
+      env: Array<{ name: string }>;
+    };
+    expect(manifest.name).toBe("syokan");
+    expect(manifest.commands.some((c) => c.usage.startsWith("syokan catalog"))).toBe(
+      true,
+    );
+    expect(manifest.env.some((e) => e.name === "SYOKAN_BASE_URL")).toBe(true);
+  });
+});
+
+describe("cli main: catalog", () => {
+  test("GETs /api/catalog and prints the JSON", async () => {
+    const h = makeDeps({
+      respond: () => Response.json({ items: [{ type: "Stack" }] }),
+    });
+    const result = await main(["catalog"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/catalog");
+    expect(h.calls[0]?.method).toBe("GET");
+    const data = JSON.parse(h.out[0] as string) as { items: unknown[] };
+    expect(data.items.length).toBe(1);
+  });
+});
+
+describe("cli main: templates", () => {
+  test("bare 'templates' lists via GET /api/templates", async () => {
+    const h = makeDeps({
+      respond: () => Response.json({ items: [{ id: "a", title: "A" }] }),
+    });
+    const result = await main(["templates"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/templates");
+    expect(h.calls[0]?.method).toBe("GET");
+  });
+
+  test("add --title reads file and POSTs title+json, prints id", async () => {
+    const h = makeDeps({
+      files: { "t.json": JSON.stringify({ root: { type: "Stack", props: {} } }) },
+      respond: () => Response.json({ id: "tmpl-1" }, { status: 201 }),
+    });
+    const result = await main(
+      ["templates", "add", "--title", "RSS", "--description", "daily", "t.json"],
+      h.deps,
+    );
+    expect(result.exitCode).toBe(0);
+    expect(h.out).toEqual(["tmpl-1"]);
+    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/templates");
+    expect(h.calls[0]?.method).toBe("POST");
+    const body = h.calls[0]?.body as {
+      title: string;
+      description: string;
+      json: { root: { type: string } };
+    };
+    expect(body.title).toBe("RSS");
+    expect(body.description).toBe("daily");
+    expect(body.json.root.type).toBe("Stack");
+  });
+
+  test("add reads json from stdin when source is omitted", async () => {
+    const h = makeDeps({
+      stdin: JSON.stringify({ root: { type: "Card", props: {} } }),
+      respond: () => Response.json({ id: "tmpl-2" }, { status: 201 }),
+    });
+    const result = await main(["templates", "add", "--title", "Piped"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.out).toEqual(["tmpl-2"]);
+    const body = h.calls[0]?.body as { json: { root: { type: string } } };
+    expect(body.json.root.type).toBe("Card");
+  });
+
+  test("add without --title fails before any request", async () => {
+    const h = makeDeps({ respond: () => okResponse() });
+    const result = await main(["templates", "add", "t.json"], h.deps);
+    expect(result.exitCode).toBe(1);
+    expect(h.calls.length).toBe(0);
+    const err = JSON.parse(h.err[0] as string) as { error: string };
+    expect(err.error).toBe("missing_title");
+  });
+
+  test("get <id> GETs the template", async () => {
+    const h = makeDeps({
+      respond: () => Response.json({ id: "x", title: "X", json: {} }),
+    });
+    const result = await main(["templates", "get", "x"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/templates/x");
+    expect(h.calls[0]?.method).toBe("GET");
+  });
+
+  test("rm <id> DELETEs the template", async () => {
+    const h = makeDeps({ respond: () => Response.json({ ok: true }) });
+    const result = await main(["templates", "rm", "x"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/templates/x");
+    expect(h.calls[0]?.method).toBe("DELETE");
+  });
+
+  test("unknown subcommand fails", async () => {
+    const h = makeDeps({ respond: () => okResponse() });
+    const result = await main(["templates", "bogus"], h.deps);
+    expect(result.exitCode).toBe(1);
+    const err = JSON.parse(h.err[0] as string) as { error: string };
+    expect(err.error).toBe("unknown_subcommand");
   });
 });
 

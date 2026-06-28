@@ -84,6 +84,10 @@ LLM に「JSXを書かせる」のではなく、**schema を満たす JSON tree
 
 利点: LLM token 削減、生成速度、型安全、デザイン一貫性、refactor 容易。
 
+catalog の type と props 定義は **`src/catalogs` が単一の SSOT**。`manifest.ts` がそれを JSON Schema 化して `GET /api/catalog` で公開し、LLM (skill) は md への転記ではなくこの API から props 契約を引く。md に書き写すと catalog 変更のたびに drift するため、SSOT を 1 箇所に保つ。
+
+「お気に入りの view に再現性を持たせる」ための **templates** も同じ思想で、syokan を SSOT にする。テンプレは「保存した envelope そのもの」で、syokan は中身を解釈せず保管・一覧するだけ (`~/.config/syokan/templates/`、`GET/POST/DELETE /api/templates`)。placeholder の render engine は持たない。雛形からの組み立て (placeholder 置換・可変長リストの展開) は LLM 側 (skill) が担い、syokan は保管庫に徹する。snapshot (ephemeral) と違いテンプレは残す前提。
+
 ### Interface フリー
 
 入力経路を MCP / CLI / HTTP / paste のいずれかに固定しない。すべて `POST /api/snapshots` の同一 JSON envelope に統一 (envelope schema は README が SSOT)。
@@ -100,17 +104,17 @@ LLM に「JSXを書かせる」のではなく、**schema を満たす JSON tree
 ```
 syokan/
 ├── entry.ts             # 単体バイナリの dual-mode entry (SYOKAN_SERVE で cli/server 分岐)
-├── cli/syokan.ts        # CLI (post / open / stop)。server を lazy-spawn (compiled は自分自身)
+├── cli/syokan.ts        # CLI (post / open / stop / catalog / templates)。server を lazy-spawn (compiled は自分自身)
 ├── build.ts             # compile script (host=dist/syokan、--release で各 OS/arch を cross-compile)
 ├── src/
 │   ├── frontend.tsx     # RouterProvider mount
 │   ├── router.tsx       # TanStack Router の route tree (root=AppShell)
 │   ├── Home.tsx / ViewPage.tsx / Render.tsx  # 各 route の本文 + JSON tree 再帰 renderer
 │   ├── schema/          # Zod schema (catalog Item / envelope / validation 整形)
-│   ├── lib/             # 横断 util (cn / date / code / snapshots / url / theme / font ...)
-│   ├── catalogs/        # ★ LLM が JSON で投げる公開 type。index.ts が registry
+│   ├── lib/             # 横断 util (paths=~/.config/syokan 解決 / cn / date / code / snapshots ...)
+│   ├── catalogs/        # ★ LLM が JSON で投げる公開 type。index.ts が registry、manifest.ts が GET /api/catalog 用に JSON Schema 化
 │   └── components/      # catalog 非登録の内部 UI (ui=shadcn / AppShell / AppSidebar / PageLayout ...)
-├── server/             # Bun.serve。routes.ts=/api/snapshots、store.ts=~/.syokan/data (ephemeral)
+├── server/             # Bun.serve。routes.ts=/api/{snapshots,catalog,templates}、store.ts=snapshot (ephemeral)、templates.ts=テンプレ保管 (永続)
 └── .storybook/         # catalog 視覚レビュー基盤
 ```
 
@@ -152,7 +156,7 @@ global ツールは **単体実行ファイル** (`bun run compile` → `dist/sy
 - **dual-mode entry**: compile 後は cli + server + frontend が 1 バイナリに同居する。[entry.ts](./entry.ts) が `SYOKAN_SERVE` で CLI / server を分岐。lazy-spawn は「単体バイナリなら自分自身 (`process.execPath`) を `SYOKAN_SERVE=1` で再 exec、dev なら `bun server/index.ts`」する。dev/compiled の判定は `isCompiledBinary()`(execPath の basename が `bun` か) で行う。CLI 引数は両モードとも `argv.slice(2)` (compiled も argv[1] に embedded entry が入る)。
 - **frontend は static `import index from "../index.html"`**。dev は on-the-fly bundle + HMR、compile 時は Bun が frontend を bundle してバイナリへ埋め込む (同一の静的 import で両立)。
 - **tailwind / bun-plugin-tailwind は devDep**。`bun build --compile` (CLI) は plugin を受け取れないため、`build.ts` が `Bun.build({ compile, plugins:[tailwind] })` で明示配線して compile 時に CSS を展開する。
-- **dev / global 分離**: global = `5173` / `~/.syokan`、dev = `5273` / repo ローカルの `.syokan-dev/` (gitignore 済み)。port が別なので両者の lazy-spawn server は衝突しない。
+- **dev / global 分離**: global = `5173` / `~/.config/syokan`、dev = `5273` / repo ローカルの `.syokan-dev/` (gitignore 済み)。port が別なので両者の lazy-spawn server は衝突しない。永続先は `src/lib/paths.ts` に集約し `XDG_CONFIG_HOME` を尊重する (snapshot data / runtime / templates をまとめて `~/.config/syokan` 配下に置く)。
 - macOS の未署名バイナリは Gatekeeper が止めることがある。ローカルビルドはそのまま動くが、配布/コピー後に弾かれたら `codesign --sign - dist/syokan`。
 - **配布**: `bun run compile:all`(=`build.ts --release`) が各 OS/arch を cross-compile し `dist/syokan-<os>-<arch>` を吐く (名前は mise の `ubi` backend が OS/arch を判別できる形)。GitHub Release に上げ、`mise use -g ubi:wwwyo/syokan@<ver>` で install/pin する。cross-compile は対象の bun runtime を都度 download する。
 

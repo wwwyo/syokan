@@ -27,7 +27,7 @@ bun install    # also pulls portless (devDep)
 bun run dev    # Bun.serve + HMR
 ```
 
-`dev` runs behind [portless](https://github.com/vercel-labs/portless): `--app-port 5273` pins the dev app to port `5273` (portless injects it via `PORT`) and the proxy serves it at `https://syokan.localhost`. It uses a **separate, repo-local data dir** (`./.syokan-dev/`, gitignored) and a different port (`5273`) from the global install (`~/.syokan/`, port `5173`), so a running `bun run dev` and the everyday `syokan` never share a server or mix snapshots. The first run needs sudo (port 443) and registers a local CA. To bypass the proxy, run `PORTLESS=0 bun run dev` — without portless there's no `PORT` injection, so the server falls back to its default port `5173`. Stop the proxy daemon with `bunx portless proxy stop`.
+`dev` runs behind [portless](https://github.com/vercel-labs/portless): `--app-port 5273` pins the dev app to port `5273` (portless injects it via `PORT`) and the proxy serves it at `https://syokan.localhost`. It uses a **separate, repo-local data dir** (`./.syokan-dev/`, gitignored) and a different port (`5273`) from the global install (`~/.config/syokan/`, port `5173`), so a running `bun run dev` and the everyday `syokan` never share a server or mix snapshots. The first run needs sudo (port 443) and registers a local CA. To bypass the proxy, run `PORTLESS=0 bun run dev` — without portless there's no `PORT` injection, so the server falls back to its default port `5173`. Stop the proxy daemon with `bunx portless proxy stop`.
 
 While developing, post to the **dev** server by pointing the CLI at it: `SYOKAN_BASE_URL=http://localhost:5273 bun cli/syokan.ts <file.json>`. The bare `syokan` binary always talks to the **global install** on `5173`, so you see your latest local renderer in dev and the published one everywhere else.
 
@@ -73,17 +73,41 @@ The `syokan` binary (`cli/syokan.ts`, also runnable as `bun cli/syokan.ts`) lazy
 | `… \| syokan` | Posts the JSON envelope streamed on stdin (e.g. `claude -p '…' \| syokan`). |
 | `syokan open [id]` | Opens a snapshot in the browser; with no `id`, opens home. |
 | `syokan stop` | Stops the server that the CLI lazy-spawned. |
+| `syokan catalog` | Prints the catalog manifest (`GET /api/catalog`) as JSON. |
+| `syokan templates` | Lists saved templates (id / title / description) as JSON. |
+| `syokan templates add --title <t> [--description <d>] <file\|->` | Saves a template from a file or stdin; prints the new id. |
+| `syokan templates get <id>` | Prints one template (incl. its json). |
+| `syokan templates rm <id>` | Deletes a template. |
 
-On a successful post the CLI prints the view URL. The file form and the stdin form are equivalent — both just stream a JSON envelope to `/api/snapshots`.
+On a successful post the CLI prints the view URL. The file form and the stdin form are equivalent — both just stream a JSON envelope to `/api/snapshots`. The `catalog` / `templates` subcommands go through the same lazy-spawned server and print JSON for piping into other tools.
 
 ### Catalog types
 
-These are the `type` values you can put in a tree:
+The catalog (`src/catalogs`) is the SSOT for which `type` values a tree may contain. Fetch the machine-readable manifest instead of hard-coding it elsewhere:
+
+```
+GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
+```
+
+`childrenTypes` is `null` for containers (any child), `[]` for leaves (no children), or a list of allowed child types. `props` is each component's Zod schema rendered as JSON Schema (`required` / `enum` / `format` / `additionalProperties:false`).
+
+At a glance, the current types are:
 
 - **Containers** (accept `children`): `Stack`, `Card`
 - **Leaves**: `Heading`, `Link`, `Text`, `Time`, `MarkdownDoc`, `PlainText`, `Diff`, `Code`, `Badge`
 
-Each component's props are defined and validated by its Zod schema in `src/catalogs/<Name>/`. Browse them visually with Storybook (below).
+The props live in each component's Zod schema (`src/catalogs/<Name>/`); browse them visually with Storybook (below) or via `GET /api/catalog`.
+
+### Templates
+
+syokan keeps a store of reusable view **templates** so a favorite layout can be reproduced instead of rebuilt from scratch. A template is just a saved JSON (typically a snapshot envelope) plus a `title` / optional `description`; syokan stores and lists them but never interprets the contents. They live in `~/.config/syokan/templates/` — unlike snapshots, templates are meant to persist.
+
+```
+GET    /api/templates        # { items: [{ id, title, description?, createdAt }] }  (no json)
+POST   /api/templates        # body { title, description?, json } → 201 { id, template }
+GET    /api/templates/:id    # full template incl. json, or 404
+DELETE /api/templates/:id    # 404 if unknown
+```
 
 ### Source label
 
@@ -98,7 +122,7 @@ bun run compile               # → dist/syokan (a standalone binary)
 cp dist/syokan ~/.local/bin/  # put it on PATH; then `syokan`, `syokan open`, `syokan <file.json>` …
 ```
 
-The binary is **dual-mode** ([entry.ts](./entry.ts)): invoked normally it's the CLI; to run its server it re-execs *itself* with `SYOKAN_SERVE=1` (instead of shelling out to `bun`). The global binary uses port `5173` and data in `~/.syokan/`. To update, re-run `bun run compile` and replace the binary.
+The binary is **dual-mode** ([entry.ts](./entry.ts)): invoked normally it's the CLI; to run its server it re-execs *itself* with `SYOKAN_SERVE=1` (instead of shelling out to `bun`). The global binary uses port `5173` and data in `~/.config/syokan/` (override with `XDG_CONFIG_HOME`). To update, re-run `bun run compile` and replace the binary.
 
 On macOS a locally built binary runs as-is; if Gatekeeper blocks it after copying, ad-hoc sign it once: `codesign --sign - dist/syokan`.
 
