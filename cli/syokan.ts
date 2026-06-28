@@ -416,11 +416,14 @@ const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
     name: "templates",
     usage: "syokan templates [list|add|get|rm]",
     summary: "保存した template を操作する",
-    details: [
-      "syokan templates                       一覧 (id/title/description) を JSON 出力",
-      "syokan templates add --title <t> [--description <d>] <file|->",
-      "syokan templates get <id>",
-      "syokan templates rm <id>",
+    subcommands: [
+      { usage: "syokan templates", summary: "一覧 (id/title/description) を JSON 出力" },
+      {
+        usage: "syokan templates add --title <t> [--description <d>] <file|->",
+        summary: "保存して id を出力",
+      },
+      { usage: "syokan templates get <id>", summary: "1 件を JSON 出力" },
+      { usage: "syokan templates rm <id>", summary: "削除" },
     ],
     run: (rest, deps) => runTemplates(rest, deps),
   },
@@ -448,7 +451,7 @@ export const helpManifest = {
   commands: COMMANDS.map((c) => ({
     usage: c.usage ?? [c.name, ...(c.aliases ?? [])].join(", "),
     summary: c.summary ?? "",
-    details: c.details ?? [],
+    subcommands: c.subcommands ?? [],
   })),
   env: [
     {
@@ -474,7 +477,7 @@ export const helpManifest = {
     {
       code: 1,
       summary:
-        "error: invalid_json | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand",
+        "error: invalid_json | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand | unknown_option",
     },
   ],
 };
@@ -492,7 +495,7 @@ function renderHelpText(): string {
   lines.push("", "Commands:");
   for (const c of h.commands) {
     lines.push(`  ${c.usage}`, `      ${c.summary}`);
-    for (const d of c.details) lines.push(`      ${d}`);
+    for (const s of c.subcommands) lines.push(`    ${s.usage}`, `        ${s.summary}`);
   }
   lines.push("", "Environment:");
   for (const e of h.env) lines.push(`  ${e.name}`, `      ${e.summary}`);
@@ -519,9 +522,14 @@ const cli = createRouter<CliDeps, CliResult | Promise<CliResult>>({
   },
   // 予約語でも flag でもない第一引数はファイルパスとして post する。
   fallback: (first, _rest, deps) => runPost(first, deps),
-  // 未知の `-` 始まりはファイル扱いせず明示エラー (ENOENT を避ける)。
+  // 未知の `-` 始まりはファイル扱い (ENOENT) を避け、他エラーと同じ JSON 契約で返す。
   onUnknownOption: (token, deps) => {
-    deps.stderr(`syokan: unknown option '${token}' (try 'syokan --help')`);
+    deps.stderr(
+      JSON.stringify({
+        error: "unknown_option",
+        message: `unknown option '${token}', see: syokan --help`,
+      }),
+    );
     return { exitCode: 1 };
   },
 });

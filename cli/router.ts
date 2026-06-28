@@ -13,8 +13,8 @@ export type Command<Ctx, Res> = {
   summary?: string;
   /** help 用の usage 文字列 (任意。未指定なら name + aliases から導出する) */
   usage?: string;
-  /** help 用の補足行 (任意。subcommand の列挙など) */
-  details?: readonly string[];
+  /** help 用の subcommand 一覧 (任意。machine-readable に保つため構造化して持つ) */
+  subcommands?: readonly { usage: string; summary: string }[];
   /** command トークンより後ろの引数を受け取る */
   run: (rest: readonly string[], ctx: Ctx) => Res;
 };

@@ -592,11 +592,16 @@ describe("cli main: version / unknown option", () => {
     },
   );
 
-  test("an unknown flag errors cleanly instead of reading it as a file", async () => {
+  test("an unknown flag errors as JSON instead of reading it as a file", async () => {
     const h = makeDeps({ respond: () => okResponse() });
     const result = await main(["--bogus"], h.deps);
     expect(result.exitCode).toBe(1);
-    expect(h.err[0]).toContain("unknown option '--bogus'");
+    const parsed = JSON.parse(h.err[0] as string) as {
+      error: string;
+      message: string;
+    };
+    expect(parsed.error).toBe("unknown_option");
+    expect(parsed.message).toContain("--bogus");
     expect(h.err[0]).not.toContain("ENOENT");
   });
 });
