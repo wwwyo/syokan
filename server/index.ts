@@ -1,6 +1,8 @@
 import { serve } from "bun";
 import { dataDir as resolveDataDir, templatesDir } from "@/lib/paths";
 import index from "../index.html";
+// version は CLI が「旧 build の server を黙って再利用しない」ための互換マーカー。
+import pkg from "../package.json";
 import {
   createApiHandlers,
   createTemplateHandlers,
@@ -26,7 +28,7 @@ export function startServer() {
   const templates = createTemplateHandlers(new TemplateStore(templatesDir()));
   const server = serve({
     routes: {
-      "/api/health": () => Response.json({ ok: true }),
+      "/api/health": () => Response.json({ ok: true, version: pkg.version }),
       // catalog は src/catalogs が SSOT。LLM は props 定義をここから引く。
       "/api/catalog": getCatalog,
       "/api/snapshots": {
