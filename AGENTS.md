@@ -4,7 +4,7 @@
 
 「**照鑑 / 抄観**」— 自分の周りで何が起きているかを、抄して観るための場所。
 
-> **セットアップ・使い方 (CLI / `POST /api/snapshots` の envelope schema / source.label 仕様 / catalog type 一覧) は [README.md](./README.md) が SSOT。** この AGENTS.md は設計判断 (なぜ) と開発規約 (どういじるか) を扱う。
+> **セットアップ・使い方 (`POST /api/snapshots` の envelope schema / source.label 仕様 / catalog type 一覧) は [README.md](./README.md) が、CLI コマンドは `syokan --help` (機械可読は `--help --json`) が SSOT。** この AGENTS.md は設計判断 (なぜ) と開発規約 (どういじるか) を扱う。
 
 ## なぜ作るか
 
@@ -134,7 +134,7 @@ component は `<Name>/index.tsx` に実装し、同じ dir に test (`<Name>.tes
 
 ## セットアップ / 使い方
 
-セットアップ手順 (mise / bun / portless)、CLI コマンド、`POST /api/snapshots` の envelope schema、source.label 仕様、catalog type 一覧は [README.md](./README.md) が SSOT。重複させないためここには書かない。
+セットアップ手順 (mise / bun / portless)、`POST /api/snapshots` の envelope schema、source.label 仕様、catalog type 一覧は [README.md](./README.md) が SSOT。CLI コマンドは catalog と同じ思想で `syokan --help` (機械可読は `--help --json`) が SSOT — md に転記すると drift するため README にも一覧は載せない。重複させないためここには書かない。
 
 Storybook は catalog component の視覚レビュー基盤。`<Name>/<Name>.stories.tsx` で props の variant・edge case・dark/light を一覧化し、`.storybook/preview.tsx` が `src/styles.css` を読み込む。toolbar の `.dark` トグルでテーマ追従を確認できる。`.claude/launch.json` に `storybook` を登録済みなので preview 経由でも起動可能。起動コマンドは README 参照。
 
