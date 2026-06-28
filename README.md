@@ -100,7 +100,24 @@ cp dist/syokan ~/.local/bin/  # put it on PATH; then `syokan`, `syokan open`, `s
 
 The binary is **dual-mode** ([entry.ts](./entry.ts)): invoked normally it's the CLI; to run its server it re-execs *itself* with `SYOKAN_SERVE=1` (instead of shelling out to `bun`). The global binary uses port `5173` and data in `~/.syokan/`. To update, re-run `bun run compile` and replace the binary.
 
-On macOS a locally built binary runs as-is; if Gatekeeper blocks it after copying, ad-hoc sign it once: `codesign --sign - dist/syokan`. Cross-compile for another OS/arch with `--target` (see `bun build --help`).
+On macOS a locally built binary runs as-is; if Gatekeeper blocks it after copying, ad-hoc sign it once: `codesign --sign - dist/syokan`.
+
+### Distribute via mise (ubi)
+
+`bun run dist` cross-compiles per-platform binaries named so mise's [ubi](https://mise.jdx.dev/dev-tools/backends/ubi.html) backend can detect OS/arch:
+
+```bash
+bun run dist   # → dist/syokan-{darwin-arm64,darwin-x64,linux-x64,linux-arm64}
+```
+
+(Each target downloads its Bun runtime once.) Attach those to a GitHub Release, then install/pin with mise:
+
+```bash
+gh release create v0.1.0 dist/syokan-*           # publish the assets
+mise use -g ubi:wwwyo/syokan@0.1.0               # install + pin
+```
+
+Notes: a **private** repo needs `GITHUB_TOKEN` for ubi to fetch assets; an unsigned binary may need `codesign --sign -` (or `xattr -dr com.apple.quarantine <path>`) on macOS; if ubi can't auto-pick the asset, narrow it with `ubi:wwwyo/syokan[matching=darwin-arm64]`.
 
 ## Storybook
 

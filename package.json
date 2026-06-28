@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "SYOKAN_DATA_DIR=.syokan-dev/data portless run --app-port 5273 bun --hot server/index.ts",
     "compile": "bun build.ts",
+    "dist": "bun build.ts --release",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "storybook": "storybook dev -p 6006",

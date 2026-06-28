@@ -1,27 +1,47 @@
 #!/usr/bin/env bun
-// 単体実行ファイルをコンパイルする。entry.ts を起点に cli + server + frontend
-// (server が import する index.html) を 1 つのバイナリに同梱する。
-// CLI の `bun build --compile` は plugin を受け取れないため、tailwind plugin を
-// 明示配線した Bun.build({ compile }) で行う (これで CSS も compile 時に展開される)。
+// frontend を埋め込んだ単体実行ファイルを compile する。
+//   引数なし  : host 向け 1 つ (dist/syokan) — ローカル利用・動作確認用
+//   --release : 配布用に各 OS/arch を cross-compile (dist/syokan-<os>-<arch>)
+//               名前は mise の ubi backend が GitHub Release から OS/arch を判別できる形にする
+// CLI の `bun build --compile` は plugin を渡せないため、Bun.build({compile}) で
+// tailwind plugin を明示配線する。
 import { fileURLToPath } from "node:url";
+import type { Build } from "bun";
 import tailwind from "bun-plugin-tailwind";
 
-const outfile = fileURLToPath(new URL("./dist/syokan", import.meta.url));
+const entry = fileURLToPath(new URL("./entry.ts", import.meta.url));
+const out = (name: string) =>
+  fileURLToPath(new URL(`./dist/${name}`, import.meta.url));
 
-const result = await Bun.build({
-  entrypoints: [fileURLToPath(new URL("./entry.ts", import.meta.url))],
-  target: "bun",
-  compile: { outfile },
-  plugins: [tailwind],
-  minify: true,
-  // compile 時の ambient NODE_ENV が server の development 判定に焼き込まれるのを防ぐ。
-  // バイナリは常に production (HMR 無効・埋め込み frontend を配信) に固定する。
-  define: { "process.env.NODE_ENV": JSON.stringify("production") },
-});
+const RELEASE_TARGETS: { target: Build.CompileTarget; name: string }[] = [
+  { target: "bun-darwin-arm64", name: "syokan-darwin-arm64" },
+  { target: "bun-darwin-x64", name: "syokan-darwin-x64" },
+  { target: "bun-linux-x64", name: "syokan-linux-x64" },
+  { target: "bun-linux-arm64", name: "syokan-linux-arm64" },
+];
 
-if (!result.success) {
-  for (const log of result.logs) console.error(log);
-  process.exit(1);
+async function compile(outfile: string, target?: Build.CompileTarget) {
+  const result = await Bun.build({
+    entrypoints: [entry],
+    target: "bun",
+    compile: target ? { target, outfile } : { outfile },
+    plugins: [tailwind],
+    minify: true,
+    // compile 時の ambient NODE_ENV が server の development 判定に焼き込まれるのを防ぎ、
+    // バイナリを常に production (HMR 無効・埋め込み frontend を配信) に固定する。
+    define: { "process.env.NODE_ENV": JSON.stringify("production") },
+  });
+  if (!result.success) {
+    for (const log of result.logs) console.error(log);
+    process.exit(1);
+  }
+  console.log(`syokan: compiled → ${outfile}`);
 }
 
-console.log(`syokan: compiled → ${outfile}`);
+if (process.argv.includes("--release")) {
+  for (const { target, name } of RELEASE_TARGETS) {
+    await compile(out(name), target);
+  }
+} else {
+  await compile(out("syokan"));
+}
