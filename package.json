@@ -8,6 +8,7 @@
     "dev": "SYOKAN_DATA_DIR=.syokan-dev/data SYOKAN_TEMPLATES_DIR=.syokan-dev/templates portless run --app-port 5273 bun --hot server/index.ts",
     "compile": "bun build.ts",
     "compile:all": "bun build.ts --release",
+    "release": "bun scripts/release.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "storybook": "storybook dev -p 6006",

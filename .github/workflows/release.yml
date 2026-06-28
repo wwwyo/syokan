@@ -1,0 +1,26 @@
+name: release
+
+# `npm version <patch|minor|major>` で bump + tag し `git push --follow-tags` した
+# tag を起点に、cross-compile したバイナリを添付した draft release を作る。
+# 版を決めるのは人間 (tag)、重い compile と asset upload を CI に逃がす分担。
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # release 作成・asset upload に必要
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0 / mise.toml の bun を手元と同一版で入れる
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run compile:all
+      - run: gh release create "$GITHUB_REF_NAME" dist/syokan-* --generate-notes --draft
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
