@@ -592,11 +592,47 @@ describe("cli main: version / unknown option", () => {
     },
   );
 
-  test("an unknown flag errors cleanly instead of reading it as a file", async () => {
+  test("an unknown flag errors as JSON instead of reading it as a file", async () => {
     const h = makeDeps({ respond: () => okResponse() });
     const result = await main(["--bogus"], h.deps);
     expect(result.exitCode).toBe(1);
-    expect(h.err[0]).toContain("unknown option '--bogus'");
+    const parsed = JSON.parse(h.err[0] as string) as {
+      error: string;
+      message: string;
+    };
+    expect(parsed.error).toBe("unknown_option");
+    expect(parsed.message).toContain("--bogus");
     expect(h.err[0]).not.toContain("ENOENT");
+  });
+});
+
+describe("cli main: help (generated from command declarations)", () => {
+  test("--help text lists every declared command and the version, without spawning", async () => {
+    const h = makeDeps({ respond: () => okResponse() });
+    const result = await main(["--help"], h.deps);
+    expect(result.exitCode).toBe(0);
+    const text = h.out.join("\n");
+    for (const usage of [
+      "syokan open [id]",
+      "syokan stop",
+      "syokan catalog",
+      "syokan templates [list|add|get|rm]",
+      "syokan --version",
+    ]) {
+      expect(text).toContain(usage);
+    }
+    expect(text).toContain(pkg.version);
+    expect(h.spawnCount()).toBe(0);
+  });
+
+  test("--help --json emits a manifest whose commands come from the declarations", async () => {
+    const h = makeDeps({ respond: () => okResponse() });
+    await main(["--help", "--json"], h.deps);
+    const manifest = JSON.parse(h.out[0] as string) as {
+      commands: { usage: string }[];
+    };
+    const usages = manifest.commands.map((c) => c.usage);
+    expect(usages).toContain("syokan open [id]");
+    expect(usages).toContain("syokan templates [list|add|get|rm]");
   });
 });
