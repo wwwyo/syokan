@@ -1,6 +1,6 @@
 {
   "name": "syokan",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Personal, schema-driven view layer. Post a JSON tree, render it with pre-defined React components.",
   "type": "module",
   "private": true,
