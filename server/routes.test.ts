@@ -381,6 +381,19 @@ describe("template routes", () => {
     expect(data.error).toBe("validation_failed");
   });
 
+  test("POST returns 400 when json is null", async () => {
+    const res = await templates.createTemplate(
+      makeRequest("/api/templates", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: "x", json: null }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toBe("validation_failed");
+  });
+
   test("GET list returns summaries without json", async () => {
     await templates.createTemplate(
       makeRequest("/api/templates", {

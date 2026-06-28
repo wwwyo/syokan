@@ -121,8 +121,10 @@ const templateInputSchema = z
   .object({
     title: z.string().min(1),
     description: z.string().min(1).optional(),
-    // 中身は解釈しない保管庫なので json は任意の構造を許す (null 以外)。
-    json: z.unknown().refine((v) => v !== undefined, "json is required"),
+    // 中身は解釈しない保管庫だが、null/undefined は雛形として無意味なので弾く。
+    json: z
+      .unknown()
+      .refine((v) => v !== undefined && v !== null, "json is required"),
   })
   .strict();
 
