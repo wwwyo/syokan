@@ -157,7 +157,9 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
           // 長文セルの markdown table は data table と違い折り返したい
           // (shadcn 既定の whitespace-nowrap だと横スクロール送りになる)
           th: ({ children }) => (
-            <TableHead className="whitespace-normal align-top">{children}</TableHead>
+            <TableHead className="h-auto whitespace-normal py-2">
+              {children}
+            </TableHead>
           ),
           td: ({ children }) => (
             <TableCell className="whitespace-normal align-top">{children}</TableCell>
