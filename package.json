@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "SYOKAN_DATA_DIR=.syokan-dev/data SYOKAN_TEMPLATES_DIR=.syokan-dev/templates portless run --app-port 5273 bun --hot server/index.ts",
+    "dev": "SYOKAN_DATA_DIR=.syokan-dev/data SYOKAN_TEMPLATES_DIR=.syokan-dev/templates SYOKAN_SETTINGS_FILE=.syokan-dev/settings.json portless run --app-port 5273 bun --hot server/index.ts",
     "compile": "bun build.ts",
     "compile:all": "bun build.ts --release",
     "release": "bun scripts/release.ts",
@@ -21,6 +21,7 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "lucide-react": "1.14.0",
+    "mermaid": "11.15.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "react-markdown": "10.1.0",

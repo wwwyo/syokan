@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { z } from "zod";
 import { Code } from "@/catalogs/Code";
+import { Mermaid } from "@/catalogs/MarkdownDoc/Mermaid";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
@@ -110,6 +111,10 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
           ),
           pre: ({ node, children }) => {
             const extracted = extractCodeFromPre(node);
+            if (extracted?.lang?.toLowerCase() === "mermaid") {
+              // ```mermaid は図として描画する (ハイライトせず Mermaid に委譲)
+              return <Mermaid chart={extracted.code} />;
+            }
             if (extracted) {
               // コードフェンスは catalog の Code に委譲し、単独 Code / Diff と同じ
               // @pierre/diffs スタックで一貫させる。dev (StrictMode) では cold 初回に

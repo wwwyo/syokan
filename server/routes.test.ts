@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createApiHandlers,
+  createSettingsHandlers,
   createTemplateHandlers,
   getCatalog,
 } from "./routes";
+import { SettingsStore } from "./settings";
 import { SnapshotStore } from "./store";
 import { TemplateStore } from "./templates";
 
@@ -433,5 +435,79 @@ describe("template routes", () => {
       makeParamRequest(`/api/templates/${id}`, { id }) as never,
     );
     expect(get.status).toBe(404);
+  });
+});
+
+describe("settings routes", () => {
+  let dir: string;
+  let settings: ReturnType<typeof createSettingsHandlers>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "syokan-settings-api-"));
+    settings = createSettingsHandlers(
+      new SettingsStore(join(dir, "settings.json")),
+    );
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("GET returns defaults before anything is written", async () => {
+    const res = await settings.getSettings();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ theme: "system", font: "current" });
+  });
+
+  test("PUT applies a partial patch and GET reflects it", async () => {
+    const put = await settings.updateSettings(
+      makeRequest("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ theme: "dark" }),
+      }),
+    );
+    expect(put.status).toBe(200);
+    expect(await put.json()).toEqual({ theme: "dark", font: "current" });
+
+    const get = await settings.getSettings();
+    expect(await get.json()).toEqual({ theme: "dark", font: "current" });
+  });
+
+  test("PUT returns 400 on unknown key", async () => {
+    const res = await settings.updateSettings(
+      makeRequest("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bogus: 1 }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toBe("validation_failed");
+  });
+
+  test("PUT returns 400 on invalid enum value", async () => {
+    const res = await settings.updateSettings(
+      makeRequest("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ theme: "neon" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test("PUT returns 400 for non-JSON body", async () => {
+    const res = await settings.updateSettings(
+      makeRequest("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: "{not json",
+      }),
+    );
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toBe("invalid_json");
   });
 });
