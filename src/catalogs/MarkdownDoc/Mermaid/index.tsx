@@ -31,6 +31,10 @@ export function Mermaid({ chart }: MermaidProps) {
           theme: scheme === "dark" ? "dark" : "default",
           // chart は外部 / LLM 由来。ラベル内 HTML を sanitize する (既定だが明示する)
           securityLevel: "strict",
+          // 解析失敗時に mermaid が error 図を document.body へ注入するのを抑止し、
+          // 一時要素も除去して throw させる。失敗は下の catch で <pre> fallback に寄せる。
+          // (container 引数で囲う手もあるが、複数図の同時 render を壊すため使わない)
+          suppressErrorRendering: true,
         });
         const { svg } = await mermaid.render(`mermaid-${id}`, chart);
         if (!cancelled) setSvg(svg);

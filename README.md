@@ -72,6 +72,17 @@ GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
 
 気に入った layout は **テンプレート**（保存した envelope + `title`）として `~/.config/syokan/templates/` に残せる。snapshot と違い永続する。syokan は保管・一覧するだけで中身は解釈しない（`GET/POST/DELETE /api/templates`）。
 
+## 設定
+
+テーマ・フォントの表示設定は singleton リソースとして `~/.config/syokan/settings.json` に永続する（snapshot と違い残す）。ブラウザの localStorage が即時反映用キャッシュ、サーバーが正本で、起動時に同期するので複数ブラウザ間で設定を共有できる。
+
+```
+GET /api/settings              # { theme, font }（未設定なら既定値）
+PUT /api/settings              # 部分更新（送ったキーだけ上書き）。未知キー / 不正値は 400
+```
+
+`theme`: `system` `light` `dark` / `font`: `current` `geist` `system`。値の SSOT は `src/schema/settings.ts`。
+
 ## ビルド (単体バイナリ)
 
 ```bash
