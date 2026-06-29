@@ -498,6 +498,29 @@ describe("setting routes", () => {
     expect(res.status).toBe(400);
   });
 
+  test("PUT accepts a known font preset", async () => {
+    const res = await setting.updateSetting(
+      makeRequest("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ font: "inter" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ theme: "system", font: "inter" });
+  });
+
+  test("PUT returns 400 on a syntactically-valid but unknown font", async () => {
+    const res = await setting.updateSetting(
+      makeRequest("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ font: "does-not-exist" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
   test("PUT returns 400 for non-JSON body", async () => {
     const res = await setting.updateSetting(
       makeRequest("/api/settings", {

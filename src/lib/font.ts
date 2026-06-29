@@ -28,10 +28,13 @@ export function getStoredFont(): Font {
 }
 
 // Google Fonts の <link> を href 単位で一度だけ注入する (切替を繰り返しても増えない)。
+// href を属性セレクタに埋めると family 名次第で壊れる (`"` 等) ので、走査して
+// getAttribute 比較で dedup する。inline script (index.html) が注入した分も拾える。
 function ensureFontLink(href: string): void {
   if (typeof document === "undefined") return;
-  const selector = `link[data-syokan-font][href="${href}"]`;
-  if (document.querySelector(selector)) return;
+  for (const l of document.querySelectorAll("link[data-syokan-font]")) {
+    if (l.getAttribute("href") === href) return;
+  }
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = href;
@@ -75,24 +78,27 @@ export function useFont(): { font: Font; setFont: (font: Font) => void } {
   useEffect(() => {
     let alive = true;
     fetchSetting().then((s) => {
-      if (!alive || !s || s.font === getStoredFont()) return;
+      if (!alive || !s) return;
       const next = isFont(s.font) ? s.font : DEFAULT_FONT;
-      persistFont(next);
-      setFontState(next);
+      if (next !== getStoredFont()) setFontState(next);
     });
     return () => {
       alive = false;
     };
   }, []);
 
+  // font が決まるたびに適用し、FOUC 用キャッシュも書き直す。mount 時にも走るので、
+  // プリセット定義 / Google URL を変えた新版でも次回 reload の inline script に反映される。
   useEffect(() => {
     applyFont(font);
+    persistFont(font);
   }, [font]);
 
   const setFont = useCallback((next: Font) => {
-    persistFont(next);
-    setFontState(next);
-    void putSetting({ font: next });
+    // 未知値でも state(highlight) と localStorage が食い違わないよう先に正規化する。
+    const value = isFont(next) ? next : DEFAULT_FONT;
+    setFontState(value);
+    void putSetting({ font: value });
   }, []);
 
   return { font, setFont };

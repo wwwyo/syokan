@@ -2,6 +2,7 @@ import type { BunRequest } from "bun";
 import { z } from "zod";
 import { itemSchema } from "@/catalogs";
 import { catalogManifest } from "@/catalogs/manifest";
+import { isFontValue } from "@/lib/fonts";
 import {
   CURRENT_SCHEMA_VERSION,
   formatValidationError,
@@ -207,6 +208,14 @@ export function createSettingHandlers(store: SettingStore): SettingApiHandlers {
           error: "validation_failed",
           message: "Request body does not satisfy the setting schema",
           issues: formatValidationError(parsed.error),
+        });
+      }
+      // schema は font を識別子の形だけで通すので、preset 表 (SSOT) の存在確認は
+      // ここで行う。theme(enum) と対称に、未知 font は永続させず 400 を返す。
+      if (parsed.data.font !== undefined && !isFontValue(parsed.data.font)) {
+        return jsonError(400, {
+          error: "validation_failed",
+          message: `Unknown font preset: ${parsed.data.font}`,
         });
       }
       const setting = await store.update(parsed.data);

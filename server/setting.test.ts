@@ -39,6 +39,14 @@ describe("createSettingStore", () => {
     expect(next).toEqual({ theme: "dark", font: "geist" });
   });
 
+  test("concurrent partial updates do not lose each other (serialized)", async () => {
+    await Promise.all([
+      store.update({ theme: "dark" }),
+      store.update({ font: "geist" }),
+    ]);
+    expect(await store.get()).toEqual({ theme: "dark", font: "geist" });
+  });
+
   test("get fills missing keys from defaults and drops unknown keys", async () => {
     await writeFile(file, JSON.stringify({ theme: "light", bogus: 1 }), "utf8");
     expect(await store.get()).toEqual({ theme: "light", font: "system" });

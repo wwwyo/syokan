@@ -40,15 +40,16 @@ const SYSTEM_PRESET: FontPreset = {
   mono: monoStack(),
 };
 
+// sans/mono とも Moralerspace (等幅) で統一する。両者が同一スタックなので 1 箇所で持つ。
+function moralerspacePreset(): FontPreset {
+  const stack = `"Moralerspace Argon", "Source Han Code JP", ${monoStack()}`;
+  return { value: "moralerspace", label: "Moralerspace", sans: stack, mono: stack };
+}
+
 // system / moralerspace は Google 経由でない特別エントリ。残りは Google Fonts。
 export const FONT_PRESETS: readonly FontPreset[] = [
   SYSTEM_PRESET,
-  {
-    value: "moralerspace",
-    label: "Moralerspace",
-    sans: `"Moralerspace Argon", "Source Han Code JP", ${monoStack()}`,
-    mono: `"Moralerspace Argon", "Source Han Code JP", ${monoStack()}`,
-  },
+  moralerspacePreset(),
   // 欧文 sans
   { value: "inter", label: "Inter", sans: sansStack("Inter"), mono: monoStack(), googleQuery: google("Inter") },
   { value: "roboto", label: "Roboto", sans: sansStack("Roboto"), mono: monoStack(), googleQuery: google("Roboto") },
