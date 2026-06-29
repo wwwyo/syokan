@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
+import { type Settings, THEME_VALUES } from "@/schema";
+import { fetchSettings, putSettings } from "./settings";
 
-export type Theme = "system" | "light" | "dark";
+export type Theme = Settings["theme"];
 
 // index.html の inline script (FOUC 防止) と同じ key。両者は同じ規則で動く必要がある。
 export const THEME_STORAGE_KEY = "syokan:theme";
 
-const THEMES: readonly Theme[] = ["system", "light", "dark"];
+const THEMES: readonly Theme[] = THEME_VALUES;
 
 export function isTheme(value: unknown): value is Theme {
   return (
@@ -54,11 +56,24 @@ export function applyTheme(theme: Theme): void {
 }
 
 /**
- * テーマ選択 (system/light/dark) を localStorage に永続化し <html>.dark に反映する。
- * system のときだけ OS preference の変化を購読して追従する。
+ * テーマ選択 (system/light/dark) を localStorage に即時永続化しつつサーバー (正本) にも
+ * 同期し、<html>.dark に反映する。mount 時にサーバー値を取り直すので、別ブラウザでの
+ * 変更が反映される。system のときだけ OS preference の変化を購読して追従する。
  */
 export function useTheme(): { theme: Theme; setTheme: (theme: Theme) => void } {
   const [theme, setThemeState] = useState<Theme>(getStoredTheme);
+
+  useEffect(() => {
+    let alive = true;
+    fetchSettings().then((s) => {
+      if (!alive || !s || s.theme === getStoredTheme()) return;
+      persistTheme(s.theme);
+      setThemeState(s.theme);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     applyTheme(theme);
@@ -74,6 +89,7 @@ export function useTheme(): { theme: Theme; setTheme: (theme: Theme) => void } {
   const setTheme = useCallback((next: Theme) => {
     persistTheme(next);
     setThemeState(next);
+    void putSettings({ theme: next });
   }, []);
 
   return { theme, setTheme };

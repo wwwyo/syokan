@@ -1,13 +1,19 @@
 import { serve } from "bun";
-import { dataDir as resolveDataDir, templatesDir } from "@/lib/paths";
+import {
+  dataDir as resolveDataDir,
+  settingsFile,
+  templatesDir,
+} from "@/lib/paths";
 import index from "../index.html";
 // version は CLI が「旧 build の server を黙って再利用しない」ための互換マーカー。
 import pkg from "../package.json";
 import {
   createApiHandlers,
+  createSettingsHandlers,
   createTemplateHandlers,
   getCatalog,
 } from "./routes";
+import { SettingsStore } from "./settings";
 import { SnapshotStore } from "./store";
 import { TemplateStore } from "./templates";
 
@@ -26,6 +32,7 @@ export function startServer() {
   const store = new SnapshotStore(dataDir);
   const api = createApiHandlers(store);
   const templates = createTemplateHandlers(new TemplateStore(templatesDir()));
+  const settings = createSettingsHandlers(new SettingsStore(settingsFile()));
   const server = serve({
     routes: {
       "/api/health": () => Response.json({ ok: true, version: pkg.version }),
@@ -46,6 +53,10 @@ export function startServer() {
       "/api/templates/:id": {
         GET: templates.getTemplate,
         DELETE: templates.deleteTemplate,
+      },
+      "/api/settings": {
+        GET: settings.getSettings,
+        PUT: settings.updateSettings,
       },
       // static > param > wildcard 順で評価されるので上の API が優先される。
       "/api/*": () => Response.json({ error: "not_found" }, { status: 404 }),

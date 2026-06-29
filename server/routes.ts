@@ -5,8 +5,10 @@ import { catalogManifest } from "@/catalogs/manifest";
 import {
   CURRENT_SCHEMA_VERSION,
   formatValidationError,
+  settingsPatchSchema,
   snapshotMetadataSchema,
 } from "@/schema";
+import { type SettingsStore } from "./settings";
 import { type SnapshotStore } from "./store";
 import { type TemplateStore } from "./templates";
 
@@ -181,6 +183,36 @@ export function createTemplateHandlers(
         });
       }
       return Response.json({ ok: true });
+    },
+  };
+}
+
+export type SettingsApiHandlers = {
+  getSettings: () => Promise<Response>;
+  updateSettings: (req: Request) => Promise<Response>;
+};
+
+export function createSettingsHandlers(
+  store: SettingsStore,
+): SettingsApiHandlers {
+  return {
+    async getSettings() {
+      return Response.json(await store.get());
+    },
+
+    async updateSettings(req) {
+      const body = await readJsonBody(req);
+      if (!body.ok) return body.response;
+      const parsed = settingsPatchSchema.safeParse(body.value);
+      if (!parsed.success) {
+        return jsonError(400, {
+          error: "validation_failed",
+          message: "Request body does not satisfy the settings schema",
+          issues: formatValidationError(parsed.error),
+        });
+      }
+      const settings = await store.update(parsed.data);
+      return Response.json(settings);
     },
   };
 }

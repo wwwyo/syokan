@@ -8,10 +8,11 @@ type MermaidProps = {
 /**
  * ```mermaid フェンスを図として描画する MarkdownDoc 内部部品。
  *
- * mermaid (~数MB) は dynamic import で遅延ロードし、図を含む doc を開いたときだけ取得する
- * (初回 JS バンドルに載せない)。描画は document 依存の client 専用なので、SSR / mount 前は
- * 生のコードを <pre> で見せる (図が出るまで内容が消えない / 解析失敗時もここに留まる)。
- * dark/light は useColorScheme に追従して再描画する。
+ * mermaid (~数MB) は dynamic import し、図を含む doc を描画するまでモジュール評価を遅延する
+ * (起動時に mermaid の重い初期化を走らせない)。ただし単体バイナリ配布では Bun が同一 chunk に
+ * インライン化するため bytes 自体は初回 bundle に含まれる (chunk 分割配信はしない)。
+ * 描画は document 依存の client 専用なので、SSR / mount 前は生のコードを <pre> で見せる
+ * (図が出るまで内容が消えない / 解析失敗時もここに留まる)。dark/light は useColorScheme に追従する。
  */
 export function Mermaid({ chart }: MermaidProps) {
   const scheme = useColorScheme();
