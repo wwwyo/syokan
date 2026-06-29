@@ -8,12 +8,13 @@ import { SnapshotListProvider } from "./snapshotList";
 // localStorage に逃がす (storage 無効環境では throw しうるので握る)。
 const SIDEBAR_STORAGE_KEY = "syokan:sidebar-open";
 
+// 未設定 (初回訪問) は開いた状態を既定にする。明示的に閉じた選択だけ "0" として記憶する。
 function readPersistedOpen(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   try {
-    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 
