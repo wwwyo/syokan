@@ -10,6 +10,16 @@ export {
   formatValidationError,
 } from "./error";
 export {
+  type Settings,
+  type SettingsPatch,
+  DEFAULT_SETTINGS,
+  FONT_VALUES,
+  settingsPatchSchema,
+  settingsSchema,
+  storedSettingsSchema,
+  THEME_VALUES,
+} from "./settings";
+export {
   type SnapshotEnvelope,
   type SnapshotMetadata,
   type SnapshotSummary,

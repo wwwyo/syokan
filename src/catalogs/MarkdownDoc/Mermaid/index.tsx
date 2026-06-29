@@ -28,6 +28,8 @@ export function Mermaid({ chart }: MermaidProps) {
         mermaid.initialize({
           startOnLoad: false,
           theme: scheme === "dark" ? "dark" : "default",
+          // chart は外部 / LLM 由来。ラベル内 HTML を sanitize する (既定だが明示する)
+          securityLevel: "strict",
         });
         const { svg } = await mermaid.render(`mermaid-${id}`, chart);
         if (!cancelled) setSvg(svg);

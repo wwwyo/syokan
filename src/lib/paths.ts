@@ -30,3 +30,9 @@ export function runtimeDir(): string {
 export function templatesDir(): string {
   return env("SYOKAN_TEMPLATES_DIR") ?? join(syokanHome(), "templates");
 }
+
+// 設定は singleton なので dir ではなく単一 file。snapshot data / templates と
+// 同じ XDG config 配下に置く。
+export function settingsFile(): string {
+  return env("SYOKAN_SETTINGS_FILE") ?? join(syokanHome(), "settings.json");
+}

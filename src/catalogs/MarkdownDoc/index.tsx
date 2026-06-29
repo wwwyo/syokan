@@ -111,7 +111,7 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
           ),
           pre: ({ node, children }) => {
             const extracted = extractCodeFromPre(node);
-            if (extracted?.lang === "mermaid") {
+            if (extracted?.lang?.toLowerCase() === "mermaid") {
               // ```mermaid は図として描画する (ハイライトせず Mermaid に委譲)
               return <Mermaid chart={extracted.code} />;
             }
