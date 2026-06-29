@@ -22,6 +22,8 @@ export function Mermaid({ chart }: MermaidProps) {
 
   useEffect(() => {
     let cancelled = false;
+    // svg は再描画完了まで前回値を残す。最頻の再描画はテーマ切替で、ここで svg を
+    // クリアすると一旦 <pre> fallback に落ちてチラつくため、旧図のまま差し替える。
     setFailed(false);
     (async () => {
       try {
