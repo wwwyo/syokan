@@ -33,6 +33,8 @@ function makeDeps(opts: {
   stopped?: boolean;
   // stdin の中身。指定すると pipe 扱い (stdinIsPipe=true) になる
   stdin?: string;
+  // path ごとの stat サイズ (byte)。未指定は 0。
+  fileSizes?: Record<string, number>;
 }): Harness {
   const out: string[] = [];
   const err: string[] = [];
@@ -69,6 +71,7 @@ function makeDeps(opts: {
     },
     // 実 realpath は使わず、決定的に `/abs/<path>` へ解決する (assertion 用)。
     resolvePath: (path) => `/abs/${path}`,
+    fileSize: (path) => opts.fileSizes?.[path] ?? 0,
     readStdin: async () => opts.stdin ?? "",
     stdinIsPipe: () => opts.stdin !== undefined,
     fetch: (async (input: string | URL, init?: RequestInit) => {
@@ -232,6 +235,26 @@ describe("cli main: post (default action)", () => {
     expect(err).toEqual([]);
     const body = calls[0]?.body as { root: { type: string } };
     expect(body.root.type).toBe("FileDoc");
+  });
+
+  test("a file over the display limit is wrapped without reading its contents", async () => {
+    let read = false;
+    const { deps, calls } = makeDeps({
+      fileSizes: { "huge.log": 5 * 1024 * 1024 },
+      respond: () => okResponse(),
+    });
+    // readFile が呼ばれたら記録 (巨大ファイルでは読まれないことを確認)。
+    const orig = deps.readFile;
+    deps.readFile = async (p) => {
+      read = true;
+      return orig(p);
+    };
+    const result = await main(["huge.log"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(read).toBe(false);
+    const body = calls[0]?.body as { root: { type: string; props: { path: string } } };
+    expect(body.root.type).toBe("FileDoc");
+    expect(body.root.props.path).toBe("/abs/huge.log");
   });
 
   test("envelope JSON file is posted as-is (not wrapped, no injected idempotencyKey)", async () => {

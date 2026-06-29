@@ -99,7 +99,7 @@ describe("createFileWatcher", () => {
     watcher.closeAll();
   });
 
-  test("survives temp-write→rename (editor save) by watching the parent dir", async () => {
+  test("survives temp-write→rename (editor save) via re-arm on rename", async () => {
     const p = join(dir, "doc.md");
     await writeFile(p, "v1");
     const watcher = createFileWatcher({ notifyDebounceMs: 5 });
@@ -112,6 +112,31 @@ describe("createFileWatcher", () => {
     await writeFile(tmp, "v2");
     await rename(tmp, p);
     await waitFor(() => hits >= 1);
+    unsub();
+    watcher.closeAll();
+  });
+
+  test("re-arms across a brief gap where the path momentarily disappears", async () => {
+    const p = join(dir, "gap.md");
+    await writeFile(p, "v1");
+    const watcher = createFileWatcher({ notifyDebounceMs: 5, rearmDelayMs: 15 });
+    let hits = 0;
+    const unsub = watcher.subscribe(p, () => {
+      hits += 1;
+    });
+    // watch が確立するのを待つ。
+    await new Promise((r) => setTimeout(r, 60));
+    // unlink → 少し置いて作り直す保存を模す。delete の rename で re-arm され、
+    // 置換先が現れたら張り直す。
+    await rm(p);
+    await new Promise((r) => setTimeout(r, 8));
+    await writeFile(p, "v2");
+    // re-arm が新 inode に張り直すのを待つ。
+    await new Promise((r) => setTimeout(r, 80));
+    // 張り直し後の in-place 書き込みを拾えることが re-arm 成功の証拠。
+    const before = hits;
+    await writeFile(p, "v3");
+    await waitFor(() => hits > before);
     unsub();
     watcher.closeAll();
   });

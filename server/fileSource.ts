@@ -12,6 +12,9 @@ const NOTIFY_DEBOUNCE_MS = 50;
 // rename (inode 差し替え) 後、新 inode に張り直すまでの待ち。rename の隙間で path が
 // 一瞬消えるため少し待ってから再 watch する。
 const REARM_DELAY_MS = 10;
+// 張り直し時に path がまだ無い (rename 進行中等) ら数回リトライする。editor の atomic save は
+// 直後に置換先が現れるので数回で張り直せる。回数上限で「削除のみ」の無限リトライを防ぐ。
+const REARM_MAX_ATTEMPTS = 5;
 
 export type ReadFileFailure =
   | "not_found"
@@ -136,7 +139,7 @@ export function createFileWatcher(opts?: {
     }
   }
 
-  function rearm(path: string): void {
+  function rearm(path: string, attempt = 0): void {
     const entry = entries.get(path);
     if (!entry || entry.rearmTimer) return;
     try {
@@ -150,6 +153,13 @@ export function createFileWatcher(opts?: {
       const cur = entries.get(path);
       if (!cur || cur.subs.size === 0) return;
       cur.watcher = armWatch(path);
+      // まだ張れない (置換先が未出現) なら上限まで再試行する。張れたら変更を取りこぼした
+      // 可能性があるので一度通知して client に取り直させる。
+      if (!cur.watcher) {
+        if (attempt + 1 < REARM_MAX_ATTEMPTS) rearm(path, attempt + 1);
+      } else if (attempt > 0) {
+        notify(path);
+      }
     }, rearmDelayMs);
     entry.rearmTimer.unref?.();
   }

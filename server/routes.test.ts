@@ -569,6 +569,14 @@ describe("file routes", () => {
     expect((await res.json()).error).toBe("missing_path");
   });
 
+  test("GET /api/files with a relative path → 400 invalid_path", async () => {
+    const res = await file.readFile(
+      makeRequest(`/api/files?path=${encodeURIComponent("relative/notes.md")}`),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_path");
+  });
+
   test("GET /api/files for a missing file → 404 not_found", async () => {
     const res = await file.readFile(
       makeRequest(`/api/files?path=${encodeURIComponent(join(fileDir, "x"))}`),

@@ -1,4 +1,5 @@
 import type { BunRequest } from "bun";
+import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { itemSchema } from "@/catalogs";
 import { catalogManifest } from "@/catalogs/manifest";
@@ -211,17 +212,39 @@ export type FileApiHandlers = {
 // ファイル参照ノード (FileDoc) の読み出し + 変更監視。読み出しは GET で本文/エラーを返し、
 // 監視は SSE で「変わった」だけ通知する (内容は client が GET で取り直す)。watcher は
 // server プロセス寿命の runtime state で永続化しない。
+// path query param を取り出して検証する。相対パスは server CWD 依存になり意図しない
+// ファイルを指すため、絶対パスのみ受け付ける (CLI は常に絶対パスを渡す)。
+function readPathParam(
+  req: Request,
+): { ok: true; path: string } | { ok: false; response: Response } {
+  const path = new URL(req.url).searchParams.get("path");
+  if (!path) {
+    return {
+      ok: false,
+      response: jsonError(400, {
+        error: "missing_path",
+        message: "query param 'path' is required",
+      }),
+    };
+  }
+  if (!isAbsolute(path)) {
+    return {
+      ok: false,
+      response: jsonError(400, {
+        error: "invalid_path",
+        message: "path must be absolute",
+      }),
+    };
+  }
+  return { ok: true, path };
+}
+
 export function createFileHandlers(watcher: FileWatcher): FileApiHandlers {
   return {
     async readFile(req) {
-      const path = new URL(req.url).searchParams.get("path");
-      if (!path) {
-        return jsonError(400, {
-          error: "missing_path",
-          message: "query param 'path' is required",
-        });
-      }
-      const result = await readTextFile(path);
+      const param = readPathParam(req);
+      if (!param.ok) return param.response;
+      const result = await readTextFile(param.path);
       if (result.ok) return Response.json({ content: result.content });
       const status = FILE_FAILURE_STATUS[result.reason];
       return jsonError(status, {
@@ -231,13 +254,9 @@ export function createFileHandlers(watcher: FileWatcher): FileApiHandlers {
     },
 
     watchFile(req) {
-      const path = new URL(req.url).searchParams.get("path");
-      if (!path) {
-        return jsonError(400, {
-          error: "missing_path",
-          message: "query param 'path' is required",
-        });
-      }
+      const param = readPathParam(req);
+      if (!param.ok) return param.response;
+      const path = param.path;
       const encoder = new TextEncoder();
       let unsubscribe: (() => void) | undefined;
       const stream = new ReadableStream({

@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -24,6 +25,8 @@ export type CliDeps = {
   readFile: (path: string) => Promise<string>;
   // FileDoc に包むときの絶対パス解決 (canonical 化)。dedup 識別子に使う。
   resolvePath: (path: string) => string;
+  // ファイルサイズ (byte)。stat 不能 (未存在等) は -1。巨大ファイルを読まずに弾くのに使う。
+  fileSize: (path: string) => number;
   // 引数なし起動時の post 入力 (`... | syokan`)
   readStdin: () => Promise<string>;
   // 引数なし起動で stdin が pipe / redirect か (端末でないか) の判定
@@ -208,10 +211,19 @@ function wrapFileDoc(absPath: string): unknown {
   };
 }
 
+// FileDoc の表示上限と揃える。これを超えるファイルは envelope ではありえず、表示もできない
+// ので、CLI が内容を読まずに FileDoc へ包む (巨大 log を丸ごと読んで OOM するのを防ぐ。
+// server 側が too_large を表示する)。
+const SNIFF_SIZE_LIMIT = 2 * 1024 * 1024;
+
 // `syokan <path>`: 内容が envelope schema を満たすなら従来どおり post、満たさなければ
 // 絶対パスに解決して FileDoc に包んで post する (FR-13/14)。markdown/log/txt は JSON.parse
 // に失敗するので自動的に wrap 経路へ入る。
 export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
+  // 表示上限超のファイルは sniff せず即 wrap する (内容を読み込まない)。
+  if (deps.fileSize(file) > SNIFF_SIZE_LIMIT) {
+    return postWithServer(deps, wrapFileDoc(deps.resolvePath(file)));
+  }
   let text: string;
   try {
     text = await deps.readFile(file);
@@ -692,6 +704,13 @@ export async function runCli(): Promise<void> {
         return realpathSync(path);
       } catch {
         return resolve(path);
+      }
+    },
+    fileSize: (path) => {
+      try {
+        return statSync(path).size;
+      } catch {
+        return -1;
       }
     },
     readStdin: () => Bun.stdin.text(),
