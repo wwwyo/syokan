@@ -23,8 +23,10 @@
           var mono = localStorage.getItem("syokan:font-mono");
           if (sans) root.style.setProperty("--app-font-sans", sans);
           if (mono) root.style.setProperty("--app-font-mono", mono);
+          // href は localStorage 由来で改竄/破損し得るので、Google Fonts css2 の
+          // stylesheet だけ注入する (任意の外部 stylesheet を読ませない)。
           var href = localStorage.getItem("syokan:font-href");
-          if (href) {
+          if (href && href.indexOf("https://fonts.googleapis.com/css2?") === 0) {
             var link = document.createElement("link");
             link.rel = "stylesheet";
             link.href = href;
