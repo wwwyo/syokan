@@ -85,20 +85,21 @@ export function FileDocBody({
   return <PlainText body={state.content} />;
 }
 
-function reasonFromStatus(status: number, body: unknown): FileErrorReason {
+// body が読めなくても status だけで理由を引けるようにする (本文 parse 失敗で
+// 413/415 等の具体的理由が generic に落ちるのを防ぐ)。
+const STATUS_REASON: Record<number, FileErrorReason> = {
+  400: "missing_path",
+  403: "permission_denied",
+  404: "not_found",
+  413: "too_large",
+  415: "not_text",
+  422: "not_regular_file",
+};
+
+export function reasonFromStatus(status: number, body: unknown): FileErrorReason {
   const fromBody = (body as { error?: string } | null)?.error;
-  if (
-    fromBody === "not_found" ||
-    fromBody === "not_regular_file" ||
-    fromBody === "permission_denied" ||
-    fromBody === "too_large" ||
-    fromBody === "not_text" ||
-    fromBody === "missing_path"
-  ) {
-    return fromBody;
-  }
-  if (status === 404) return "not_found";
-  return "error";
+  if (fromBody && fromBody in ERROR_MESSAGE) return fromBody as FileErrorReason;
+  return STATUS_REASON[status] ?? "error";
 }
 
 /**
@@ -146,16 +147,15 @@ export function FileDoc({ path }: FileDocProps) {
 
     void load();
 
-    // SSE 接続 = 購読。change で取り直し、再接続 (2 回目以降の open) でも取り直して
-    // サーバ再起動後の最新内容を復元する。
+    // SSE 接続 = 購読。change で取り直す。さらに (再)接続のたびに取り直して、初回 fetch が
+    // 失敗 (server 一時ダウン) していても最初に接続できた時点で復帰させ、再接続時は切断中に
+    // 見落とした変更も回収する (サーバ再起動後の最新内容復元を含む)。重複 load は loadId で畳む。
     const source = new EventSource(`/api/files/watch?${query}`);
-    let opened = false;
     source.addEventListener("change", () => {
       void load();
     });
     source.addEventListener("open", () => {
-      if (opened) void load();
-      opened = true;
+      void load();
     });
 
     return () => {

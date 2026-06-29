@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { FileDocBody, fileDocPropsSchema } from ".";
+import { FileDocBody, fileDocPropsSchema, reasonFromStatus } from ".";
 
 function html(path: string, state: Parameters<typeof FileDocBody>[0]["state"]) {
   return renderToString(createElement(FileDocBody, { path, state }));
@@ -15,6 +15,23 @@ describe("fileDocPropsSchema", () => {
     expect(
       fileDocPropsSchema.safeParse({ path: "/a", as: "markdown" }).success,
     ).toBe(false);
+  });
+});
+
+describe("reasonFromStatus", () => {
+  test("prefers a known body.error", () => {
+    expect(reasonFromStatus(500, { error: "not_text" })).toBe("not_text");
+  });
+
+  test("falls back to the status when the body is unreadable", () => {
+    expect(reasonFromStatus(413, null)).toBe("too_large");
+    expect(reasonFromStatus(415, null)).toBe("not_text");
+    expect(reasonFromStatus(422, null)).toBe("not_regular_file");
+    expect(reasonFromStatus(403, null)).toBe("permission_denied");
+  });
+
+  test("unknown status → generic error", () => {
+    expect(reasonFromStatus(500, null)).toBe("error");
   });
 });
 

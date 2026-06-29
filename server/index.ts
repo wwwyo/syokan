@@ -72,6 +72,9 @@ export function startServer() {
     },
     development: process.env.NODE_ENV !== "production",
     port: resolvePort(),
+    // localhost のみに bind する。任意ファイルを読む /api/files を LAN に晒さないため
+    // (PRD の信頼境界 = localhost bind ＋ ユーザー権限)。
+    hostname: "127.0.0.1",
   });
   console.log(`syokan listening on ${server.url}`);
   console.log(`snapshot store: ${dataDir}`);
