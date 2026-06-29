@@ -9,6 +9,12 @@ import {
   settingPatchSchema,
   snapshotMetadataSchema,
 } from "@/schema";
+import {
+  type FileWatcher,
+  FILE_SIZE_LIMIT,
+  type ReadFileFailure,
+  readTextFile,
+} from "./fileSource";
 import { type SettingStore } from "./setting";
 import { type SnapshotStore } from "./store";
 import { type TemplateStore } from "./templates";
@@ -184,6 +190,79 @@ export function createTemplateHandlers(
         });
       }
       return Response.json({ ok: true });
+    },
+  };
+}
+
+// 失敗理由を HTTP ステータスに対応づける。client はステータスで状態を分岐する (FR-9〜12)。
+const FILE_FAILURE_STATUS: Record<ReadFileFailure, number> = {
+  not_found: 404,
+  not_regular_file: 422,
+  permission_denied: 403,
+  too_large: 413,
+  not_text: 415,
+};
+
+export type FileApiHandlers = {
+  readFile: (req: Request) => Promise<Response>;
+  watchFile: (req: Request) => Response;
+};
+
+// ファイル参照ノード (FileDoc) の読み出し + 変更監視。読み出しは GET で本文/エラーを返し、
+// 監視は SSE で「変わった」だけ通知する (内容は client が GET で取り直す)。watcher は
+// server プロセス寿命の runtime state で永続化しない。
+export function createFileHandlers(watcher: FileWatcher): FileApiHandlers {
+  return {
+    async readFile(req) {
+      const path = new URL(req.url).searchParams.get("path");
+      if (!path) {
+        return jsonError(400, {
+          error: "missing_path",
+          message: "query param 'path' is required",
+        });
+      }
+      const result = await readTextFile(path);
+      if (result.ok) return Response.json({ content: result.content });
+      const status = FILE_FAILURE_STATUS[result.reason];
+      return jsonError(status, {
+        error: result.reason,
+        ...(result.reason === "too_large" ? { limit: FILE_SIZE_LIMIT } : {}),
+      });
+    },
+
+    watchFile(req) {
+      const path = new URL(req.url).searchParams.get("path");
+      if (!path) {
+        return jsonError(400, {
+          error: "missing_path",
+          message: "query param 'path' is required",
+        });
+      }
+      const encoder = new TextEncoder();
+      let unsubscribe: (() => void) | undefined;
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(": connected\n\n"));
+          unsubscribe = watcher.subscribe(path, () => {
+            try {
+              controller.enqueue(encoder.encode("event: change\ndata: {}\n\n"));
+            } catch {
+              // client が既に切断 (enqueue 不可)。cancel が解除を担う。
+            }
+          });
+        },
+        // client 切断時に Bun が cancel を呼ぶ → 購読解除 (= watcher の refcount--)。
+        cancel() {
+          unsubscribe?.();
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+          connection: "keep-alive",
+        },
+      });
     },
   };
 }

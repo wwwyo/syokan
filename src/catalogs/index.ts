@@ -5,6 +5,7 @@ import { Badge, badgePropsSchema } from "./Badge";
 import { Card, cardPropsSchema } from "./Card";
 import { Code, codePropsSchema } from "./Code";
 import { Diff, diffPropsSchema } from "./Diff";
+import { FileDoc, fileDocPropsSchema } from "./FileDoc";
 import { Heading, headingPropsSchema } from "./Heading";
 import { Link, linkPropsSchema } from "./Link";
 import { MarkdownDoc, markdownDocPropsSchema } from "./MarkdownDoc";
@@ -67,6 +68,9 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Diff", diffPropsSchema, Diff, { childrenTypes: [] }),
   defineViewComponent("Code", codePropsSchema, Code, { childrenTypes: [] }),
   defineViewComponent("Badge", badgePropsSchema, Badge, { childrenTypes: [] }),
+  defineViewComponent("FileDoc", fileDocPropsSchema, FileDoc, {
+    childrenTypes: [],
+  }),
 ];
 
 const catalog = createCatalog(entries.map((e) => e.spec));

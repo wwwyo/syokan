@@ -67,6 +67,8 @@ function makeDeps(opts: {
       }
       return content;
     },
+    // 実 realpath は使わず、決定的に `/abs/<path>` へ解決する (assertion 用)。
+    resolvePath: (path) => `/abs/${path}`,
     readStdin: async () => opts.stdin ?? "",
     stdinIsPipe: () => opts.stdin !== undefined,
     fetch: (async (input: string | URL, init?: RequestInit) => {
@@ -177,15 +179,89 @@ describe("cli main: post (default action)", () => {
     expect(body.metadata.source.label).toBe("daily-rss");
   });
 
-  test("invalid JSON: invalid_json error to stderr, exit non-zero", async () => {
+  test("invalid JSON via stdin: invalid_json error to stderr, exit non-zero", async () => {
     const { deps, err } = makeDeps({
-      files: { "items.json": "{not json" },
+      stdin: "{not json",
       respond: () => okResponse(),
     });
-    const result = await main(["items.json"], deps);
+    const result = await main([], deps);
     expect(result.exitCode).toBe(1);
     const parsed = JSON.parse(err[0] as string) as { error: string };
     expect(parsed.error).toBe("invalid_json");
+  });
+
+  test("non-JSON file is wrapped as a live FileDoc (title/label/key = basename/abs path)", async () => {
+    const { deps, out, calls } = makeDeps({
+      files: { "notes.md": "# 議事録\n\n- 決定事項" },
+      respond: () => okResponse("md-1"),
+    });
+    const result = await main(["notes.md"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(out).toEqual(["http://localhost:5173/snapshots/md-1"]);
+    const body = calls[0]?.body as {
+      title: string;
+      root: { type: string; props: { path: string } };
+      metadata: { source: { label: string } };
+      idempotencyKey: string;
+    };
+    expect(body.root.type).toBe("FileDoc");
+    expect(body.root.props.path).toBe("/abs/notes.md");
+    expect(body.title).toBe("notes.md");
+    expect(body.metadata.source.label).toBe("notes.md");
+    expect(body.idempotencyKey).toBe("filedoc:/abs/notes.md");
+  });
+
+  test("JSON file without an envelope root is wrapped as a FileDoc", async () => {
+    const { deps, calls } = makeDeps({
+      files: { "config.json": JSON.stringify({ port: 5173, name: "x" }) },
+      respond: () => okResponse(),
+    });
+    const result = await main(["config.json"], deps);
+    expect(result.exitCode).toBe(0);
+    const body = calls[0]?.body as { root: { type: string } };
+    expect(body.root.type).toBe("FileDoc");
+  });
+
+  test("malformed JSON file is wrapped as a FileDoc (no invalid_json error)", async () => {
+    const { deps, calls, err } = makeDeps({
+      files: { "broken.json": "{not json" },
+      respond: () => okResponse(),
+    });
+    const result = await main(["broken.json"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(err).toEqual([]);
+    const body = calls[0]?.body as { root: { type: string } };
+    expect(body.root.type).toBe("FileDoc");
+  });
+
+  test("envelope JSON file is posted as-is (not wrapped, no injected idempotencyKey)", async () => {
+    const { deps, calls } = makeDeps({
+      files: {
+        "view.json": JSON.stringify({
+          root: { type: "Heading", props: { text: "T" } },
+        }),
+      },
+      respond: () => okResponse(),
+    });
+    await main(["view.json"], deps);
+    const body = calls[0]?.body as {
+      root: { type: string };
+      idempotencyKey?: string;
+    };
+    expect(body.root.type).toBe("Heading");
+    expect(body.idempotencyKey).toBeUndefined();
+  });
+
+  test("re-posting the same path yields a stable idempotencyKey", async () => {
+    const { deps, calls } = makeDeps({
+      files: { "log.log": "line 1" },
+      respond: () => okResponse(),
+    });
+    await main(["log.log"], deps);
+    await main(["log.log"], deps);
+    const a = calls[0]?.body as { idempotencyKey: string };
+    const b = calls[1]?.body as { idempotencyKey: string };
+    expect(a.idempotencyKey).toBe(b.idempotencyKey);
   });
 
   test("server validation error: error JSON to stderr, exit non-zero", async () => {

@@ -4,11 +4,12 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runtimeDir } from "@/lib/paths";
 // compile 時に JSON ごとバイナリへ埋め込まれる (= そのバイナリのバージョン)
@@ -21,6 +22,8 @@ export type StopResult = { stopped: boolean; pid?: number };
 export type CliDeps = {
   fetch: typeof fetch;
   readFile: (path: string) => Promise<string>;
+  // FileDoc に包むときの絶対パス解決 (canonical 化)。dedup 識別子に使う。
+  resolvePath: (path: string) => string;
   // 引数なし起動時の post 入力 (`... | syokan`)
   readStdin: () => Promise<string>;
   // 引数なし起動で stdin が pipe / redirect か (端末でないか) の判定
@@ -178,6 +181,36 @@ async function postText(text: string, deps: CliDeps): Promise<CliResult> {
   return postWithServer(deps, payload);
 }
 
+// envelope か否かの軽量判定。catalog の full schema を import すると React component 群が
+// CLI バンドルに混入するため使わない。`root` が Item 形 (`{ type: string, ... }`) かだけを見る。
+// 壊れた envelope はここを通し、server の strict 検証に validation_failed を返させる。
+function looksLikeEnvelope(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const root = (value as { root?: unknown }).root;
+  return (
+    typeof root === "object" &&
+    root !== null &&
+    typeof (root as { type?: unknown }).type === "string"
+  );
+}
+
+// ファイルを FileDoc 1 ノードの envelope に包む。title / source.label は basename、
+// dedup 識別子 (idempotencyKey) は絶対パスとする (FR-15〜17)。
+function wrapFileDoc(absPath: string): unknown {
+  const name = basename(absPath);
+  return {
+    title: name,
+    root: { type: "FileDoc", props: { path: absPath } },
+    metadata: { source: { label: name } },
+    idempotencyKey: `filedoc:${absPath}`,
+  };
+}
+
+// `syokan <path>`: 内容が envelope schema を満たすなら従来どおり post、満たさなければ
+// 絶対パスに解決して FileDoc に包んで post する (FR-13/14)。markdown/log/txt は JSON.parse
+// に失敗するので自動的に wrap 経路へ入る。
 export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
   let text: string;
   try {
@@ -186,7 +219,17 @@ export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
     deps.stderr(JSON.stringify({ error: "read_failed", message: String(err) }));
     return { exitCode: 1 };
   }
-  return postText(text, deps);
+  let parsed: unknown;
+  let parsedOk = true;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    parsedOk = false;
+  }
+  if (parsedOk && looksLikeEnvelope(parsed)) {
+    return postWithServer(deps, parsed);
+  }
+  return postWithServer(deps, wrapFileDoc(deps.resolvePath(file)));
 }
 
 // open に渡された引数を閲覧 URL に正規化する。post の出力 (フル URL / `/snapshots/:id`)
@@ -439,8 +482,9 @@ export const helpManifest = {
   usage: "syokan [command] [args]   |   <json> | syokan",
   forms: [
     {
-      usage: "syokan <file.json>",
-      summary: "Post a snapshot envelope from a file; prints the view URL",
+      usage: "syokan <file>",
+      summary:
+        "Post a file: envelope JSON is posted as-is; any other file (md/txt/log/json) is wrapped as a live FileDoc that follows edits. Prints the view URL",
     },
     { usage: "<json> | syokan", summary: "Post a snapshot envelope from stdin" },
     {
@@ -641,6 +685,15 @@ export async function runCli(): Promise<void> {
   const deps: CliDeps = {
     fetch: globalThis.fetch,
     readFile: (path) => readFile(path, "utf8"),
+    // canonical 化 (symlink/`..`/相対 を解決)。未存在 (realpath が ENOENT) は resolve に
+    // 落として post は通し、view 側で not_found を表示させる。
+    resolvePath: (path) => {
+      try {
+        return realpathSync(path);
+      } catch {
+        return resolve(path);
+      }
+    },
     readStdin: () => Bun.stdin.text(),
     stdinIsPipe: () => !process.stdin.isTTY,
     stdout: (line) => {
