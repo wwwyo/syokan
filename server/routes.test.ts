@@ -4,13 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   createApiHandlers,
-  createSettingsHandlers,
+  createSettingHandlers,
   createTemplateHandlers,
   getCatalog,
 } from "./routes";
-import { SettingsStore } from "./settings";
-import { SnapshotStore } from "./store";
-import { TemplateStore } from "./templates";
+import { createSettingStore } from "./setting";
+import { createSnapshotStore, type SnapshotStore } from "./store";
+import { createTemplateStore } from "./templates";
 
 const baseInput = {
   root: {
@@ -39,7 +39,7 @@ describe("api routes", () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "syokan-api-"));
-    store = new SnapshotStore(dir);
+    store = createSnapshotStore(dir);
     api = createApiHandlers(store);
   });
 
@@ -167,7 +167,7 @@ describe("api routes", () => {
     const { id } = (await post.json()) as { id: string };
 
     // simulate a fresh process by constructing a new store over the same dir
-    const next = new SnapshotStore(dir);
+    const next = createSnapshotStore(dir);
     const nextApi = createApiHandlers(next);
     const res = await nextApi.getSnapshot(
       makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
@@ -338,7 +338,7 @@ describe("template routes", () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "syokan-tmpl-api-"));
-    templates = createTemplateHandlers(new TemplateStore(dir));
+    templates = createTemplateHandlers(createTemplateStore(dir));
   });
 
   afterEach(async () => {
@@ -438,14 +438,14 @@ describe("template routes", () => {
   });
 });
 
-describe("settings routes", () => {
+describe("setting routes", () => {
   let dir: string;
-  let settings: ReturnType<typeof createSettingsHandlers>;
+  let setting: ReturnType<typeof createSettingHandlers>;
 
   beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), "syokan-settings-api-"));
-    settings = createSettingsHandlers(
-      new SettingsStore(join(dir, "settings.json")),
+    dir = await mkdtemp(join(tmpdir(), "syokan-setting-api-"));
+    setting = createSettingHandlers(
+      createSettingStore(join(dir, "settings.json")),
     );
   });
 
@@ -454,13 +454,13 @@ describe("settings routes", () => {
   });
 
   test("GET returns defaults before anything is written", async () => {
-    const res = await settings.getSettings();
+    const res = await setting.getSetting();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ theme: "system", font: "current" });
+    expect(await res.json()).toEqual({ theme: "system", font: "system" });
   });
 
   test("PUT applies a partial patch and GET reflects it", async () => {
-    const put = await settings.updateSettings(
+    const put = await setting.updateSetting(
       makeRequest("/api/settings", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -468,14 +468,14 @@ describe("settings routes", () => {
       }),
     );
     expect(put.status).toBe(200);
-    expect(await put.json()).toEqual({ theme: "dark", font: "current" });
+    expect(await put.json()).toEqual({ theme: "dark", font: "system" });
 
-    const get = await settings.getSettings();
-    expect(await get.json()).toEqual({ theme: "dark", font: "current" });
+    const get = await setting.getSetting();
+    expect(await get.json()).toEqual({ theme: "dark", font: "system" });
   });
 
   test("PUT returns 400 on unknown key", async () => {
-    const res = await settings.updateSettings(
+    const res = await setting.updateSetting(
       makeRequest("/api/settings", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -488,7 +488,7 @@ describe("settings routes", () => {
   });
 
   test("PUT returns 400 on invalid enum value", async () => {
-    const res = await settings.updateSettings(
+    const res = await setting.updateSetting(
       makeRequest("/api/settings", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -499,7 +499,7 @@ describe("settings routes", () => {
   });
 
   test("PUT returns 400 for non-JSON body", async () => {
-    const res = await settings.updateSettings(
+    const res = await setting.updateSetting(
       makeRequest("/api/settings", {
         method: "PUT",
         headers: { "content-type": "application/json" },

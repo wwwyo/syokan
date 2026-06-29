@@ -1,7 +1,7 @@
 import { serve } from "bun";
 import {
   dataDir as resolveDataDir,
-  settingsFile,
+  settingFile,
   templatesDir,
 } from "@/lib/paths";
 import index from "../index.html";
@@ -9,13 +9,13 @@ import index from "../index.html";
 import pkg from "../package.json";
 import {
   createApiHandlers,
-  createSettingsHandlers,
+  createSettingHandlers,
   createTemplateHandlers,
   getCatalog,
 } from "./routes";
-import { SettingsStore } from "./settings";
-import { SnapshotStore } from "./store";
-import { TemplateStore } from "./templates";
+import { createSettingStore } from "./setting";
+import { createSnapshotStore } from "./store";
+import { createTemplateStore } from "./templates";
 
 const DEFAULT_PORT = 5173;
 
@@ -29,10 +29,10 @@ function resolvePort(): number {
 // import で両立する)。entry.ts (単体バイナリ) と直接起動の両方から呼ばれる。
 export function startServer() {
   const dataDir = resolveDataDir();
-  const store = new SnapshotStore(dataDir);
+  const store = createSnapshotStore(dataDir);
   const api = createApiHandlers(store);
-  const templates = createTemplateHandlers(new TemplateStore(templatesDir()));
-  const settings = createSettingsHandlers(new SettingsStore(settingsFile()));
+  const templates = createTemplateHandlers(createTemplateStore(templatesDir()));
+  const setting = createSettingHandlers(createSettingStore(settingFile()));
   const server = serve({
     routes: {
       "/api/health": () => Response.json({ ok: true, version: pkg.version }),
@@ -55,8 +55,8 @@ export function startServer() {
         DELETE: templates.deleteTemplate,
       },
       "/api/settings": {
-        GET: settings.getSettings,
-        PUT: settings.updateSettings,
+        GET: setting.getSetting,
+        PUT: setting.updateSetting,
       },
       // static > param > wildcard 順で評価されるので上の API が優先される。
       "/api/*": () => Response.json({ error: "not_found" }, { status: 404 }),

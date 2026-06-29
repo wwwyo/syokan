@@ -22,22 +22,23 @@ export type TemplateInput = {
 // json を落とした一覧用サマリ。CLI / sidebar が title・description だけ見たいとき用。
 export type TemplateSummary = Omit<Template, "json">;
 
+export type TemplateStore = {
+  add: (input: TemplateInput) => Promise<Template>;
+  get: (id: string) => Promise<Template | undefined>;
+  list: () => Promise<TemplateSummary[]>;
+  remove: (id: string) => Promise<boolean>;
+};
+
 // ファイル名 = id。id を path に結合する前に UUID 形式だけに制限し、
 // `..` や `/` による traversal を構造的に排除する。
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-export class TemplateStore {
-  private readonly dir: string;
-
-  constructor(dir: string) {
-    this.dir = dir;
+export function createTemplateStore(dir: string): TemplateStore {
+  function file(id: string): string {
+    return join(dir, `${id}.json`);
   }
 
-  private file(id: string): string {
-    return join(this.dir, `${id}.json`);
-  }
-
-  async add(input: TemplateInput): Promise<Template> {
+  async function add(input: TemplateInput): Promise<Template> {
     const template: Template = {
       id: crypto.randomUUID(),
       title: input.title,
@@ -47,14 +48,14 @@ export class TemplateStore {
         : {}),
       json: input.json,
     };
-    await writeJsonAtomic(this.file(template.id), template);
+    await writeJsonAtomic(file(template.id), template);
     return template;
   }
 
-  async get(id: string): Promise<Template | undefined> {
+  async function get(id: string): Promise<Template | undefined> {
     if (!ID_RE.test(id)) return undefined;
     try {
-      const text = await readFile(this.file(id), "utf8");
+      const text = await readFile(file(id), "utf8");
       return JSON.parse(text) as Template;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
@@ -62,10 +63,10 @@ export class TemplateStore {
     }
   }
 
-  async list(): Promise<TemplateSummary[]> {
+  async function list(): Promise<TemplateSummary[]> {
     let names: string[];
     try {
-      names = await readdir(this.dir);
+      names = await readdir(dir);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
@@ -74,7 +75,7 @@ export class TemplateStore {
     for (const name of names) {
       if (!name.endsWith(".json")) continue;
       try {
-        const text = await readFile(join(this.dir, name), "utf8");
+        const text = await readFile(join(dir, name), "utf8");
         const parsed = JSON.parse(text) as Partial<Template>;
         // 手置きの foreign file 等、shape が崩れたものは sort で落ちる前に除外する
         // (壊れた JSON と同じ扱い)。id/title/createdAt が string でなければ skip。
@@ -101,14 +102,16 @@ export class TemplateStore {
     return summaries;
   }
 
-  async remove(id: string): Promise<boolean> {
+  async function remove(id: string): Promise<boolean> {
     if (!ID_RE.test(id)) return false;
     try {
-      await rm(this.file(id));
+      await rm(file(id));
       return true;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
       throw err;
     }
   }
+
+  return { add, get, list, remove };
 }

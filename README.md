@@ -81,7 +81,7 @@ GET /api/settings              # { theme, font }（未設定なら既定値）
 PUT /api/settings              # 部分更新（送ったキーだけ上書き）。未知キー / 不正値は 400
 ```
 
-`theme`: `system` `light` `dark` / `font`: `current` `geist` `system`。値の SSOT は `src/schema/settings.ts`。
+`theme`: `system` `light` `dark`（SSOT: `src/schema/setting.ts`）。`font`: Google Fonts プリセットの識別子（既定 `system`）。一覧と追加は `src/lib/fonts.ts` が SSOT で、ここに 1 エントリ足すだけでフォントが増える（実フォントは選択時に `<link>` を動的読込し、`--app-font-*` を書き換える。`styles.css` / `index.html` は触らない）。
 
 ## ビルド (単体バイナリ)
 

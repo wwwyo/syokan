@@ -112,7 +112,7 @@ syokan/
 │   ├── lib/             # 横断 util (paths=~/.config/syokan 解決 / cn / date / code / snapshots ...)
 │   ├── catalogs/        # ★ LLM が JSON で投げる公開 type。index.ts が registry、manifest.ts が GET /api/catalog 用に JSON Schema 化
 │   └── components/      # catalog 非登録の内部 UI (ui=shadcn / AppShell / AppSidebar / PageLayout ...)
-├── server/             # Bun.serve。routes.ts=/api/{snapshots,catalog,templates,settings}、store.ts=snapshot (ephemeral)、templates.ts=テンプレ保管 (永続)、settings.ts=表示設定 singleton (永続)
+├── server/             # Bun.serve。routes.ts=/api/{snapshots,catalog,templates,settings}、store.ts=snapshot (ephemeral)、templates.ts=テンプレ保管 (永続)、setting.ts=表示設定 singleton (永続)
 └── .storybook/         # catalog 視覚レビュー基盤
 ```
 
