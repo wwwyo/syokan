@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TemplateStore } from "./templates";
+import { createTemplateStore, type TemplateStore } from "./templates";
 
 describe("TemplateStore", () => {
   let dir: string;
@@ -10,7 +10,7 @@ describe("TemplateStore", () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "syokan-tmpl-"));
-    store = new TemplateStore(dir);
+    store = createTemplateStore(dir);
   });
 
   afterEach(async () => {
@@ -39,7 +39,7 @@ describe("TemplateStore", () => {
   });
 
   test("list returns [] when the dir does not exist yet", async () => {
-    const empty = new TemplateStore(join(dir, "nope"));
+    const empty = createTemplateStore(join(dir, "nope"));
     expect(await empty.list()).toEqual([]);
   });
 

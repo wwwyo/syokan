@@ -87,11 +87,11 @@ export function Home() {
               </div>
               <ThemeSelect />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-medium">フォント</p>
                 <p className="text-sm text-muted-foreground">
-                  表示フォントを Geist / Moralerspace / システムから選べる。
+                  表示フォントを Google Fonts のプリセットから検索して選べる。
                 </p>
               </div>
               <FontSelect />

@@ -7,6 +7,8 @@
     <script>
       // FOUC 防止: React 描画前に保存済み theme/font を <html> へ当てる。
       // 規則は src/lib/{theme,font}.ts と揃える (import できないため最小限を複製)。
+      // font は fonts.ts のプリセット表を参照できないので、解決済みスタック / href を
+      // localStorage キャッシュ (font.ts が書く) から読んで直接適用する。
       (function () {
         try {
           var t = localStorage.getItem("syokan:theme");
@@ -15,18 +17,27 @@
             ((!t || t === "system") &&
               matchMedia("(prefers-color-scheme: dark)").matches);
           document.documentElement.classList.toggle("dark", dark);
-          var f = localStorage.getItem("syokan:font");
-          document.documentElement.dataset.font =
-            f === "geist" || f === "system" ? f : "current";
+
+          var root = document.documentElement;
+          var sans = localStorage.getItem("syokan:font-sans");
+          var mono = localStorage.getItem("syokan:font-mono");
+          if (sans) root.style.setProperty("--app-font-sans", sans);
+          if (mono) root.style.setProperty("--app-font-mono", mono);
+          // href は localStorage 由来で改竄/破損し得るので、Google Fonts css2 の
+          // stylesheet だけ注入する (任意の外部 stylesheet を読ませない)。
+          var href = localStorage.getItem("syokan:font-href");
+          if (href && href.indexOf("https://fonts.googleapis.com/css2?") === 0) {
+            var link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = href;
+            link.dataset.syokanFont = "";
+            document.head.appendChild(link);
+          }
         } catch (e) {}
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="./src/styles.css" />
   </head>
   <body>

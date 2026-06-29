@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { type Settings, THEME_VALUES } from "@/schema";
-import { fetchSettings, putSettings } from "./settings";
+import { type Setting, THEME_VALUES } from "@/schema";
+import { fetchSetting, putSetting } from "./setting";
 
-export type Theme = Settings["theme"];
+export type Theme = Setting["theme"];
 
 // index.html の inline script (FOUC 防止) と同じ key。両者は同じ規則で動く必要がある。
 export const THEME_STORAGE_KEY = "syokan:theme";
@@ -65,7 +65,7 @@ export function useTheme(): { theme: Theme; setTheme: (theme: Theme) => void } {
 
   useEffect(() => {
     let alive = true;
-    fetchSettings().then((s) => {
+    fetchSetting().then((s) => {
       if (!alive || !s || s.theme === getStoredTheme()) return;
       persistTheme(s.theme);
       setThemeState(s.theme);
@@ -89,7 +89,7 @@ export function useTheme(): { theme: Theme; setTheme: (theme: Theme) => void } {
   const setTheme = useCallback((next: Theme) => {
     persistTheme(next);
     setThemeState(next);
-    void putSettings({ theme: next });
+    void putSetting({ theme: next });
   }, []);
 
   return { theme, setTheme };

@@ -2,13 +2,14 @@ import type { BunRequest } from "bun";
 import { z } from "zod";
 import { itemSchema } from "@/catalogs";
 import { catalogManifest } from "@/catalogs/manifest";
+import { isFontValue } from "@/lib/fonts";
 import {
   CURRENT_SCHEMA_VERSION,
   formatValidationError,
-  settingsPatchSchema,
+  settingPatchSchema,
   snapshotMetadataSchema,
 } from "@/schema";
-import { type SettingsStore } from "./settings";
+import { type SettingStore } from "./setting";
 import { type SnapshotStore } from "./store";
 import { type TemplateStore } from "./templates";
 
@@ -187,32 +188,38 @@ export function createTemplateHandlers(
   };
 }
 
-export type SettingsApiHandlers = {
-  getSettings: () => Promise<Response>;
-  updateSettings: (req: Request) => Promise<Response>;
+export type SettingApiHandlers = {
+  getSetting: () => Promise<Response>;
+  updateSetting: (req: Request) => Promise<Response>;
 };
 
-export function createSettingsHandlers(
-  store: SettingsStore,
-): SettingsApiHandlers {
+export function createSettingHandlers(store: SettingStore): SettingApiHandlers {
   return {
-    async getSettings() {
+    async getSetting() {
       return Response.json(await store.get());
     },
 
-    async updateSettings(req) {
+    async updateSetting(req) {
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
-      const parsed = settingsPatchSchema.safeParse(body.value);
+      const parsed = settingPatchSchema.safeParse(body.value);
       if (!parsed.success) {
         return jsonError(400, {
           error: "validation_failed",
-          message: "Request body does not satisfy the settings schema",
+          message: "Request body does not satisfy the setting schema",
           issues: formatValidationError(parsed.error),
         });
       }
-      const settings = await store.update(parsed.data);
-      return Response.json(settings);
+      // schema は font を識別子の形だけで通すので、preset 表 (SSOT) の存在確認は
+      // ここで行う。theme(enum) と対称に、未知 font は永続させず 400 を返す。
+      if (parsed.data.font !== undefined && !isFontValue(parsed.data.font)) {
+        return jsonError(400, {
+          error: "validation_failed",
+          message: `Unknown font preset: ${parsed.data.font}`,
+        });
+      }
+      const setting = await store.update(parsed.data);
+      return Response.json(setting);
     },
   };
 }

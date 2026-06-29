@@ -24,22 +24,13 @@
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
 
-  /* 表示フォント。<html data-font> (FontSelect / 描画前 inline script) で切替。既定は Moralerspace。 */
-  --app-font-sans: "Moralerspace Argon", "Source Han Code JP",
-    "源ノ角ゴシック Code JP", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --app-font-mono: "Moralerspace Argon", "Source Han Code JP",
-    "源ノ角ゴシック Code JP", ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-:root[data-font="geist"] {
-  --app-font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
-  --app-font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
-:root[data-font="system"] {
+  /* 表示フォントの既定 (= system)。JS 起動前 / フォント未選択時のフォールバック。
+     実際の切替はプリセット表 (src/lib/fonts.ts) が --app-font-* を直接書き換える。 */
   --app-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --app-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    "Helvetica Neue", Arial, "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI",
+    Meiryo, sans-serif;
+  --app-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Hiragino Sans", "Noto Sans JP", monospace;
 }
 
 .dark {
@@ -64,7 +55,7 @@
 }
 
 @theme inline {
-  /* 実フォントは :root の --app-font-* (data-font で切替) に委譲する */
+  /* 実フォントは :root の --app-font-* (fonts.ts が JS で書換) に委譲する */
   --font-sans: var(--app-font-sans);
   --font-mono: var(--app-font-mono);
   --color-background: var(--background);

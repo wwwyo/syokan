@@ -10,15 +10,14 @@ export {
   formatValidationError,
 } from "./error";
 export {
-  type Settings,
-  type SettingsPatch,
-  DEFAULT_SETTINGS,
-  FONT_VALUES,
-  settingsPatchSchema,
-  settingsSchema,
-  storedSettingsSchema,
+  type Setting,
+  type SettingPatch,
+  DEFAULT_SETTING,
+  settingPatchSchema,
+  settingSchema,
+  storedSettingSchema,
   THEME_VALUES,
-} from "./settings";
+} from "./setting";
 export {
   type SnapshotEnvelope,
   type SnapshotMetadata,

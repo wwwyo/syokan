@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Item } from "@/schema";
-import { SnapshotStore } from "./store";
+import { createSnapshotStore, type SnapshotStore } from "./store";
 
 const sampleRoot: Item = { type: "Stack", props: {} };
 
@@ -13,7 +13,7 @@ describe("SnapshotStore", () => {
 
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "syokan-store-"));
-    store = new SnapshotStore(dir);
+    store = createSnapshotStore(dir);
   });
 
   afterEach(async () => {
@@ -42,7 +42,7 @@ describe("SnapshotStore", () => {
 
   test("survives a 'restart' (fresh store instance over the same file)", async () => {
     const env = await store.create({ root: sampleRoot });
-    const next = new SnapshotStore(dir);
+    const next = createSnapshotStore(dir);
     const got = await next.get(env.id);
     expect(got?.id).toBe(env.id);
   });
@@ -146,15 +146,15 @@ describe("SnapshotStore", () => {
   });
 
   test("concurrent creates across separate instances all persist (cross-process lock)", async () => {
-    const a = new SnapshotStore(dir);
-    const b = new SnapshotStore(dir);
+    const a = createSnapshotStore(dir);
+    const b = createSnapshotStore(dir);
     await Promise.all([
       a.create({ root: sampleRoot }),
       b.create({ root: sampleRoot }),
       a.create({ root: sampleRoot }),
       b.create({ root: sampleRoot }),
     ]);
-    const items = await new SnapshotStore(dir).list();
+    const items = await createSnapshotStore(dir).list();
     expect(items.length).toBe(4);
   });
 });

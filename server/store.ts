@@ -21,18 +21,65 @@ export type CreateInput = {
   idempotencyKey?: string;
 };
 
+export type SnapshotStore = {
+  create: (input: CreateInput) => Promise<SnapshotEnvelope>;
+  get: (id: string) => Promise<SnapshotEnvelope | undefined>;
+  list: () => Promise<SnapshotSummary[]>;
+  delete: (id: string) => Promise<boolean>;
+};
+
 const LOCK_TIMEOUT_MS = 5_000;
 
-export class SnapshotStore {
-  private readonly file: string;
-  private readonly lockFile: string;
+export function createSnapshotStore(dataDir: string): SnapshotStore {
+  const file = join(dataDir, "snapshots.json");
+  const lockFile = `${file}.lock`;
   // 書き込み (create/delete) を 1 プロセス内で直列化する (in-process mutex)。
   // read-modify-write の interleave による idempotency 違反 / lost update を防ぐ。
-  private writeChain: Promise<unknown> = Promise.resolve();
+  let writeChain: Promise<unknown> = Promise.resolve();
 
-  constructor(dataDir: string) {
-    this.file = join(dataDir, "snapshots.json");
-    this.lockFile = `${this.file}.lock`;
+  function isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (err) {
+      // EPERM = 存在するが権限なし → alive 扱い (奪わない)
+      return (err as NodeJS.ErrnoException).code === "EPERM";
+    }
+  }
+
+  // owner プロセスが死んでいる lock だけを reclaim する。返り値は「取得を
+  // 再試行してよいか」(消した / 既に消えていた = true、生存中 = false)。
+  async function reclaimIfDead(): Promise<boolean> {
+    let raw: string;
+    try {
+      raw = await readFile(lockFile, "utf8");
+    } catch {
+      return true; // 既に消えた → 取得を再試行
+    }
+    const pid = Number.parseInt(raw.split(":")[0] ?? "", 10);
+    if (Number.isFinite(pid) && pid > 0 && isProcessAlive(pid)) {
+      return false; // owner 生存 → 奪わず待つ
+    }
+    // crash した owner (or 不正な内容)。読んだ内容と一致するときだけ消す
+    // (その間に生きたプロセスが取り直していたら消さない)。
+    try {
+      if ((await readFile(lockFile, "utf8")) === raw) {
+        await rm(lockFile, { force: true });
+      }
+    } catch {
+      // 既に消えた
+    }
+    return true;
+  }
+
+  async function releaseLock(content: string): Promise<void> {
+    try {
+      if ((await readFile(lockFile, "utf8")) === content) {
+        await rm(lockFile, { force: true });
+      }
+    } catch {
+      // 既に無い / 読めない → 何もしない
+    }
   }
 
   // クロスプロセス排他。lazy-spawn は同じ data dir を指す別 server プロセスを
@@ -45,13 +92,13 @@ export class SnapshotStore {
   // 絶対に奪わず、crash (pid が存在しない) のときだけ reclaim する。
   // lock file には `pid:token` を書き、release / reclaim は内容一致時のみ rm
   // して、他プロセスのロックを消さない。
-  private async withLock<T>(fn: () => Promise<T>): Promise<T> {
-    await mkdir(dirname(this.file), { recursive: true });
+  async function withLock<T>(fn: () => Promise<T>): Promise<T> {
+    await mkdir(dirname(file), { recursive: true });
     const content = `${process.pid}:${crypto.randomUUID()}`;
     const deadline = Date.now() + LOCK_TIMEOUT_MS;
     for (;;) {
       try {
-        const handle = await open(this.lockFile, "wx");
+        const handle = await open(lockFile, "wx");
         try {
           await handle.writeFile(content);
         } finally {
@@ -60,7 +107,7 @@ export class SnapshotStore {
         break;
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
-        if (await this.reclaimIfDead()) continue;
+        if (await reclaimIfDead()) continue;
         if (Date.now() > deadline) {
           throw new Error("SnapshotStore: lock acquisition timed out");
         }
@@ -72,52 +119,7 @@ export class SnapshotStore {
     try {
       return await fn();
     } finally {
-      await this.releaseLock(content);
-    }
-  }
-
-  // owner プロセスが死んでいる lock だけを reclaim する。返り値は「取得を
-  // 再試行してよいか」(消した / 既に消えていた = true、生存中 = false)。
-  private async reclaimIfDead(): Promise<boolean> {
-    let raw: string;
-    try {
-      raw = await readFile(this.lockFile, "utf8");
-    } catch {
-      return true; // 既に消えた → 取得を再試行
-    }
-    const pid = Number.parseInt(raw.split(":")[0] ?? "", 10);
-    if (Number.isFinite(pid) && pid > 0 && this.isProcessAlive(pid)) {
-      return false; // owner 生存 → 奪わず待つ
-    }
-    // crash した owner (or 不正な内容)。読んだ内容と一致するときだけ消す
-    // (その間に生きたプロセスが取り直していたら消さない)。
-    try {
-      if ((await readFile(this.lockFile, "utf8")) === raw) {
-        await rm(this.lockFile, { force: true });
-      }
-    } catch {
-      // 既に消えた
-    }
-    return true;
-  }
-
-  private isProcessAlive(pid: number): boolean {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch (err) {
-      // EPERM = 存在するが権限なし → alive 扱い (奪わない)
-      return (err as NodeJS.ErrnoException).code === "EPERM";
-    }
-  }
-
-  private async releaseLock(content: string): Promise<void> {
-    try {
-      if ((await readFile(this.lockFile, "utf8")) === content) {
-        await rm(this.lockFile, { force: true });
-      }
-    } catch {
-      // 既に無い / 読めない → 何もしない
+      await releaseLock(content);
     }
   }
 
@@ -129,9 +131,9 @@ export class SnapshotStore {
   // 関数を返して `!env` ガードをすり抜け、`"toString" in snapshots` が true に
   // なる。null-proto にすると lookup / `in` が own key のみを見るので、
   // get / delete / idempotency の全 lookup がまとめて安全になる。
-  private async read(): Promise<StoreFile> {
+  async function read(): Promise<StoreFile> {
     try {
-      const text = await readFile(this.file, "utf8");
+      const text = await readFile(file, "utf8");
       const parsed = JSON.parse(text) as Partial<StoreFile>;
       return {
         snapshots: Object.assign(Object.create(null), parsed.snapshots),
@@ -146,25 +148,25 @@ export class SnapshotStore {
     }
   }
 
-  private write(data: StoreFile): Promise<void> {
-    return writeJsonAtomic(this.file, data);
+  function write(data: StoreFile): Promise<void> {
+    return writeJsonAtomic(file, data);
   }
 
   // 直前の書き込み完了を待ってから fn を実行する (in-process mutex)。
-  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.writeChain.then(fn, fn);
+  function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = writeChain.then(fn, fn);
     // chain には成否を伝播させない (1 件の失敗で後続を止めない)
-    this.writeChain = run.then(
+    writeChain = run.then(
       () => undefined,
       () => undefined,
     );
     return run;
   }
 
-  create(input: CreateInput): Promise<SnapshotEnvelope> {
-    return this.enqueue(() =>
-      this.withLock(async () => {
-        const data = await this.read();
+  function create(input: CreateInput): Promise<SnapshotEnvelope> {
+    return enqueue(() =>
+      withLock(async () => {
+        const data = await read();
         if (input.idempotencyKey) {
           const existingId = data.idempotency[input.idempotencyKey];
           if (existingId) {
@@ -179,27 +181,25 @@ export class SnapshotStore {
           root: input.root,
           createdAt: new Date().toISOString(),
           ...(input.title !== undefined ? { title: input.title } : {}),
-          ...(input.metadata !== undefined
-            ? { metadata: input.metadata }
-            : {}),
+          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
         };
         data.snapshots[id] = envelope;
         if (input.idempotencyKey) {
           data.idempotency[input.idempotencyKey] = id;
         }
-        await this.write(data);
+        await write(data);
         return envelope;
       }),
     );
   }
 
-  async get(id: string): Promise<SnapshotEnvelope | undefined> {
-    const data = await this.read();
+  async function get(id: string): Promise<SnapshotEnvelope | undefined> {
+    const data = await read();
     return data.snapshots[id];
   }
 
-  async list(): Promise<SnapshotSummary[]> {
-    const data = await this.read();
+  async function list(): Promise<SnapshotSummary[]> {
+    const data = await read();
     const items = Object.values(data.snapshots).map((env) => {
       const summary: SnapshotSummary = {
         id: env.id,
@@ -215,18 +215,20 @@ export class SnapshotStore {
     return items;
   }
 
-  delete(id: string): Promise<boolean> {
-    return this.enqueue(() =>
-      this.withLock(async () => {
-        const data = await this.read();
+  function remove(id: string): Promise<boolean> {
+    return enqueue(() =>
+      withLock(async () => {
+        const data = await read();
         if (!(id in data.snapshots)) return false;
         delete data.snapshots[id];
         for (const key of Object.keys(data.idempotency)) {
           if (data.idempotency[key] === id) delete data.idempotency[key];
         }
-        await this.write(data);
+        await write(data);
         return true;
       }),
     );
   }
+
+  return { create, get, list, delete: remove };
 }

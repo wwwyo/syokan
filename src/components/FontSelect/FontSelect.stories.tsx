@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FontSelect } from ".";
 
-// FontSelect は localStorage("syokan:font") を読み書きし <html data-font> をトグルする。
-// 押すと実際に doc のフォントが切り替わる。
+// FontSelect は localStorage("syokan:font") を読み書きし --app-font-* を書き換える。
+// プリセットを選ぶと実際に doc のフォントが切り替わる (Google フォントは動的読込)。
 const meta = {
   title: "Components/FontSelect",
   component: FontSelect,
