@@ -75,7 +75,7 @@ GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
 
 現在の type — container: `Stack` `Card` / leaf: `Heading` `Link` `Text` `Time` `MarkdownDoc` `PlainText` `Diff` `Code` `Badge` `FileDoc`。Storybook（`bun run storybook`）で視覚的に確認できる。
 
-`FileDoc`（props: `path`）はファイルパスを参照する catalog ノード。サーバが内容を読んで拡張子から描画形式を推論し（`.md`/`.markdown`→markdown、`.json`→code、その他→text）、ファイルの変更を view に追従させる（forward sync）。
+`FileDoc`（props: `path`、**絶対パスのみ**）はファイルパスを参照する catalog ノード。サーバが内容を読んで拡張子から描画形式を推論し（`.md`/`.markdown`→markdown、`.json`→code、その他→text）、ファイルの変更を view に追従させる（forward sync）。サーバは localhost のみに bind し、監視は view を開いている間だけの一時状態（永続しない）。
 
 ## テンプレート
 
