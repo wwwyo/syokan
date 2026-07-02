@@ -7,8 +7,10 @@ import {
 import index from "../index.html";
 // version は CLI が「旧 build の server を黙って再利用しない」ための互換マーカー。
 import pkg from "../package.json";
+import { createFileWatcher } from "./fileSource";
 import {
   createApiHandlers,
+  createFileHandlers,
   createSettingHandlers,
   createTemplateHandlers,
   getCatalog,
@@ -33,6 +35,8 @@ export function startServer() {
   const api = createApiHandlers(store);
   const templates = createTemplateHandlers(createTemplateStore(templatesDir()));
   const setting = createSettingHandlers(createSettingStore(settingFile()));
+  // file 監視は永続化しない接続スコープの runtime state。server 寿命と同じ生存。
+  const file = createFileHandlers(createFileWatcher());
   const server = serve({
     routes: {
       "/api/health": () => Response.json({ ok: true, version: pkg.version }),
@@ -58,6 +62,9 @@ export function startServer() {
         GET: setting.getSetting,
         PUT: setting.updateSetting,
       },
+      // ファイル参照ノードの本文読み出し (GET) と変更監視 (SSE)。
+      "/api/files": { GET: file.readFile },
+      "/api/files/watch": { GET: file.watchFile },
       // static > param > wildcard 順で評価されるので上の API が優先される。
       "/api/*": () => Response.json({ error: "not_found" }, { status: 404 }),
       // SPA fallback: API 以外は frontend を返し、client router が描画を分岐する。
@@ -65,6 +72,9 @@ export function startServer() {
     },
     development: process.env.NODE_ENV !== "production",
     port: resolvePort(),
+    // localhost のみに bind する。任意ファイルを読む /api/files を LAN に晒さないため
+    // (PRD の信頼境界 = localhost bind ＋ ユーザー権限)。
+    hostname: "127.0.0.1",
   });
   console.log(`syokan listening on ${server.url}`);
   console.log(`snapshot store: ${dataDir}`);

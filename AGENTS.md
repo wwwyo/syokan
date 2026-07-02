@@ -97,6 +97,16 @@ catalog の type と props 定義は **`src/catalogs` が単一の SSOT**。`man
 [gh webhook]       ──┘
 ```
 
+### File-backed view (ファイル参照ノード)
+
+手元のファイル (markdown / log / json ...) を「渡すだけ」で表示し、元ファイルの編集に view を追従させる。ファイル参照は envelope や store のレベルではなく **catalog node 1 個 (`FileDoc`)** に閉じ込める。こうすると snapshot envelope は従来どおり catalog tree だけを持ち、store は「ファイルを参照している snapshot」を特別扱いしない。「いつ読み直すか」は `FileDoc` component の責務になり、普通の catalog node と同じ snapshot に混在できる。
+
+- **描画**: `FileDoc` は props の path (絶対パス) をサーバ経由で読み、拡張子から形式を推論して既存の MarkdownDoc / PlainText / Code に委譲する (data 取得する初の catalog component)。推論規則は `src/lib/fileFormat.ts` が SSOT (`.md`/`.markdown`→markdown、`.json`→code、他→text)。
+- **forward sync**: サーバはファイルを監視し、変更時に SSE (`/api/files/watch`) で「変わった」だけ通知する。内容は client が `GET /api/files` で取り直す。欠落 / 巨大 / バイナリ / 非通常ファイルのエラーを HTTP ステータス (404/413/415/422/403) に素直に乗せ、初回 mount と更新で読み出し経路を 1 本にするため、SSE で内容は push しない。
+- **watcher = f(購読)**: 監視は永続化しない接続スコープの runtime state。SSE 接続の開閉が購読で、path ごとの refcount で watcher を張り/解放する。サーバ再起動後は client の再接続で watcher が張り直る (store と独立)。
+- **CLI auto-wrap**: `syokan <path>` は envelope JSON ならそのまま post、そうでなければ `FileDoc` に自動で包む (従来「CLI はテキストを包まない」の唯一の例外)。dedup 識別子は絶対パスで、既存の idempotency 機構に乗せる (store 無改修)。
+- **ephemeral 原則**: envelope/store にファイル内容は持ち込まない。file-backed snapshot は再現性が元ファイルに依存する点で従来 snapshot とライフサイクルが異なるが、この差を許容して原則を保つ。localhost bind + ユーザー権限を信頼境界とし、ファイル読み出しに allowlist は課さない。判断と経緯は `.agent/prd/file-source-sync/` (prd.md / decision.log)。
+
 ## ディレクトリ構造
 
 ```
@@ -112,7 +122,7 @@ syokan/
 │   ├── lib/             # 横断 util (paths=~/.config/syokan 解決 / cn / date / code / snapshots ...)
 │   ├── catalogs/        # ★ LLM が JSON で投げる公開 type。index.ts が registry、manifest.ts が GET /api/catalog 用に JSON Schema 化
 │   └── components/      # catalog 非登録の内部 UI (ui=shadcn / AppShell / AppSidebar / PageLayout ...)
-├── server/             # Bun.serve。routes.ts=/api/{snapshots,catalog,templates,settings}、store.ts=snapshot (ephemeral)、templates.ts=テンプレ保管 (永続)、setting.ts=表示設定 singleton (永続)
+├── server/             # Bun.serve (127.0.0.1 bind)。routes.ts=/api/{snapshots,catalog,templates,settings,files}、store.ts=snapshot (ephemeral)、templates.ts=テンプレ保管 (永続)、setting.ts=表示設定 singleton (永続)、fileSource.ts=ファイル読み出し + 変更監視 (接続スコープ runtime state)
 └── .storybook/         # catalog 視覚レビュー基盤
 ```
 
@@ -168,6 +178,14 @@ global ツールは **単体実行ファイル** (`bun run compile` → `dist/sy
 - **影響は dev のみ**。warm（grammar キャッシュ済）や本番ビルド（StrictMode 無効）では正常に描画される。`disableWorkerPool` / mount 遅延 / ResizeObserver パッチ除去 / default tab 変更はいずれも効かない（核心は非同期 callback × ライフサイクルのため）。
 - **方針**: ハイライト不要な静的コード片は `components/CodeSnippet`（素の `<pre>`、初回計測に依存せず潰れない）を使う。ハイライトが要る doc は catalog `Code` のまま（dev での見え方は割り切り、本番で出る）。詳細は `src/catalogs/Code/index.tsx` のコメント参照。
 - **上流**: pierre 側が StrictMode 再マウント後に非同期ハイライトの完了 callback を新インスタンスへ張り直さない堅牢性バグ。upstream issue 候補。
+
+### Bun (macOS) の `fs.watch` は親ディレクトリ watch が中の content 変更で発火しない
+
+`FileDoc` の変更監視 (`server/fileSource.ts`) の実装で踏んだ。
+
+- **落とし穴**: 「temp 書き込み → rename」保存 (エディタの一般的な atomic save) は対象ファイルの inode を差し替えるため、素朴に `fs.watch(path)` すると差し替え後の変更を見失う。定石は「親ディレクトリを watch して basename でフィルタ」だが、**Bun (macOS) では `fs.watch(dir)` が中のファイルの content 変更で発火しない**ことを実機確認した (dir watch は使えない)。
+- **方針**: ファイル自身を watch し、`rename` イベント (inode 差し替え/削除のシグナル) を受けたら同じ path に watch を張り直す (re-arm)。置換先が未出現なら上限つきでリトライする。これで「rename 保存 → 以降の in-place 書き込み」に追従する。
+- **残る限界**: 削除後しばらくして同じ path で再作成されるケースは re-arm のリトライ上限を過ぎると live 更新が止まる (view は GET で not_found を表示)。MVP 受容。詳細は `.agent/prd/file-source-sync/decision.log` #7。
 
 ## コミュニケーション方針
 

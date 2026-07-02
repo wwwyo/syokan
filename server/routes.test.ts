@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createFileWatcher } from "./fileSource";
 import {
   createApiHandlers,
+  createFileHandlers,
   createSettingHandlers,
   createTemplateHandlers,
   getCatalog,
@@ -532,5 +534,77 @@ describe("setting routes", () => {
     expect(res.status).toBe(400);
     const data = (await res.json()) as { error: string };
     expect(data.error).toBe("invalid_json");
+  });
+});
+
+describe("file routes", () => {
+  let fileDir: string;
+  let watcher: ReturnType<typeof createFileWatcher>;
+  let file: ReturnType<typeof createFileHandlers>;
+
+  beforeEach(async () => {
+    fileDir = await mkdtemp(join(tmpdir(), "syokan-files-"));
+    watcher = createFileWatcher({ releaseDelayMs: 20, notifyDebounceMs: 5 });
+    file = createFileHandlers(watcher);
+  });
+
+  afterEach(async () => {
+    watcher.closeAll();
+    await rm(fileDir, { recursive: true, force: true });
+  });
+
+  test("GET /api/files returns the content of a text file", async () => {
+    const p = join(fileDir, "a.md");
+    await writeFile(p, "# hi");
+    const res = await file.readFile(
+      makeRequest(`/api/files?path=${encodeURIComponent(p)}`),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ content: "# hi" });
+  });
+
+  test("GET /api/files without path → 400", async () => {
+    const res = await file.readFile(makeRequest("/api/files"));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("missing_path");
+  });
+
+  test("GET /api/files with a relative path → 400 invalid_path", async () => {
+    const res = await file.readFile(
+      makeRequest(`/api/files?path=${encodeURIComponent("relative/notes.md")}`),
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("invalid_path");
+  });
+
+  test("GET /api/files for a missing file → 404 not_found", async () => {
+    const res = await file.readFile(
+      makeRequest(`/api/files?path=${encodeURIComponent(join(fileDir, "x"))}`),
+    );
+    expect(res.status).toBe(404);
+    expect((await res.json()).error).toBe("not_found");
+  });
+
+  test("GET /api/files/watch emits an SSE stream and releases on cancel", async () => {
+    const p = join(fileDir, "w.txt");
+    await writeFile(p, "v1");
+    const res = file.watchFile(
+      makeRequest(`/api/files/watch?path=${encodeURIComponent(p)}`),
+    );
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
+    const reader = res.body!.getReader();
+    // 接続直後のコメント行を受け取る。
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toContain(": connected");
+    expect(watcher.activeCount()).toBe(1);
+    // client 切断 = stream cancel → 購読解除。
+    await reader.cancel();
+    await new Promise((r) => setTimeout(r, 40));
+    expect(watcher.activeCount()).toBe(0);
+  });
+
+  test("GET /api/files/watch without path → 400", async () => {
+    const res = file.watchFile(makeRequest("/api/files/watch"));
+    expect(res.status).toBe(400);
   });
 });

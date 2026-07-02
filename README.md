@@ -34,6 +34,13 @@ syokan open   # home を開く
 
 props は `syokan catalog` で確認して組む。あとは自分のデータを投げるだけ。
 
+手元のファイルはそのまま渡せる（envelope を組む必要はない）。envelope JSON ならそのまま post、それ以外（markdown / log / txt / 設定 json など）は live な `FileDoc` に自動で包まれ、元ファイルの編集が view に追従する:
+
+```bash
+syokan notes.md   # markdown を整形表示。保存するたびに view が最新化される
+syokan app.log    # 追記される log を等幅で表示
+```
+
 ## 開発
 
 ```bash
@@ -66,7 +73,9 @@ dev は global install（port `5173` / `~/.config/syokan/`）とは別に port `
 GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
 ```
 
-現在の type — container: `Stack` `Card` / leaf: `Heading` `Link` `Text` `Time` `MarkdownDoc` `PlainText` `Diff` `Code` `Badge`。Storybook（`bun run storybook`）で視覚的に確認できる。
+現在の type — container: `Stack` `Card` / leaf: `Heading` `Link` `Text` `Time` `MarkdownDoc` `PlainText` `Diff` `Code` `Badge` `FileDoc`。Storybook（`bun run storybook`）で視覚的に確認できる。
+
+`FileDoc`（props: `path`、**絶対パスのみ**）はファイルパスを参照する catalog ノード。サーバが内容を読んで拡張子から描画形式を推論し（`.md`/`.markdown`→markdown、`.json`→code、その他→text）、ファイルの変更を view に追従させる（forward sync）。サーバは localhost のみに bind し、監視は view を開いている間だけの一時状態（永続しない）。
 
 ## テンプレート
 

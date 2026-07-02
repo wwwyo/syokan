@@ -4,6 +4,7 @@ import { Badge } from "./Badge";
 import { Card } from "./Card";
 import { Code } from "./Code";
 import { Diff } from "./Diff";
+import { FileDoc } from "./FileDoc";
 import { Heading } from "./Heading";
 import { Link } from "./Link";
 import { MarkdownDoc } from "./MarkdownDoc";
@@ -64,8 +65,9 @@ describe("catalog", () => {
     expect(components.get("Diff")).toBe(asItem(Diff));
     expect(components.get("Code")).toBe(asItem(Code));
     expect(components.get("Badge")).toBe(asItem(Badge));
+    expect(components.get("FileDoc")).toBe(asItem(FileDoc));
     expect(components.get("Missing")).toBeUndefined();
-    expect(components.size).toBe(11);
+    expect(components.size).toBe(12);
   });
 
   test("Heading requires text and is strict", () => {
