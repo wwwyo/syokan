@@ -49,9 +49,21 @@ describe("paths", () => {
     expect(runtimeDir()).toBe("/x/state/syokan");
   });
 
-  test("explicit SYOKAN_* env overrides win", () => {
+  test("explicit SYOKAN_* env overrides win for every category", () => {
     process.env.SYOKAN_DATA_DIR = "/var/tmp/x/data";
+    process.env.SYOKAN_TEMPLATES_DIR = "/var/tmp/x/templates";
+    process.env.SYOKAN_RUNTIME_DIR = "/var/tmp/x/runtime";
+    process.env.SYOKAN_SETTINGS_FILE = "/var/tmp/x/settings.json";
     expect(dataDir()).toBe("/var/tmp/x/data");
+    expect(templatesDir()).toBe("/var/tmp/x/templates");
+    expect(runtimeDir()).toBe("/var/tmp/x/runtime");
+    expect(settingFile()).toBe("/var/tmp/x/settings.json");
+  });
+
+  test("SYOKAN_* overrides accept relative paths (dev .syokan-dev)", () => {
+    for (const k of KEYS) delete process.env[k];
+    process.env.SYOKAN_DATA_DIR = ".syokan-dev/data";
+    expect(dataDir()).toBe(".syokan-dev/data");
   });
 
   test("relative XDG base env is ignored (spec: must be absolute)", () => {
