@@ -517,10 +517,21 @@ export const helpManifest = {
     {
       name: "XDG_CONFIG_HOME",
       summary:
-        "Config root (default ~/.config); data and templates live under <root>/syokan",
+        "Config root (default ~/.config); settings.json lives under <root>/syokan",
+    },
+    {
+      name: "XDG_DATA_HOME",
+      summary:
+        "Data root (default ~/.local/share); templates live under <root>/syokan",
+    },
+    {
+      name: "XDG_STATE_HOME",
+      summary:
+        "State root (default ~/.local/state); snapshots, pidfile, and log live under <root>/syokan",
     },
     { name: "SYOKAN_DATA_DIR", summary: "Override the snapshot data dir" },
     { name: "SYOKAN_TEMPLATES_DIR", summary: "Override the templates dir" },
+    { name: "SYOKAN_SETTINGS_FILE", summary: "Override the settings file path" },
     {
       name: "SYOKAN_RUNTIME_DIR",
       summary: "Override the server pidfile/log dir",

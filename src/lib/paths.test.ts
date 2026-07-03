@@ -54,6 +54,12 @@ describe("paths", () => {
     expect(dataDir()).toBe("/var/tmp/x/data");
   });
 
+  test("relative XDG base env is ignored (spec: must be absolute)", () => {
+    for (const k of KEYS) delete process.env[k];
+    process.env.XDG_STATE_HOME = "state";
+    expect(dataDir()).toBe(join(homedir(), ".local", "state", "syokan"));
+  });
+
   test("legacyTemplatesDir points at the old config layout for migration", () => {
     for (const k of KEYS) delete process.env[k];
     process.env.XDG_CONFIG_HOME = "/x/config";
