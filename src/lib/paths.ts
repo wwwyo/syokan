@@ -40,6 +40,14 @@ export function templatesDir(): string {
   return env("SYOKAN_TEMPLATES_DIR") ?? join(dataHome(), "syokan", "templates");
 }
 
+// 旧レイアウト (全カテゴリを config 集約) での templates 位置。data home への移設で
+// keep data が upgrade 時に消えるのを防ぐ 1 回限りの移行にのみ使う。明示 override 時は
+// 呼び出し側が場所を管理しているので移行対象にせず null を返す。
+export function legacyTemplatesDir(): string | null {
+  if (env("SYOKAN_TEMPLATES_DIR")) return null;
+  return join(configHome(), "syokan", "templates");
+}
+
 // 設定は singleton なので dir ではなく単一 file。config home に置く
 // (この 1 ファイルだけが ~/.config/syokan 配下に残り、dotfiles で安全に版管理できる)。
 export function settingFile(): string {

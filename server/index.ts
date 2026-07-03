@@ -1,6 +1,9 @@
+import { existsSync, mkdirSync, renameSync } from "node:fs";
+import { dirname } from "node:path";
 import { serve } from "bun";
 import {
   dataDir as resolveDataDir,
+  legacyTemplatesDir,
   settingFile,
   templatesDir,
 } from "@/lib/paths";
@@ -29,7 +32,23 @@ function resolvePort(): number {
 // frontend は index.html の import で供給する。dev は on-the-fly bundle + HMR、
 // compile 時は Bun が frontend を bundle して同じバイナリへ埋め込む (同一の静的
 // import で両立する)。entry.ts (単体バイナリ) と直接起動の両方から呼ばれる。
+// 旧レイアウトの templates を新 data home へ 1 回だけ引き継ぐ。移設先が既にあれば
+// 移行済み or 現行運用中なので触らない。best-effort (失敗しても起動は続行する)。
+function migrateLegacyTemplates(): void {
+  const legacy = legacyTemplatesDir();
+  if (!legacy) return;
+  const dest = templatesDir();
+  if (legacy === dest || !existsSync(legacy) || existsSync(dest)) return;
+  try {
+    mkdirSync(dirname(dest), { recursive: true });
+    renameSync(legacy, dest);
+  } catch {
+    // 移行に失敗しても新規運用は成立するので握る
+  }
+}
+
 export function startServer() {
+  migrateLegacyTemplates();
   const dataDir = resolveDataDir();
   const store = createSnapshotStore(dataDir);
   const api = createApiHandlers(store);

@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { dataDir, runtimeDir, settingFile, templatesDir } from "./paths";
+import {
+  dataDir,
+  legacyTemplatesDir,
+  runtimeDir,
+  settingFile,
+  templatesDir,
+} from "./paths";
 
 const KEYS = [
   "XDG_CONFIG_HOME",
@@ -46,5 +52,16 @@ describe("paths", () => {
   test("explicit SYOKAN_* env overrides win", () => {
     process.env.SYOKAN_DATA_DIR = "/var/tmp/x/data";
     expect(dataDir()).toBe("/var/tmp/x/data");
+  });
+
+  test("legacyTemplatesDir points at the old config layout for migration", () => {
+    for (const k of KEYS) delete process.env[k];
+    process.env.XDG_CONFIG_HOME = "/x/config";
+    expect(legacyTemplatesDir()).toBe("/x/config/syokan/templates");
+  });
+
+  test("legacyTemplatesDir returns null when the location is explicitly overridden", () => {
+    process.env.SYOKAN_TEMPLATES_DIR = "/custom/templates";
+    expect(legacyTemplatesDir()).toBeNull();
   });
 });
