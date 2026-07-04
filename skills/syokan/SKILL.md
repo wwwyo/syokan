@@ -1,7 +1,7 @@
 ---
 name: syokan
 license: MIT
-description: "syokan (個人用 view layer) に手元のデータを表示するための JSON snapshot envelope を組み立てて POST する。RSS フィード、進行中の PR review、議事録 markdown、今日の TODO、任意の集計結果などを『syokan に出して/表示して/投げて』『snapshot を作って/送って』『syokan のUIで見たい』と言われたとき、または手元のデータを構造化 UI で一覧・確認したいときに使う。catalog component (Stack, Card, Heading, Link, Text, Time, MarkdownDoc, PlainText, Diff, Code, Badge) だけで tree を組み、syokan CLI もしくは POST /api/snapshots に送る。JSX は書かない。syokan という語が出たら、明示的に snapshot と言われなくてもこの skill を使う。"
+description: "syokan (個人用 view layer) に手元のデータを表示するための JSON snapshot envelope を組み立てて POST する。RSS フィード、進行中の PR review、議事録 markdown、今日の TODO、ローカルの Markdown ファイル、任意の集計結果などを『syokan に出して/表示して/投げて』『snapshot を作って/送って』『syokan のUIで見たい』『Markdown をプレビューして/md ファイルをブラウザで見たい』と言われたとき、または手元のデータを構造化 UI で一覧・確認したいときに使う。catalog component (Stack, Card, Heading, Link, Text, Time, MarkdownDoc, PlainText, Diff, Code, Badge, FileDoc) だけで tree を組み、syokan CLI もしくは POST /api/snapshots に送る。JSX は書かない。syokan という語が出たら、明示的に snapshot と言われなくてもこの skill を使う。"
 ---
 
 # syokan
@@ -62,6 +62,25 @@ POST body に入れてよいのは次だけ。
 組んだ envelope はファイルか stdin で渡すと、成功時に view URL が stdout に出る（`syokan snapshot.json` / `cat snapshot.json | syokan` / `claude -p '…JSON…' | syokan`）。
 
 これ以外のコマンド・サブコマンド・env・exit code は `syokan --help --json`、type と props は `syokan catalog` で引く。
+
+## ローカルファイルをプレビューする
+
+手元のファイルは **`syokan <path>` でそのまま渡すのが最短**。envelope JSON ならそのまま post され、それ以外（markdown / log / txt / json など）は live な `FileDoc` に自動で包まれる。CLI が絶対パスに解決してサーバへ渡し、サーバが内容を読んで拡張子から形式を推論し（`.md`/`.markdown`→markdown、`.json`→code、その他→text）、**view を開いている間はファイルの編集に追従する**（投げ直し不要）。
+
+```bash
+syokan notes.md   # markdown を整形表示。保存するたび view が最新化される
+syokan app.log    # 追記される log を等幅で表示
+```
+
+複数ファイルを 1 view にまとめる・`Heading` や他 node と混ぜるなど tree を組みたいときは、`FileDoc` node を自分で置く（props は `path`、**絶対パスのみ**。読み込みと変更追従は FileDoc が担う）。
+
+一方、ファイルの中身を**静的に固めて**見せたい（追従は不要、または内容を加工して出す）ときは `MarkdownDoc` / `PlainText` / `Code` の node に本文を入れる。`jq --rawfile` なら JSON エスケープを気にせず流せる。
+
+```bash
+jq -n --rawfile body README.md \
+  '{title:"README.md", root:{type:"Stack",props:{},children:[{type:"MarkdownDoc",props:{body:$body}}]}}' \
+  | syokan
+```
 
 ## テンプレートで再現性を持たせる
 
