@@ -8,6 +8,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   formatValidationError,
   settingPatchSchema,
+  type SnapshotEnvelope,
   snapshotMetadataSchema,
 } from "@/schema";
 import {
@@ -29,6 +30,11 @@ const postInputSchema = z
     idempotencyKey: z.string().min(1).optional(),
   })
   .strict();
+
+// PUT は idempotencyKey だけ必須にする以外 POST と同形。
+const putInputSchema = postInputSchema.extend({
+  idempotencyKey: z.string().min(1),
+});
 
 function jsonError(
   status: number,
@@ -54,8 +60,40 @@ async function readJsonBody(req: Request): Promise<
   }
 }
 
+// POST/PUT 共通: body を読んで snapshot schema で検証する。
+async function parseSnapshotBody<T>(
+  req: Request,
+  schema: z.ZodType<T>,
+): Promise<{ ok: true; value: T } | { ok: false; response: Response }> {
+  const body = await readJsonBody(req);
+  if (!body.ok) return body;
+  const parsed = schema.safeParse(body.value);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      response: jsonError(400, {
+        error: "validation_failed",
+        message: "Request body does not satisfy the snapshot schema",
+        issues: formatValidationError(parsed.error),
+      }),
+    };
+  }
+  return { ok: true, value: parsed.data };
+}
+
+function snapshotResponse(
+  envelope: SnapshotEnvelope,
+  status?: number,
+): Response {
+  return Response.json(
+    { id: envelope.id, url: `/snapshots/${envelope.id}`, snapshot: envelope },
+    status !== undefined ? { status } : undefined,
+  );
+}
+
 export type ApiHandlers = {
   createSnapshot: (req: Request) => Promise<Response>;
+  updateSnapshot: (req: Request) => Promise<Response>;
   listSnapshots: () => Promise<Response>;
   getSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
   deleteSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
@@ -64,31 +102,24 @@ export type ApiHandlers = {
 export function createApiHandlers(store: SnapshotStore): ApiHandlers {
   return {
     async createSnapshot(req) {
-      const body = await readJsonBody(req);
+      const body = await parseSnapshotBody(req, postInputSchema);
       if (!body.ok) return body.response;
-      const parsed = postInputSchema.safeParse(body.value);
-      if (!parsed.success) {
-        return jsonError(400, {
-          error: "validation_failed",
-          message: "Request body does not satisfy the snapshot schema",
-          issues: formatValidationError(parsed.error),
+      const envelope = await store.create(body.value);
+      return snapshotResponse(envelope, 201);
+    },
+
+    // 一致が無ければ 404 (AIP-134 の Update の既定。作りたいときは POST を使う)。
+    async updateSnapshot(req) {
+      const body = await parseSnapshotBody(req, putInputSchema);
+      if (!body.ok) return body.response;
+      const result = await store.update(body.value);
+      if (!result.ok) {
+        return jsonError(404, {
+          error: "not_found",
+          message: `No snapshot found for idempotencyKey "${body.value.idempotencyKey}"; POST to create one`,
         });
       }
-      const input = parsed.data;
-      const envelope = await store.create({
-        title: input.title,
-        root: input.root,
-        metadata: input.metadata,
-        idempotencyKey: input.idempotencyKey,
-      });
-      return Response.json(
-        {
-          id: envelope.id,
-          url: `/snapshots/${envelope.id}`,
-          snapshot: envelope,
-        },
-        { status: 201 },
-      );
+      return snapshotResponse(result.envelope);
     },
 
     async listSnapshots() {

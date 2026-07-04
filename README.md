@@ -64,18 +64,18 @@ Dev uses port `5273` and the repo-local `./.syokan-dev/` directory, so it never 
 
 ## Envelope
 
-The body of `POST /api/snapshots` is a snapshot **envelope** (**JSON** only; wrap Markdown/plain text in `MarkdownDoc` / `PlainText` nodes):
+A snapshot **envelope** (**JSON** only; wrap Markdown/plain text in `MarkdownDoc` / `PlainText` nodes) is created with `POST /api/snapshots` and refreshed in place with `PUT /api/snapshots`:
 
 ```jsonc
 {
   "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // required: view tree
   "title": "Today's RSS",                              // optional
   "metadata": { "source": { "label": "daily-rss" } }, // optional: origin label, shown in the sidebar and header
-  "idempotencyKey": "rss-2026-06-20"                   // optional: dedupes duplicate posts
+  "idempotencyKey": "rss-2026-06-20"                   // optional on POST, required on PUT: names a view so it can be targeted again later
 }
 ```
 
-On success: `201` with `{ id, url, snapshot }`. Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
+`POST` always creates a fresh snapshot (`201`); an `idempotencyKey` just tags it for later `PUT`s. `PUT` requires `idempotencyKey` and targets an existing view by it: a match replaces `root`/`title`/`metadata` in place (same id/url; `createdAt` is kept) and returns `200`; no match returns `404` (`not_found`) — `PUT` never creates (there is no "create if missing" escape hatch; use `POST` for that). Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
 
 ## Catalog
 

@@ -90,16 +90,70 @@ describe("SnapshotStore", () => {
     expect(await store.delete("__proto__")).toBe(false);
   });
 
-  test("idempotencyKey replays the same id on repeated create", async () => {
+  test("update returns not_found when the key is unseen (no allow_missing escape hatch)", async () => {
+    const result = await store.update({
+      root: sampleRoot,
+      idempotencyKey: "never-posted",
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  test("create with idempotencyKey registers the key for later update", async () => {
+    const created = await store.create({
+      root: sampleRoot,
+      title: "Day 1",
+      idempotencyKey: "rss-2026-05-21",
+    });
+    const result = await store.update({
+      root: sampleRoot,
+      idempotencyKey: "rss-2026-05-21",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.envelope.id).toBe(created.id);
+  });
+
+  test("update replaces content in place (same id/url/createdAt, refreshed root/title)", async () => {
     const first = await store.create({
       root: sampleRoot,
-      idempotencyKey: "rss-2026-05-21",
+      title: "Day 1",
+      idempotencyKey: "recurring",
     });
-    const second = await store.create({
+    const updatedRoot: Item = { type: "Stack", props: { direction: "horizontal" } };
+    const second = await store.update({
+      root: updatedRoot,
+      title: "Day 2",
+      idempotencyKey: "recurring",
+    });
+    expect(second.ok).toBe(true);
+    if (second.ok) {
+      expect(second.envelope.id).toBe(first.id);
+      expect(second.envelope.title).toBe("Day 2");
+      expect(second.envelope.root).toEqual(updatedRoot);
+      expect(second.envelope.createdAt).toBe(first.createdAt);
+    }
+    const items = await store.list();
+    expect(items.length).toBe(1);
+    expect(items[0]?.title).toBe("Day 2");
+  });
+
+  test("update omitting title/metadata preserves the existing values instead of clearing them", async () => {
+    await store.create({
       root: sampleRoot,
-      idempotencyKey: "rss-2026-05-21",
+      title: "Day 1",
+      metadata: { source: { label: "rss" } },
+      idempotencyKey: "recurring-partial",
     });
-    expect(second.id).toBe(first.id);
+    const updatedRoot: Item = { type: "Stack", props: { direction: "horizontal" } };
+    const result = await store.update({
+      root: updatedRoot,
+      idempotencyKey: "recurring-partial",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.envelope.title).toBe("Day 1");
+      expect(result.envelope.metadata?.source?.label).toBe("rss");
+      expect(result.envelope.root).toEqual(updatedRoot);
+    }
   });
 
   test("different idempotencyKeys produce different ids", async () => {
@@ -114,14 +168,25 @@ describe("SnapshotStore", () => {
     expect(a.id).not.toBe(b.id);
   });
 
-  test("concurrent creates with the same idempotencyKey collapse to one snapshot", async () => {
+  test("create with an already-registered idempotencyKey dedups instead of creating a new id", async () => {
+    const first = await store.create({ root: sampleRoot, idempotencyKey: "repeat" });
+    const second = await store.create({
+      root: { type: "Heading", props: { text: "ignored" } },
+      idempotencyKey: "repeat",
+    });
+    expect(second.id).toBe(first.id);
+    const items = await store.list();
+    expect(items.length).toBe(1);
+  });
+
+  test("concurrent creates with the same new idempotencyKey collapse to one snapshot (no orphans from the PUT->404->POST fallback race)", async () => {
     const [a, b, c] = await Promise.all([
       store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
       store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
       store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
     ]);
-    expect(b?.id).toBe(a?.id);
-    expect(c?.id).toBe(a?.id);
+    expect(b.id).toBe(a.id);
+    expect(c.id).toBe(a.id);
     const items = await store.list();
     expect(items.length).toBe(1);
   });

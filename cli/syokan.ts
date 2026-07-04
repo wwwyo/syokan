@@ -120,12 +120,39 @@ async function apiCall(
   return { ok: res.ok, status: res.status, data };
 }
 
-function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
+function hasIdempotencyKey(payload: unknown): boolean {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    typeof (payload as { idempotencyKey?: unknown }).idempotencyKey === "string"
+  );
+}
+
+function postSnapshot(
+  deps: CliDeps,
+  method: "POST" | "PUT",
+  body: string,
+): Promise<PostResult> {
   return apiCall(deps, "/api/snapshots", {
-    method: "POST",
+    method,
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
+    body,
   });
+}
+
+// server の PUT は「既にある前提」(無ければ 404) なので、呼び出し側が
+// 初回か否かを判定しなくて済むよう、404 のときだけここで POST にフォールバックする。
+async function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
+  const body = JSON.stringify(payload);
+  if (!hasIdempotencyKey(payload)) {
+    return postSnapshot(deps, "POST", body);
+  }
+  const updated = await postSnapshot(deps, "PUT", body);
+  const isNotFound =
+    updated.status === 404 &&
+    (updated.data as { error?: string } | null)?.error === "not_found";
+  if (!isNotFound) return updated;
+  return postSnapshot(deps, "POST", body);
 }
 
 function reportSuccess(deps: CliDeps, data: unknown): CliResult {
@@ -200,7 +227,8 @@ function looksLikeEnvelope(value: unknown): boolean {
 }
 
 // ファイルを FileDoc 1 ノードの envelope に包む。title / source.label は basename、
-// dedup 識別子 (idempotencyKey) は絶対パスとする (FR-15〜17)。
+// 同じファイルを指す再 post が同じ id/url を指すよう、dedup 識別子 (idempotencyKey)
+// は絶対パスとする (FR-15〜17)。
 function wrapFileDoc(absPath: string): unknown {
   const name = basename(absPath);
   return {
