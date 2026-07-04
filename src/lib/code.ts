@@ -11,7 +11,7 @@ const SUPPORTED_LANGS = new Set([
   "python", "py",
   "go", "rust", "rs",
   "yaml", "yml", "toml", "ini",
-  "sql", "graphql", "diff",
+  "sql", "graphql", "diff", "proto", "protobuf",
   "c", "cpp", "java", "kotlin", "kt", "swift",
   "ruby", "rb", "php", "dockerfile", "make", "makefile",
   "vue", "svelte", "astro", "text", "plaintext", "txt",

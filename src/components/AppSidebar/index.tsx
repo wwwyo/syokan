@@ -1,6 +1,6 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { X } from "lucide-react";
-import { useSnapshotList } from "@/components/AppShell/snapshotList";
+import { shellRouteApi } from "@/components/AppShell/shellRouteApi";
 import { useDeleteSnapshot } from "@/components/AppShell/useDeleteSnapshot";
 import {
   SIDEBAR_ID,
@@ -14,13 +14,14 @@ import { ViewList } from "./ViewList";
  * 開いたまま main を操作できる。閉じているときは幅 0 + inert にして tab フォーカスが
  * 内部リンクに入らないようにする。
  *
- * 常駐 shell (AppShell) の直下にあり遷移で再 mount されない。一覧は常駐 provider から
- * 受け取り、開閉やスクロール位置は再構築されずに残る (自前の scroll 復元は持たない)。
+ * 常駐 shell (AppShell) の直下にあり遷移で再 mount されない。一覧は shell layout の
+ * loader から受け取り、開閉やスクロール位置は再構築されずに残る (自前の scroll 復元は
+ * 持たない)。取得中/失敗は route の pending/error に委ねるので、ここでは常に items が揃う。
  */
 export function AppSidebar() {
   const sidebar = useSidebar();
   const open = sidebar?.open ?? false;
-  const { state } = useSnapshotList();
+  const items = shellRouteApi.useLoaderData();
   const params = useParams({ strict: false }) as { id?: string };
   const currentId = params.id ?? null;
   const del = useDeleteSnapshot();
@@ -57,29 +58,21 @@ export function AppSidebar() {
           ) : null}
         </div>
         <nav className="flex-1 overflow-y-auto p-2">
-          {state.status === "loading" ? (
-            <p className="px-3 py-2 text-sm text-muted-foreground">読み込み中…</p>
-          ) : state.status === "error" ? (
-            <p className="px-3 py-2 text-sm text-destructive">
-              一覧の取得に失敗しました
-            </p>
-          ) : (
-            <ViewList
-              items={state.items}
-              currentId={currentId}
-              onDelete={(id) => del(id, { isCurrent: id === currentId })}
-              renderLink={({ id, active, className, children }) => (
-                <Link
-                  to="/snapshots/$id"
-                  params={{ id }}
-                  aria-current={active ? "page" : undefined}
-                  className={className}
-                >
-                  {children}
-                </Link>
-              )}
-            />
-          )}
+          <ViewList
+            items={items}
+            currentId={currentId}
+            onDelete={(id) => del(id, { isCurrent: id === currentId })}
+            renderLink={({ id, active, className, children }) => (
+              <Link
+                to="/snapshots/$id"
+                params={{ id }}
+                aria-current={active ? "page" : undefined}
+                className={className}
+              >
+                {children}
+              </Link>
+            )}
+          />
         </nav>
       </div>
     </aside>
