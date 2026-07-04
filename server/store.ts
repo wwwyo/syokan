@@ -18,8 +18,11 @@ export type CreateInput = {
   title?: string;
   root: Item;
   metadata?: SnapshotMetadata;
-  // 指定すると id/url とは別に key→id を登録する (以後の update の的になる)。
-  // 既に登録済みの key を渡した場合も無条件に上書きする (create に存在チェックは無い)。
+  // 指定すると id/url とは別に key→id を登録し、以後の update の的にする。
+  // 既に登録済みの key を渡した場合は新規作成せず既存をそのまま返す (dedup) —
+  // CLI の PUT→404→POST フォールバックが並行実行されても、この dedup が
+  // read-modify-write を直列化する enqueue+withLock の中で効くので孤児
+  // snapshot が増えない。
   idempotencyKey?: string;
 };
 
@@ -35,7 +38,7 @@ export type UpdateResult =
   | { ok: false; error: "not_found" };
 
 export type SnapshotStore = {
-  // 常に新規作成する。idempotencyKey を渡すと key→id を登録する (存在チェックなし)。
+  // 新規作成する。idempotencyKey が既に登録済みなら新規作成せず既存を返す (dedup)。
   create: (input: CreateInput) => Promise<SnapshotEnvelope>;
   // idempotencyKey で特定した既存 snapshot を置き換える (id/url/createdAt は保つ)。
   // 一致が無ければ not_found (AIP-134 の Update の既定。allow_missing は持たない —
@@ -182,19 +185,43 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     return run;
   }
 
+  // id/createdAt/title/metadata から envelope を組み立てる (create/update 共通)。
+  // title/metadata は base (create では undefined、update では既存の値) を
+  // fallback にすることで、update が省略されたフィールドを消さずに保つ。
+  function buildEnvelope(
+    id: string,
+    createdAt: string,
+    root: Item,
+    title: string | undefined,
+    metadata: SnapshotMetadata | undefined,
+  ): SnapshotEnvelope {
+    return {
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id,
+      root,
+      createdAt,
+      ...(title !== undefined ? { title } : {}),
+      ...(metadata !== undefined ? { metadata } : {}),
+    };
+  }
+
   function create(input: CreateInput): Promise<SnapshotEnvelope> {
     return enqueue(() =>
       withLock(async () => {
         const data = await read();
+        if (input.idempotencyKey) {
+          const existingId = data.idempotency[input.idempotencyKey];
+          const existing = existingId ? data.snapshots[existingId] : undefined;
+          if (existing) return existing;
+        }
         const id = crypto.randomUUID();
-        const envelope: SnapshotEnvelope = {
-          schemaVersion: CURRENT_SCHEMA_VERSION,
+        const envelope = buildEnvelope(
           id,
-          root: input.root,
-          createdAt: new Date().toISOString(),
-          ...(input.title !== undefined ? { title: input.title } : {}),
-          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
-        };
+          new Date().toISOString(),
+          input.root,
+          input.title,
+          input.metadata,
+        );
         data.snapshots[id] = envelope;
         if (input.idempotencyKey) {
           data.idempotency[input.idempotencyKey] = id;
@@ -212,16 +239,15 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         const existingId = data.idempotency[input.idempotencyKey];
         const existing = existingId ? data.snapshots[existingId] : undefined;
         if (!existing) return { ok: false, error: "not_found" };
-        // 同じ id/url を保ったまま中身を置き換える。createdAt は初回のまま保つ
-        // (list の並びを touch のたびに揺らさない)。
-        const envelope: SnapshotEnvelope = {
-          schemaVersion: CURRENT_SCHEMA_VERSION,
-          id: existing.id,
-          root: input.root,
-          createdAt: existing.createdAt,
-          ...(input.title !== undefined ? { title: input.title } : {}),
-          ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
-        };
+        // 同じ id/url/createdAt を保ったまま置き換える。title/metadata は
+        // 省略されたら既存の値を保つ (PUT で root だけ更新しても消えない)。
+        const envelope = buildEnvelope(
+          existing.id,
+          existing.createdAt,
+          input.root,
+          input.title ?? existing.title,
+          input.metadata ?? existing.metadata,
+        );
         data.snapshots[envelope.id] = envelope;
         await write(data);
         return { ok: true, envelope };

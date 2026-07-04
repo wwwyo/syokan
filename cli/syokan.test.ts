@@ -212,6 +212,36 @@ describe("cli main: post (default action)", () => {
     expect(body.title).toBe("notes.md");
     expect(body.metadata.source.label).toBe("notes.md");
     expect(body.idempotencyKey).toBe("filedoc:/abs/notes.md");
+    // idempotencyKey を持つ payload は PUT (update) を先に試す。
+    expect(calls[0]?.method).toBe("PUT");
+  });
+
+  test("PUT 404 not_found falls back to POST to create the snapshot (first-ever post of a key)", async () => {
+    const { deps, out, calls } = makeDeps({
+      files: { "notes.md": "# first post" },
+      respond: (captured) =>
+        captured.method === "PUT"
+          ? Response.json({ error: "not_found" }, { status: 404 })
+          : okResponse("created-1"),
+    });
+    const result = await main(["notes.md"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(out).toEqual(["http://localhost:5173/snapshots/created-1"]);
+    expect(calls.map((c) => c.method)).toEqual(["PUT", "POST"]);
+    expect(calls[1]?.body).toEqual(calls[0]?.body);
+  });
+
+  test("PUT 200 (existing key) does not fall back to POST", async () => {
+    const { deps, calls } = makeDeps({
+      files: { "notes.md": "# refresh" },
+      respond: (captured) =>
+        captured.method === "PUT"
+          ? okResponse("existing-1")
+          : Response.json({ error: "unexpected_post" }, { status: 500 }),
+    });
+    const result = await main(["notes.md"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(calls.map((c) => c.method)).toEqual(["PUT"]);
   });
 
   test("JSON file without an envelope root is wrapped as a FileDoc", async () => {

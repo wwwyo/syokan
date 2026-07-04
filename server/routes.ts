@@ -8,6 +8,7 @@ import {
   CURRENT_SCHEMA_VERSION,
   formatValidationError,
   settingPatchSchema,
+  type SnapshotEnvelope,
   snapshotMetadataSchema,
 } from "@/schema";
 import {
@@ -30,15 +31,10 @@ const postInputSchema = z
   })
   .strict();
 
-const putInputSchema = z
-  .object({
-    schemaVersion: z.literal(CURRENT_SCHEMA_VERSION).optional(),
-    title: z.string().min(1).optional(),
-    root: itemSchema,
-    metadata: snapshotMetadataSchema.optional(),
-    idempotencyKey: z.string().min(1),
-  })
-  .strict();
+// PUT は idempotencyKey だけ必須にする以外 POST と同形。
+const putInputSchema = postInputSchema.extend({
+  idempotencyKey: z.string().min(1),
+});
 
 function jsonError(
   status: number,
@@ -64,6 +60,37 @@ async function readJsonBody(req: Request): Promise<
   }
 }
 
+// POST/PUT 共通: body を読んで snapshot schema で検証する。
+async function parseSnapshotBody<T>(
+  req: Request,
+  schema: z.ZodType<T>,
+): Promise<{ ok: true; value: T } | { ok: false; response: Response }> {
+  const body = await readJsonBody(req);
+  if (!body.ok) return body;
+  const parsed = schema.safeParse(body.value);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      response: jsonError(400, {
+        error: "validation_failed",
+        message: "Request body does not satisfy the snapshot schema",
+        issues: formatValidationError(parsed.error),
+      }),
+    };
+  }
+  return { ok: true, value: parsed.data };
+}
+
+function snapshotResponse(
+  envelope: SnapshotEnvelope,
+  status?: number,
+): Response {
+  return Response.json(
+    { id: envelope.id, url: `/snapshots/${envelope.id}`, snapshot: envelope },
+    status !== undefined ? { status } : undefined,
+  );
+}
+
 export type ApiHandlers = {
   createSnapshot: (req: Request) => Promise<Response>;
   updateSnapshot: (req: Request) => Promise<Response>;
@@ -74,62 +101,25 @@ export type ApiHandlers = {
 
 export function createApiHandlers(store: SnapshotStore): ApiHandlers {
   return {
-    // POST: 常に新規作成。idempotencyKey を渡すと以後の PUT の的として登録される。
     async createSnapshot(req) {
-      const body = await readJsonBody(req);
+      const body = await parseSnapshotBody(req, postInputSchema);
       if (!body.ok) return body.response;
-      const parsed = postInputSchema.safeParse(body.value);
-      if (!parsed.success) {
-        return jsonError(400, {
-          error: "validation_failed",
-          message: "Request body does not satisfy the snapshot schema",
-          issues: formatValidationError(parsed.error),
-        });
-      }
-      const input = parsed.data;
-      const envelope = await store.create({
-        title: input.title,
-        root: input.root,
-        metadata: input.metadata,
-        idempotencyKey: input.idempotencyKey,
-      });
-      return Response.json(
-        { id: envelope.id, url: `/snapshots/${envelope.id}`, snapshot: envelope },
-        { status: 201 },
-      );
+      const envelope = await store.create(body.value);
+      return snapshotResponse(envelope, 201);
     },
 
-    // PUT: idempotencyKey で特定した既存を置き換える。一致が無ければ 404
-    // (AIP-134 の Update の既定。作りたいときは POST を使う)。
+    // 一致が無ければ 404 (AIP-134 の Update の既定。作りたいときは POST を使う)。
     async updateSnapshot(req) {
-      const body = await readJsonBody(req);
+      const body = await parseSnapshotBody(req, putInputSchema);
       if (!body.ok) return body.response;
-      const parsed = putInputSchema.safeParse(body.value);
-      if (!parsed.success) {
-        return jsonError(400, {
-          error: "validation_failed",
-          message: "Request body does not satisfy the snapshot schema",
-          issues: formatValidationError(parsed.error),
-        });
-      }
-      const input = parsed.data;
-      const result = await store.update({
-        idempotencyKey: input.idempotencyKey,
-        title: input.title,
-        root: input.root,
-        metadata: input.metadata,
-      });
+      const result = await store.update(body.value);
       if (!result.ok) {
         return jsonError(404, {
           error: "not_found",
-          message: `No snapshot found for idempotencyKey "${input.idempotencyKey}"; POST to create one`,
+          message: `No snapshot found for idempotencyKey "${body.value.idempotencyKey}"; POST to create one`,
         });
       }
-      return Response.json({
-        id: result.envelope.id,
-        url: `/snapshots/${result.envelope.id}`,
-        snapshot: result.envelope,
-      });
+      return snapshotResponse(result.envelope);
     },
 
     async listSnapshots() {

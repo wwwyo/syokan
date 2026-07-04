@@ -286,6 +286,22 @@ describe("api routes", () => {
     expect(body.error).toBe("validation_failed");
   });
 
+  test("PUT /api/snapshots: unknown top-level keys are rejected (putInputSchema stays strict after .extend())", async () => {
+    const res = await api.updateSnapshot(
+      makeRequest("/api/snapshots", {
+        method: "PUT",
+        body: JSON.stringify({
+          root: baseInput.root,
+          idempotencyKey: "strict-check",
+          unexpected: "nope",
+        }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("validation_failed");
+  });
+
   test("idempotencyKey: omitting it always creates a new id", async () => {
     const r1 = await api.createSnapshot(
       makeRequest("/api/snapshots", {

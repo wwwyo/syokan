@@ -136,6 +136,26 @@ describe("SnapshotStore", () => {
     expect(items[0]?.title).toBe("Day 2");
   });
 
+  test("update omitting title/metadata preserves the existing values instead of clearing them", async () => {
+    await store.create({
+      root: sampleRoot,
+      title: "Day 1",
+      metadata: { source: { label: "rss" } },
+      idempotencyKey: "recurring-partial",
+    });
+    const updatedRoot: Item = { type: "Stack", props: { direction: "horizontal" } };
+    const result = await store.update({
+      root: updatedRoot,
+      idempotencyKey: "recurring-partial",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.envelope.title).toBe("Day 1");
+      expect(result.envelope.metadata?.source?.label).toBe("rss");
+      expect(result.envelope.root).toEqual(updatedRoot);
+    }
+  });
+
   test("different idempotencyKeys produce different ids", async () => {
     const a = await store.create({ root: sampleRoot, idempotencyKey: "k1" });
     const b = await store.create({ root: sampleRoot, idempotencyKey: "k2" });
@@ -148,19 +168,27 @@ describe("SnapshotStore", () => {
     expect(a.id).not.toBe(b.id);
   });
 
-  test("concurrent creates with the same idempotencyKey each persist separately; the key points to the last write", async () => {
+  test("create with an already-registered idempotencyKey dedups instead of creating a new id", async () => {
+    const first = await store.create({ root: sampleRoot, idempotencyKey: "repeat" });
+    const second = await store.create({
+      root: { type: "Heading", props: { text: "ignored" } },
+      idempotencyKey: "repeat",
+    });
+    expect(second.id).toBe(first.id);
+    const items = await store.list();
+    expect(items.length).toBe(1);
+  });
+
+  test("concurrent creates with the same new idempotencyKey collapse to one snapshot (no orphans from the PUT->404->POST fallback race)", async () => {
     const [a, b, c] = await Promise.all([
       store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
       store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
       store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
     ]);
+    expect(b.id).toBe(a.id);
+    expect(c.id).toBe(a.id);
     const items = await store.list();
-    expect(items.length).toBe(3);
-    const result = await store.update({ root: sampleRoot, idempotencyKey: "concurrent" });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect([a.id, b.id, c.id]).toContain(result.envelope.id);
-    }
+    expect(items.length).toBe(1);
   });
 
   test("concurrent distinct creates do not lose updates (serialized writes)", async () => {
