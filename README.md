@@ -1,106 +1,118 @@
 # syokan
 
-個人用の schema 駆動 **view layer**。JSX を書く代わりに、LLM（Claude Code / scheduled agent / CLI）が **JSON tree** を投げ、syokan が事前定義した React component で描画する。snapshot は **ephemeral** — 残し続ける前提のデータは置かない。
+**syokan — LLMs summon rich UI.**
 
-設計の意図・ディレクトリ構成・開発規約は [AGENTS.md](./AGENTS.md)。この README は **使い方**。
+*syokan* (召喚, "summon") is a verb. Chant the name of what you want to see, and a view appears:
 
-## 仕組み
+```bash
+syokan notes.md   # syokan your notes
+```
 
-snapshot は `{ type, props, children? }` のノードからなる JSON tree。`type` は catalog component を指し、受信時に Zod が検証して registry が React component に対応付ける:
+An LLM speaks a JSON incantation, and a rich, living interface materializes — no JSX written, no build step. Scattered data — today's RSS, an in-flight PR review, shared meeting notes, a local markdown file — appears as structured UI only when you need it. Views are ephemeral: summoned when needed, they fade; nothing is hoarded. And anything can chant: Claude Code, a scheduled agent, a CLI one-liner, a webhook.
+
+日本語版: [README.ja.md](./README.ja.md)
+
+Design rationale, directory layout, and development conventions live in [AGENTS.md](./AGENTS.md). This README covers **usage**.
+
+## How it works
+
+Under the hood, syokan is a personal schema-driven view layer. Instead of writing JSX, an LLM (Claude Code / scheduled agent / CLI) posts a **JSON tree**, and syokan renders it with predefined React components. Snapshots are **ephemeral** — summoned views are not meant to stay; data that must persist does not belong here.
+
+A snapshot is a JSON tree of `{ type, props, children? }` nodes. Each `type` names a catalog component; on receipt, Zod validates the tree and the registry maps it to a React component:
 
 ```
 { "type": "Heading", "props": { "text": "Today" } }  →  <Heading text="Today" />
 ```
 
-client-side routing（TanStack Router）の CSR app。`/` が home、`/snapshots/:id` が個別 snapshot。API 以外のパスには SPA HTML を返すので deep link / reload が成立する。
+It is a CSR app with client-side routing (TanStack Router). `/` is home, `/snapshots/:id` is an individual snapshot. Every non-API path returns the SPA HTML, so deep links and reloads just work.
 
-## はじめに
+## Getting started
 
-普段使いの `syokan` は **単体バイナリ**（Bun/Node 不要、server も自動 lazy-spawn）。
-
-```bash
-mise use -g github:wwwyo/syokan@latest   # github backend で install
-syokan --help                         # コマンド確認（機械可読は --help --json）
-```
-
-> 他の install: [Releases](https://github.com/wwwyo/syokan/releases) から `syokan-<os>-<arch>` を直接 download、または source build（[ビルド](#ビルド-単体バイナリ)）。macOS で Gatekeeper に弾かれたら `codesign --sign - <path>`。
-
-最初の snapshot を投げる（server は自動で立ち上がり、view URL が返る）:
+For everyday use, `syokan` is a **single binary** (no Bun/Node required; the server lazy-spawns automatically).
 
 ```bash
-echo '{"root":{"type":"Heading","props":{"text":"🎉 syokan のセットアップ完了"}}}' | syokan
-syokan open   # home を開く
+mise use -g github:wwwyo/syokan@latest   # install via the github backend
+syokan --help                         # list commands (machine-readable: --help --json)
 ```
 
-props は `syokan catalog` で確認して組む。あとは自分のデータを投げるだけ。
+> Other install options: download `syokan-<os>-<arch>` directly from [Releases](https://github.com/wwwyo/syokan/releases), or build from source ([Build](#build-single-binary)). If macOS Gatekeeper blocks the binary, run `codesign --sign - <path>`.
 
-手元のファイルはそのまま渡せる（envelope を組む必要はない）。envelope JSON ならそのまま post、それ以外（markdown / log / txt / 設定 json など）は live な `FileDoc` に自動で包まれ、元ファイルの編集が view に追従する:
+Your first summon (the server starts automatically and a view URL is returned):
 
 ```bash
-syokan notes.md   # markdown を整形表示。保存するたびに view が最新化される
-syokan app.log    # 追記される log を等幅で表示
+echo '{"root":{"type":"Heading","props":{"text":"🎉 syokan is set up"}}}' | syokan
+syokan open   # open home
 ```
 
-## 開発
+Check props with `syokan catalog` and compose the tree. From there, syokan whatever you want to see.
+
+Local files need no envelope at all — just syokan the path. If the input is envelope JSON it is posted as-is; anything else (markdown / log / txt / config json, etc.) is auto-wrapped in a live `FileDoc`, so edits to the original file flow into the view:
+
+```bash
+syokan notes.md   # renders the markdown; every save refreshes the view
+syokan app.log    # shows the growing log in monospace
+```
+
+## Development
 
 ```bash
 mise install && bun install
-bun run dev    # Bun.serve + HMR（portless 経由で https://syokan.localhost）
+bun run dev    # Bun.serve + HMR (https://syokan.localhost via portless)
 ```
 
-dev は global install（port `5173` / XDG 標準ディレクトリ配下）とは別に port `5273` / repo ローカルの `./.syokan-dev/` を使うので衝突しない。dev server へ投げるには `SYOKAN_BASE_URL=http://localhost:5273` を付ける。portless を介さないなら `PORTLESS=0 bun run dev`（default port `5173`）。
+Dev uses port `5273` and the repo-local `./.syokan-dev/` directory, so it never collides with a global install (port `5173` / standard XDG directories). To post to the dev server, set `SYOKAN_BASE_URL=http://localhost:5273`. To skip portless, use `PORTLESS=0 bun run dev` (default port `5173`).
 
-## envelope
+## Envelope
 
-`POST /api/snapshots` の body は snapshot **envelope**（**JSON** のみ。Markdown/plain-text は `MarkdownDoc` / `PlainText` ノードに包む）:
+The body of `POST /api/snapshots` is a snapshot **envelope** (**JSON** only; wrap Markdown/plain text in `MarkdownDoc` / `PlainText` nodes):
 
 ```jsonc
 {
-  "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // 必須: view tree
-  "title": "Today's RSS",                              // 任意
-  "metadata": { "source": { "label": "daily-rss" } }, // 任意: 出所ラベル。sidebar と header に出る
-  "idempotencyKey": "rss-2026-06-20"                   // 任意: 重複投稿を dedupe
+  "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // required: view tree
+  "title": "Today's RSS",                              // optional
+  "metadata": { "source": { "label": "daily-rss" } }, // optional: origin label, shown in the sidebar and header
+  "idempotencyKey": "rss-2026-06-20"                   // optional: dedupes duplicate posts
 }
 ```
 
-成功すると `201` で `{ id, url, snapshot }`、検証エラーは `400`（`invalid_json` / `validation_failed`）。CLI コマンドは `syokan --help`。
+On success: `201` with `{ id, url, snapshot }`. Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
 
-## catalog
+## Catalog
 
-`type` の SSOT は catalog（`src/catalogs`）。manifest を取得して props 契約を引く:
+The SSOT for `type` is the catalog (`src/catalogs`). Fetch the manifest to get the props contract:
 
 ```
 GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
 ```
 
-現在の type — container: `Stack` `Card` / leaf: `Heading` `Link` `Text` `Time` `MarkdownDoc` `PlainText` `Diff` `Code` `Badge` `FileDoc`。Storybook（`bun run storybook`）で視覚的に確認できる。
+Current types — containers: `Stack` `Card` / leaves: `Heading` `Link` `Text` `Time` `MarkdownDoc` `PlainText` `Diff` `Code` `Badge` `FileDoc`. Review them visually with Storybook (`bun run storybook`).
 
-`FileDoc`（props: `path`、**絶対パスのみ**）はファイルパスを参照する catalog ノード。サーバが内容を読んで拡張子から描画形式を推論し（`.md`/`.markdown`→markdown、`.json`→code、その他→text）、ファイルの変更を view に追従させる（forward sync）。サーバは localhost のみに bind し、監視は view を開いている間だけの一時状態（永続しない）。
+`FileDoc` (props: `path`, **absolute paths only**) is a catalog node that references a file path. The server reads the content, infers the rendering format from the extension (`.md`/`.markdown` → markdown, `.json` → code, everything else → text), and keeps the view in sync with file changes (forward sync). The server binds to localhost only, and watching is transient state that lives only while a view is open (never persisted).
 
-## テンプレート
+## Templates
 
-気に入った layout は **テンプレート**（保存した envelope + `title`）として `~/.local/share/syokan/templates/` に残せる。snapshot と違い永続する。syokan は保管・一覧するだけで中身は解釈しない（`GET/POST/DELETE /api/templates`）。
+A layout you like can be kept as a **template** (a saved envelope + `title`) under `~/.local/share/syokan/templates/`. Unlike snapshots, templates persist. syokan only stores and lists them and never interprets their contents (`GET/POST/DELETE /api/templates`).
 
-## 設定
+## Settings
 
-テーマ・フォントの表示設定は singleton リソースとして `~/.config/syokan/settings.json` に永続する（snapshot と違い残す）。ブラウザの localStorage が即時反映用キャッシュ、サーバーが正本で、起動時に同期するので複数ブラウザ間で設定を共有できる。
+Display settings (theme / font) persist as a singleton resource at `~/.config/syokan/settings.json` (unlike snapshots, they are kept). The browser's localStorage is a cache for instant application; the server is the source of truth, synced on startup, so settings are shared across browsers.
 
 ```
-GET /api/settings              # { theme, font }（未設定なら既定値）
-PUT /api/settings              # 部分更新（送ったキーだけ上書き）。未知キー / 不正値は 400
+GET /api/settings              # { theme, font } (defaults if unset)
+PUT /api/settings              # partial update (only the keys you send are overwritten). Unknown keys / invalid values: 400
 ```
 
-`theme`: `system` `light` `dark`（SSOT: `src/schema/setting.ts`）。`font`: Google Fonts プリセットの識別子（既定 `system`）。一覧と追加は `src/lib/fonts.ts` が SSOT で、ここに 1 エントリ足すだけでフォントが増える（実フォントは選択時に `<link>` を動的読込し、`--app-font-*` を書き換える。`styles.css` / `index.html` は触らない）。
+`theme`: `system` `light` `dark` (SSOT: `src/schema/setting.ts`). `font`: an identifier for a font preset (default `system`; most presets load from Google Fonts, but `system`/`moralerspace` do not). The list and how to extend it live in `src/lib/fonts.ts` — adding one entry there adds a font (the actual font is loaded dynamically via `<link>` on selection and `--app-font-*` is rewritten; `styles.css` / `index.html` stay untouched).
 
-## ビルド (単体バイナリ)
+## Build (single binary)
 
 ```bash
-bun run compile       # → dist/syokan（CLI+server+frontend を 1 バイナリに）
-bun run compile:all   # → dist/syokan-<os>-<arch>（cross-compile、Release 配布用）
+bun run compile       # → dist/syokan (CLI + server + frontend in one binary)
+bun run compile:all   # → dist/syokan-<os>-<arch> (cross-compile, for Release distribution)
 ```
 
-dual-mode（[entry.ts](./entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173`、永続先は XDG base directory に従い分散する（settings=`~/.config/syokan/`、templates=`~/.local/share/syokan/`、snapshot+runtime/log=`~/.local/state/syokan/`。場所の上書きは `XDG_{CONFIG,DATA,STATE}_HOME` で行う（絶対パスのみ、相対値は無視）。旧レイアウトからの upgrade では templates を起動時に新 location へ自動移行する）。配布は Release に asset を上げて `mise use -g github:wwwyo/syokan@latest`。
+Dual-mode ([entry.ts](./entry.ts)): a normal launch is the CLI; the server re-execs the binary itself with `SYOKAN_SERVE=1`. The global binary uses port `5173`, and persistence follows the XDG base directories (settings = `~/.config/syokan/`, templates = `~/.local/share/syokan/`, snapshots + runtime/log = `~/.local/state/syokan/`). Override locations with `XDG_{CONFIG,DATA,STATE}_HOME` (absolute paths only; relative values are ignored). When upgrading from the old layout, templates are migrated to the new location automatically on startup. To distribute, upload the assets to a Release and install with `mise use -g github:wwwyo/syokan@latest`.
 
-## その他
+## More
 
-- 設計の意図・ディレクトリ構成・開発規約: [AGENTS.md](./AGENTS.md)
+- Design rationale, directory layout, development conventions: [AGENTS.md](./AGENTS.md)

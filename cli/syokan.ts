@@ -436,14 +436,14 @@ const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
     name: "help",
     aliases: ["--help", "-h"],
     usage: "syokan --help [--json]",
-    summary: "この help を表示する (--json で manifest を JSON 出力)",
+    summary: "Show this help (--json prints the manifest as JSON)",
     run: (rest, deps) => runHelp(rest, deps),
   },
   {
     name: "version",
     aliases: ["--version", "-v"],
     usage: "syokan --version",
-    summary: "バージョンを表示する",
+    summary: "Print the version",
     run: (_rest, deps) => {
       deps.stdout(pkg.version);
       return { exitCode: 0 };
@@ -452,33 +452,36 @@ const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
   {
     name: "open",
     usage: "syokan open [id]",
-    summary: "snapshot をブラウザで開く (id 省略で home)",
+    summary: "Open a snapshot in the browser (home when id is omitted)",
     run: (rest, deps) => runOpen(rest[0], deps),
   },
   {
     name: "stop",
     usage: "syokan stop",
-    summary: "lazy-spawn した server を止める",
+    summary: "Stop the lazy-spawned server",
     run: (_rest, deps) => runStop(deps),
   },
   {
     name: "catalog",
     usage: "syokan catalog",
-    summary: "catalog manifest (type + JSON Schema props) を JSON 出力",
+    summary: "Print the catalog manifest (types + JSON Schema props) as JSON",
     run: (_rest, deps) => runCatalog(deps),
   },
   {
     name: "templates",
     usage: "syokan templates [list|add|get|rm]",
-    summary: "保存した template を操作する",
+    summary: "Manage saved templates",
     subcommands: [
-      { usage: "syokan templates", summary: "一覧 (id/title/description) を JSON 出力" },
+      {
+        usage: "syokan templates",
+        summary: "List templates (id/title/description) as JSON",
+      },
       {
         usage: "syokan templates add --title <t> [--description <d>] <file|->",
-        summary: "保存して id を出力",
+        summary: "Save a template and print its id",
       },
-      { usage: "syokan templates get <id>", summary: "1 件を JSON 出力" },
-      { usage: "syokan templates rm <id>", summary: "削除" },
+      { usage: "syokan templates get <id>", summary: "Print one template as JSON" },
+      { usage: "syokan templates rm <id>", summary: "Delete a template" },
     ],
     run: (rest, deps) => runTemplates(rest, deps),
   },
@@ -490,7 +493,7 @@ export const helpManifest = {
   name: "syokan",
   version: pkg.version,
   summary:
-    "Personal schema-driven view layer. Post a JSON snapshot envelope and it renders with predefined catalog components.",
+    "syokan — LLMs summon rich UI. Post a JSON snapshot envelope; predefined catalog components render it.",
   usage: "syokan [command] [args]   |   <json> | syokan",
   forms: [
     {

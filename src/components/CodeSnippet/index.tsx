@@ -1,5 +1,6 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type CodeSnippetProps = {
@@ -36,7 +37,7 @@ export function CodeSnippet({ code, className }: CodeSnippetProps) {
       <button
         type="button"
         onClick={copy}
-        aria-label={copied ? "コピーしました" : "コピー"}
+        aria-label={copied ? t.common.copied : t.common.copy}
         className="absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
       >
         {copied ? <Check className="size-4" /> : <Copy className="size-4" />}

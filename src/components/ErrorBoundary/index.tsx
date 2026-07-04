@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { t } from "@/lib/i18n";
 
 type ErrorBoundaryProps = {
   children: ReactNode;
@@ -34,7 +35,7 @@ export class ErrorBoundary extends Component<
             data-slot="render-error"
             className="my-4 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-muted-foreground"
           >
-            このコンテンツは表示できませんでした。
+            {t.view.renderError}
           </div>
         )
       );

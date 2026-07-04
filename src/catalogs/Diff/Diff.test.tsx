@@ -175,7 +175,7 @@ describe("Diff", () => {
         comments: [{ side: "new", line: 1, body: "orphan" }],
       }),
     );
-    expect(html).toContain("表示できませんでした");
+    expect(html).toContain("no file given, or the filename does not match");
   });
 
   test("falls back when the patch cannot be parsed", () => {
@@ -184,6 +184,6 @@ describe("Diff", () => {
     );
     expect(html).toContain('data-slot="diff"');
     expect(html).not.toContain("<diffs-container");
-    expect(html).toContain("解釈できません");
+    expect(html).toContain("could not be parsed");
   });
 });

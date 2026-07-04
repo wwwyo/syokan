@@ -6,6 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export type ViewHeaderProps = {
@@ -49,7 +50,7 @@ export function ViewHeader({
           <DropdownMenu>
             <DropdownMenuTrigger
               data-slot="view-menu-trigger"
-              aria-label="More actions"
+              aria-label={t.view.moreActions}
               className="flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Ellipsis className="size-4" />
@@ -61,7 +62,7 @@ export function ViewHeader({
                 onClick={onDelete}
               >
                 <Trash2 />
-                削除
+                {t.common.delete}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

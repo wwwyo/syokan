@@ -1,6 +1,7 @@
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { lang } from "@/lib/i18n";
 import { router } from "./router";
 
 declare global {
@@ -23,6 +24,9 @@ if (typeof window !== "undefined" && window.ResizeObserver && !window.__roRafPat
     }
   };
 }
+
+// html の静的 lang をブラウザ言語で解決した表示言語に揃える
+document.documentElement.lang = lang;
 
 const container = document.getElementById("root");
 if (!container) {

@@ -45,7 +45,7 @@ describe("FileDocBody", () => {
   test("error shows the message and the path", () => {
     const out = html("/a/missing.md", { kind: "error", reason: "not_found" });
     expect(out).toContain('data-slot="file-doc-error"');
-    expect(out).toContain("見つかりません");
+    expect(out).toContain("File not found");
     expect(out).toContain("/a/missing.md");
   });
 

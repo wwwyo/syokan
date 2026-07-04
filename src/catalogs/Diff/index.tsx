@@ -4,6 +4,7 @@ import { MessageSquare } from "lucide-react";
 import { useMemo } from "react";
 import { z } from "zod";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { t } from "@/lib/i18n";
 import { useColorScheme } from "@/lib/useColorScheme";
 
 const diffCommentSchema = z.object({
@@ -127,7 +128,7 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
         data-slot="diff"
         className="my-4 rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground"
       >
-        diff を表示できませんでした (patch を解釈できません)。
+        {t.diff.unparsable}
       </div>
     );
   }
@@ -145,7 +146,7 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
           <ErrorBoundary
             fallback={
               <div className="px-4 py-3 text-sm text-muted-foreground">
-                この diff を表示できませんでした。
+                {t.diff.fileFailed}
               </div>
             }
           >
@@ -160,8 +161,7 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
       ))}
       {unassigned.length > 0 ? (
         <div className="rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground">
-          {unassigned.length}{" "}
-          件のコメントを表示できませんでした (file 未指定、または patch 内のファイル名と不一致)。
+          {t.diff.unassignedComments(unassigned.length)}
         </div>
       ) : null}
     </div>

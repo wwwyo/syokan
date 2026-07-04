@@ -8,6 +8,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { useDeleteSnapshot } from "@/components/AppShell/useDeleteSnapshot";
 import { PageLayout } from "@/components/PageLayout";
+import { t } from "@/lib/i18n";
 import { fetchSnapshotEnvelope, fetchSnapshotList } from "@/lib/snapshots";
 import { Home } from "./Home";
 import { ViewError, ViewNotFound, ViewPage, ViewPending } from "./ViewPage";
@@ -26,10 +27,10 @@ const shellRoute = createRoute({
   errorComponent: () => (
     <PageLayout>
       <div data-slot="shell-error">
-        <p className="text-destructive">一覧の取得に失敗しました。</p>
+        <p className="text-destructive">{t.shell.listError}</p>
         <p className="mt-6">
           <a className="text-primary underline underline-offset-4" href="/">
-            再読み込み
+            {t.shell.reload}
           </a>
         </p>
       </div>
@@ -46,10 +47,10 @@ function RouteNotFound() {
   return (
     <PageLayout>
       <div data-slot="route-not-found">
-        <p className="text-muted-foreground">ページが見つかりません。</p>
+        <p className="text-muted-foreground">{t.shell.pageNotFound}</p>
         <p className="mt-6">
           <a className="text-primary underline underline-offset-4" href="/">
-            Back to home
+            {t.common.backToHome}
           </a>
         </p>
       </div>

@@ -1,42 +1,42 @@
-# syokan オンボーディング
+# syokan onboarding
 
-新規ユーザーが syokan を install して、最初の snapshot をブラウザで見るまでを Claude が伴走する手順。
-`syokan onboarding`・「syokan を入れて / セットアップして」・「初めて使う」と言われたらこの流れを実行する。
+Steps for Claude to guide a new user from installing syokan to seeing their first snapshot in the browser.
+Run this flow when the user says `syokan onboarding`, "install / set up syokan", or "first time using it".
 
-進め方（対話で進める。勝手に install しない）:
+How to proceed (interactively; never install on your own):
 
-- **read-only な確認は黙って実行してよい**：install 済みか（`syokan --help`）・OS/arch（`uname -sm`）の確認はそのまま走らせる。
-- **system を変える操作は実行前に必ずユーザーに確認する**：install / binary download / source build / `codesign` など環境を変更するコマンドは、実行するコマンドを提示して「これを実行していいか」承認を取ってから動かす。承認なしに流さない。
-- 1 ステップずつ実行し、結果を確認してから次へ進む（黙って全部流さない）。
-- 既に `syokan --help` が通るなら install を飛ばし、「4. 最初の snapshot」から始める。
-- install 方法はユーザーに選んでもらう（既定は mise）。binary はいずれも GitHub Release 由来。
+- **Read-only checks may run silently**: checking whether it is installed (`syokan --help`) and the OS/arch (`uname -sm`) can just run.
+- **Anything that changes the system requires explicit user confirmation first**: for install / binary download / source build / `codesign` and other environment-changing commands, present the exact command and get approval ("may I run this?") before executing. Never run them unapproved.
+- Execute one step at a time and confirm the result before moving on (do not silently run everything).
+- If `syokan --help` already works, skip the install and start from "4. First snapshot".
+- Let the user choose the install method (default: mise). All binaries come from GitHub Releases.
 
-## 1. 既存環境の確認
-
-```bash
-syokan --help        # 通れば install 済み → 「4. 最初の snapshot」へ
-uname -sm            # 未 install なら OS/arch を控える（例: Darwin arm64）
-```
-
-`syokan --help` が通らなければ「未 install」とユーザーに伝え、install を進めてよいか確認してから「2. install 方法を選ぶ」へ進む。ユーザーが望まなければここで止める。
-
-## 2. install 方法を選ぶ
-
-ユーザーに希望を聞く（既定 A）。選んだら、下のコマンドをそのまま流さず、**実行するコマンドを提示して承認を取ってから**動かす。
-
-### A. mise (github backend) ― 推奨
-
-GitHub Release の prebuilt binary を取得する。OS/arch は自動判別。
+## 1. Check the existing environment
 
 ```bash
-mise use -g github:wwwyo/syokan@latest   # 最新の prebuilt binary を install
+syokan --help        # if it works, already installed → go to "4. First snapshot"
+uname -sm            # if not installed, note the OS/arch (e.g. Darwin arm64)
 ```
 
-- asset を自動選択できないときは `github:wwwyo/syokan[matching=<os>-<arch>]` で絞る。
+If `syokan --help` fails, tell the user it is not installed, confirm they want to proceed with the install, then go to "2. Choose an install method". Stop here if the user declines.
 
-### B. binary を直接 download
+## 2. Choose an install method
 
-Releases から `syokan-<os>-<arch>` を落として PATH に置く。
+Ask the user for their preference (default: A). Once chosen, do not just run the commands below — **present the exact command and get approval first**.
+
+### A. mise (github backend) — recommended
+
+Fetches the prebuilt binary from GitHub Releases. OS/arch is auto-detected.
+
+```bash
+mise use -g github:wwwyo/syokan@latest   # install the latest prebuilt binary
+```
+
+- If the asset cannot be auto-selected, narrow it with `github:wwwyo/syokan[matching=<os>-<arch>]`.
+
+### B. Download the binary directly
+
+Grab `syokan-<os>-<arch>` from Releases and put it on the PATH.
 
 ```bash
 curl -L -o ~/.local/bin/syokan \
@@ -44,13 +44,13 @@ curl -L -o ~/.local/bin/syokan \
 chmod +x ~/.local/bin/syokan
 ```
 
-macOS で Gatekeeper に弾かれたら一度だけ:
+If Gatekeeper blocks it on macOS, once:
 
 ```bash
-codesign --sign - ~/.local/bin/syokan   # または xattr -dr com.apple.quarantine ~/.local/bin/syokan
+codesign --sign - ~/.local/bin/syokan   # or: xattr -dr com.apple.quarantine ~/.local/bin/syokan
 ```
 
-### C. source から build（Bun が要る / 開発もしたい人向け）
+### C. Build from source (requires Bun / for people who also want to develop)
 
 ```bash
 git clone https://github.com/wwwyo/syokan && cd syokan
@@ -59,52 +59,52 @@ bun run compile
 cp dist/syokan ~/.local/bin/
 ```
 
-## 3. install を確認
+## 3. Verify the install
 
 ```bash
-syokan --help            # コマンド一覧
+syokan --help            # command list
 ```
 
-`syokan` は post 時に server を自動で lazy-spawn する（port 5173 / `~/.config/syokan`）。明示起動は不要。
+`syokan` lazy-spawns the server automatically on post (port 5173 / `~/.config/syokan`). No explicit start needed.
 
-## 4. 最初の snapshot
+## 4. First snapshot
 
-最初の 1 枚として、下の welcome envelope をユーザーに提示し、ガイド口調で誘う。例:
+As the very first one, present the welcome envelope below to the user and invite them in a guiding tone. For example:
 
-> syokan では JSON を React tree として表示できます。例えばこの JSON を syokan で表示してみましょう。実行していいですか？
+> With syokan, an LLM summons rich UI: it posts a JSON tree and syokan renders it as a React view. Let's syokan this JSON as your first view. May I run it?
 
-承認を得てから `welcome.json` に書いて投げる（props は `syokan catalog` 準拠）。
+After approval, write it to `welcome.json` and post it (props conform to `syokan catalog`).
 
 ```json
 {
-  "title": "syokan へようこそ",
+  "title": "Welcome to syokan",
   "metadata": { "source": { "label": "onboarding" } },
   "root": {
     "type": "Stack",
     "props": { "direction": "vertical" },
     "children": [
-      { "type": "Heading", "props": { "text": "🎉 syokan のセットアップ完了", "level": 1 } },
-      { "type": "Text", "props": { "body": "これが最初の snapshot です。LLM が JSON tree を投げると、syokan が catalog component で描画します。" } },
+      { "type": "Heading", "props": { "text": "🎉 syokan setup complete", "level": 1 } },
+      { "type": "Text", "props": { "body": "This is your first snapshot. An LLM posts a JSON tree, and syokan renders it with catalog components." } },
       {
         "type": "Card",
         "props": {},
         "children": [
-          { "type": "Heading", "props": { "text": "次にできること", "level": 3 } },
-          { "type": "Text", "props": { "body": "今日の RSS、進行中の PR review、議事録、TODO などを投げて、1 つの URL で構造化 UI として見られます。" } },
+          { "type": "Heading", "props": { "text": "What you can do next", "level": 3 } },
+          { "type": "Text", "props": { "body": "Post today's RSS, an in-progress PR review, meeting notes, or your TODOs, and view them as structured UI at a single URL." } },
           { "type": "Badge", "props": { "text": "ephemeral", "variant": "secondary" } }
         ]
       },
-      { "type": "Link", "props": { "href": "https://github.com/wwwyo/syokan", "text": "syokan のドキュメント" } }
+      { "type": "Link", "props": { "href": "https://github.com/wwwyo/syokan", "text": "syokan documentation" } }
     ]
   }
 }
 ```
 
-承認されたら投げる:
+Once approved, post it:
 
 ```bash
-syokan welcome.json      # 成功すると view URL が stdout に出る
-syokan open              # home を開く（`syokan open <id>` で個別 snapshot）
+syokan welcome.json      # on success the view URL is printed to stdout
+syokan open              # open home (`syokan open <id>` for an individual snapshot)
 ```
 
-ブラウザに welcome snapshot が出れば完了。
+Done when the welcome snapshot shows up in the browser.

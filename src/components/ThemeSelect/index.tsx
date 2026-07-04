@@ -1,5 +1,6 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 import type { ComponentType } from "react";
+import { t } from "@/lib/i18n";
 import { type Theme, useTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -8,9 +9,9 @@ const OPTIONS: ReadonlyArray<{
   label: string;
   Icon: ComponentType<{ className?: string }>;
 }> = [
-  { value: "system", label: "システム", Icon: Monitor },
-  { value: "light", label: "ライト", Icon: Sun },
-  { value: "dark", label: "ダーク", Icon: Moon },
+  { value: "system", label: t.themeSelect.system, Icon: Monitor },
+  { value: "light", label: t.themeSelect.light, Icon: Sun },
+  { value: "dark", label: t.themeSelect.dark, Icon: Moon },
 ];
 
 /**
@@ -22,7 +23,7 @@ export function ThemeSelect() {
   return (
     <div
       role="group"
-      aria-label="テーマ"
+      aria-label={t.themeSelect.label}
       data-slot="theme-select"
       className="inline-flex items-center gap-1 rounded-lg border border-border bg-card p-1"
     >

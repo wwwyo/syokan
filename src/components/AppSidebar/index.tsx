@@ -6,6 +6,7 @@ import {
   SIDEBAR_ID,
   useSidebar,
 } from "@/components/PageLayout/sidebarContext";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { ViewList } from "./ViewList";
 
@@ -30,7 +31,7 @@ export function AppSidebar() {
     <aside
       id={SIDEBAR_ID}
       data-slot="app-sidebar"
-      aria-label="ページ一覧"
+      aria-label={t.shell.sidebarLabel}
       inert={!open}
       className={cn(
         "sticky top-0 h-svh shrink-0 self-start overflow-hidden border-border transition-[width] duration-200 ease-in-out motion-reduce:transition-none",
@@ -49,7 +50,7 @@ export function AppSidebar() {
           {sidebar ? (
             <button
               type="button"
-              aria-label="閉じる"
+              aria-label={t.shell.close}
               onClick={sidebar.toggle}
               className="-mr-1 flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             >

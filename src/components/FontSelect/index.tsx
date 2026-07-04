@@ -2,6 +2,7 @@ import { Check, Search } from "lucide-react";
 import { type CSSProperties, useMemo, useState } from "react";
 import { useFont } from "@/lib/font";
 import { FONT_PRESETS } from "@/lib/fonts";
+import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,13 +30,13 @@ export function FontSelect() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="フォントを検索"
-          aria-label="フォントを検索"
+          placeholder={t.fontSelect.search}
+          aria-label={t.fontSelect.search}
           className="w-full rounded-lg border border-border bg-card py-2 pr-3 pl-8 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
       <ul
-        aria-label="フォント"
+        aria-label={t.fontSelect.listLabel}
         className="mt-2 max-h-64 overflow-auto rounded-lg border border-border bg-card p-1"
       >
         {filtered.map((p) => {
@@ -61,7 +62,9 @@ export function FontSelect() {
           );
         })}
         {filtered.length === 0 ? (
-          <li className="px-3 py-2 text-sm text-muted-foreground">該当なし</li>
+          <li className="px-3 py-2 text-sm text-muted-foreground">
+            {t.fontSelect.noMatches}
+          </li>
         ) : null}
       </ul>
     </div>
