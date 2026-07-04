@@ -116,13 +116,14 @@ syokan/
 ├── build.ts             # compile script (host=dist/syokan、--release で各 OS/arch を cross-compile)
 ├── src/
 │   ├── frontend.tsx     # RouterProvider mount
-│   ├── router.tsx       # TanStack Router の route tree (root=AppShell)
+│   ├── router.tsx       # TanStack Router の route tree (root → _shell layout=AppShell → home/view)
 │   ├── Home.tsx / ViewPage.tsx / Render.tsx  # 各 route の本文 + JSON tree 再帰 renderer
 │   ├── schema/          # Zod schema (catalog Item / envelope / validation 整形)
 │   ├── lib/             # 横断 util (paths=XDG 3 系統 (config/data/state) 解決 / cn / date / code / snapshots ...)
 │   ├── catalogs/        # ★ LLM が JSON で投げる公開 type。index.ts が registry、manifest.ts が GET /api/catalog 用に JSON Schema 化
 │   └── components/      # catalog 非登録の内部 UI (ui=shadcn / AppShell / AppSidebar / PageLayout ...)
 ├── server/             # Bun.serve (127.0.0.1 bind)。routes.ts=/api/{snapshots,catalog,templates,settings,files}、store.ts=snapshot (ephemeral)、templates.ts=テンプレ保管 (永続)、setting.ts=表示設定 singleton (永続)、fileSource.ts=ファイル読み出し + 変更監視 (接続スコープ runtime state)
+├── skills/syokan/      # ★ LLM 向け syokan skill の SSOT。repo に同梱して配布し、dotfiles 側 (.agents/skills/) はこれを install したコピー。skill を直すときは必ずこちらを編集する
 └── .storybook/         # catalog 視覚レビュー基盤
 ```
 
