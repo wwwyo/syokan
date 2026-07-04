@@ -200,7 +200,9 @@ function looksLikeEnvelope(value: unknown): boolean {
 }
 
 // ファイルを FileDoc 1 ノードの envelope に包む。title / source.label は basename、
-// dedup 識別子 (idempotencyKey) は絶対パスとする (FR-15〜17)。
+// dedup 識別子 (idempotencyKey) は絶対パスとする (FR-15〜17)。allowMissing:true
+// にして「初回は作成、以降は同じ id/url のまま内容を追従」を両立させる (server は
+// idempotencyKey 付き post を update として扱い、一致が無ければ 404 するため)。
 function wrapFileDoc(absPath: string): unknown {
   const name = basename(absPath);
   return {
@@ -208,6 +210,7 @@ function wrapFileDoc(absPath: string): unknown {
     root: { type: "FileDoc", props: { path: absPath } },
     metadata: { source: { label: name } },
     idempotencyKey: `filedoc:${absPath}`,
+    allowMissing: true,
   };
 }
 

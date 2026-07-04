@@ -71,11 +71,12 @@ The body of `POST /api/snapshots` is a snapshot **envelope** (**JSON** only; wra
   "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // required: view tree
   "title": "Today's RSS",                              // optional
   "metadata": { "source": { "label": "daily-rss" } }, // optional: origin label, shown in the sidebar and header
-  "idempotencyKey": "rss-2026-06-20"                   // optional: dedupes duplicate posts
+  "idempotencyKey": "rss-2026-06-20",                  // optional: targets a named view. Present ⇒ this POST is an update (AIP-134): a match replaces root/title/metadata in place (same id/url; createdAt is kept); no match is a 404 `not_found` unless `allowMissing` is set
+  "allowMissing": true                                 // optional, default false: with idempotencyKey and no match, create instead of 404ing
 }
 ```
 
-On success: `201` with `{ id, url, snapshot }`. Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
+Without `idempotencyKey`, every POST creates a fresh snapshot (`201`). With `idempotencyKey`: a match returns `200` (updated in place); no match returns `201` if `allowMissing` was set, otherwise `404` (`not_found`). Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
 
 ## Catalog
 

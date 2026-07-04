@@ -90,22 +90,72 @@ describe("SnapshotStore", () => {
     expect(await store.delete("__proto__")).toBe(false);
   });
 
-  test("idempotencyKey replays the same id on repeated create", async () => {
-    const first = await store.create({
+  test("update without allowMissing returns not_found when the key is unseen", async () => {
+    const result = await store.update({
+      root: sampleRoot,
+      idempotencyKey: "never-posted",
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  test("update with allowMissing:true creates on first use of a key", async () => {
+    const result = await store.update({
+      root: sampleRoot,
+      idempotencyKey: "rss-2026-05-21",
+      allowMissing: true,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.created).toBe(true);
+      expect(result.envelope.id).toMatch(/[0-9a-f-]{36}/);
+    }
+  });
+
+  test("update replays the same id once a key exists, even without allowMissing", async () => {
+    const first = await store.update({
+      root: sampleRoot,
+      idempotencyKey: "rss-2026-05-21",
+      allowMissing: true,
+    });
+    const second = await store.update({
       root: sampleRoot,
       idempotencyKey: "rss-2026-05-21",
     });
-    const second = await store.create({
+    expect(second.ok).toBe(true);
+    if (first.ok && second.ok) expect(second.envelope.id).toBe(first.envelope.id);
+  });
+
+  test("update replaces content in place (same id/url/createdAt, refreshed root/title)", async () => {
+    const first = await store.update({
       root: sampleRoot,
-      idempotencyKey: "rss-2026-05-21",
+      title: "Day 1",
+      idempotencyKey: "recurring",
+      allowMissing: true,
     });
-    expect(second.id).toBe(first.id);
+    const updatedRoot: Item = { type: "Stack", props: { direction: "horizontal" } };
+    const second = await store.update({
+      root: updatedRoot,
+      title: "Day 2",
+      idempotencyKey: "recurring",
+    });
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (first.ok && second.ok) {
+      expect(second.envelope.id).toBe(first.envelope.id);
+      expect(second.created).toBe(false);
+      expect(second.envelope.title).toBe("Day 2");
+      expect(second.envelope.root).toEqual(updatedRoot);
+      expect(second.envelope.createdAt).toBe(first.envelope.createdAt);
+    }
+    const items = await store.list();
+    expect(items.length).toBe(1);
+    expect(items[0]?.title).toBe("Day 2");
   });
 
   test("different idempotencyKeys produce different ids", async () => {
-    const a = await store.create({ root: sampleRoot, idempotencyKey: "k1" });
-    const b = await store.create({ root: sampleRoot, idempotencyKey: "k2" });
-    expect(a.id).not.toBe(b.id);
+    const a = await store.update({ root: sampleRoot, idempotencyKey: "k1", allowMissing: true });
+    const b = await store.update({ root: sampleRoot, idempotencyKey: "k2", allowMissing: true });
+    expect(a.ok && b.ok && a.envelope.id !== b.envelope.id).toBe(true);
   });
 
   test("without idempotencyKey every create produces a new id", async () => {
@@ -114,14 +164,17 @@ describe("SnapshotStore", () => {
     expect(a.id).not.toBe(b.id);
   });
 
-  test("concurrent creates with the same idempotencyKey collapse to one snapshot", async () => {
+  test("concurrent updates with the same new idempotencyKey+allowMissing collapse to one snapshot", async () => {
     const [a, b, c] = await Promise.all([
-      store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
-      store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
-      store.create({ root: sampleRoot, idempotencyKey: "concurrent" }),
+      store.update({ root: sampleRoot, idempotencyKey: "concurrent", allowMissing: true }),
+      store.update({ root: sampleRoot, idempotencyKey: "concurrent", allowMissing: true }),
+      store.update({ root: sampleRoot, idempotencyKey: "concurrent", allowMissing: true }),
     ]);
-    expect(b?.id).toBe(a?.id);
-    expect(c?.id).toBe(a?.id);
+    expect(a.ok && b.ok && c.ok).toBe(true);
+    if (a.ok && b.ok && c.ok) {
+      expect(b.envelope.id).toBe(a.envelope.id);
+      expect(c.envelope.id).toBe(a.envelope.id);
+    }
     const items = await store.list();
     expect(items.length).toBe(1);
   });

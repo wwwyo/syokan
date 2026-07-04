@@ -27,6 +27,7 @@ const postInputSchema = z
     root: itemSchema,
     metadata: snapshotMetadataSchema.optional(),
     idempotencyKey: z.string().min(1).optional(),
+    allowMissing: z.boolean().optional(),
   })
   .strict();
 
@@ -75,19 +76,42 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
         });
       }
       const input = parsed.data;
-      const envelope = await store.create({
+
+      // idempotencyKey が無ければ純粋な create (key の追跡なし、常に新規)。
+      if (input.idempotencyKey === undefined) {
+        const envelope = await store.create({
+          title: input.title,
+          root: input.root,
+          metadata: input.metadata,
+        });
+        return Response.json(
+          { id: envelope.id, url: `/snapshots/${envelope.id}`, snapshot: envelope },
+          { status: 201 },
+        );
+      }
+
+      // idempotencyKey があれば update: 一致した既存を置き換える。一致が無ければ
+      // allowMissing:true のときだけ新規作成、それ以外は 404 (AIP-134 準拠)。
+      const result = await store.update({
+        idempotencyKey: input.idempotencyKey,
+        allowMissing: input.allowMissing,
         title: input.title,
         root: input.root,
         metadata: input.metadata,
-        idempotencyKey: input.idempotencyKey,
       });
+      if (!result.ok) {
+        return jsonError(404, {
+          error: "not_found",
+          message: `No snapshot found for idempotencyKey "${input.idempotencyKey}"; set allowMissing:true to create one`,
+        });
+      }
       return Response.json(
         {
-          id: envelope.id,
-          url: `/snapshots/${envelope.id}`,
-          snapshot: envelope,
+          id: result.envelope.id,
+          url: `/snapshots/${result.envelope.id}`,
+          snapshot: result.envelope,
         },
-        { status: 201 },
+        { status: result.created ? 201 : 200 },
       );
     },
 

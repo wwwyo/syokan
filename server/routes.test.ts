@@ -177,16 +177,33 @@ describe("api routes", () => {
     expect(res.status).toBe(200);
   });
 
-  test("idempotencyKey: same key replays the same id", async () => {
+  test("idempotencyKey: without allowMissing, an unseen key is a 404 not_found", async () => {
+    const res = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
+        method: "POST",
+        body: JSON.stringify({
+          root: baseInput.root,
+          idempotencyKey: "never-posted",
+        }),
+      }),
+    );
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("not_found");
+  });
+
+  test("idempotencyKey + allowMissing:true: first post creates (201), same key replays the same id", async () => {
     const first = await api.createSnapshot(
       makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({
           root: baseInput.root,
           idempotencyKey: "fixed",
+          allowMissing: true,
         }),
       }),
     );
+    expect(first.status).toBe(201);
     const a = (await first.json()) as { id: string };
     const second = await api.createSnapshot(
       makeRequest("/api/snapshots", {
@@ -197,17 +214,19 @@ describe("api routes", () => {
         }),
       }),
     );
+    expect(second.status).toBe(200);
     const b = (await second.json()) as { id: string };
     expect(b.id).toBe(a.id);
   });
 
-  test("idempotencyKey: different keys produce different ids", async () => {
+  test("idempotencyKey + allowMissing:true: different keys produce different ids", async () => {
     const first = await api.createSnapshot(
       makeRequest("/api/snapshots", {
         method: "POST",
         body: JSON.stringify({
           root: baseInput.root,
           idempotencyKey: "k1",
+          allowMissing: true,
         }),
       }),
     );
@@ -218,11 +237,45 @@ describe("api routes", () => {
         body: JSON.stringify({
           root: baseInput.root,
           idempotencyKey: "k2",
+          allowMissing: true,
         }),
       }),
     );
     const b = (await second.json()) as { id: string };
     expect(b.id).not.toBe(a.id);
+  });
+
+  test("idempotencyKey: repeat post replaces content in place via the API (200, same id)", async () => {
+    const first = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
+        method: "POST",
+        body: JSON.stringify({
+          root: baseInput.root,
+          title: "Day 1",
+          idempotencyKey: "recurring-api",
+          allowMissing: true,
+        }),
+      }),
+    );
+    const a = (await first.json()) as { id: string };
+    const second = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
+        method: "POST",
+        body: JSON.stringify({
+          root: { type: "Heading", props: { text: "Day 2" } },
+          title: "Day 2",
+          idempotencyKey: "recurring-api",
+        }),
+      }),
+    );
+    expect(second.status).toBe(200);
+    const b = (await second.json()) as {
+      id: string;
+      snapshot: { title?: string; root: { type: string } };
+    };
+    expect(b.id).toBe(a.id);
+    expect(b.snapshot.title).toBe("Day 2");
+    expect(b.snapshot.root.type).toBe("Heading");
   });
 
   test("idempotencyKey: omitting it always creates a new id", async () => {

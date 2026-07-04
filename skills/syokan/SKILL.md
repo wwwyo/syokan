@@ -39,12 +39,14 @@ Never include `id`, `createdAt`, or `url` — the server assigns them.
   "title": "Today's RSS",                                // optional. shown in the list and the view header
   "metadata": { "source": { "label": "daily-rss" } },   // optional. provenance label
   "schemaVersion": 1,                                    // optional. server fills it in
-  "idempotencyKey": "rss-2026-06-28"                     // optional. re-POSTs with the same key are deduped
+  "idempotencyKey": "rss-2026-06-28",                    // optional. targets a named view. Present ⇒ this POST is an update: a match replaces root/title/metadata in place; no match is a 404 unless allowMissing is set
+  "allowMissing": true                                   // optional, default false. with idempotencyKey and no match, create instead of 404ing
 }
 ```
 
 `metadata.source` keeps extra keys beyond `label`; you may add `url` or `fetchedAt` (e.g. `{ "label": "gh-review", "url": "https://example.com/..." }`).
-For daily or recurring views, include something like the date in the `idempotencyKey` to prevent duplicates.
+
+For daily or recurring views, include something like the date in the `idempotencyKey`, and set `allowMissing: true`. You cannot know in advance whether this key already exists, so `allowMissing: true` is the practical default whenever you use `idempotencyKey` at all: the first post creates the view, and every later post with the same key refreshes that same view in place instead of creating a duplicate. Omitting `allowMissing` is only useful when you specifically want the request to fail if the view isn't already there.
 
 ## Catalog
 
