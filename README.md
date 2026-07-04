@@ -48,7 +48,7 @@ mise install && bun install
 bun run dev    # Bun.serve + HMR（portless 経由で https://syokan.localhost）
 ```
 
-dev は global install（port `5173` / `~/.config/syokan/`）とは別に port `5273` / repo ローカルの `./.syokan-dev/` を使うので衝突しない。dev server へ投げるには `SYOKAN_BASE_URL=http://localhost:5273` を付ける。portless を介さないなら `PORTLESS=0 bun run dev`（default port `5173`）。
+dev は global install（port `5173` / XDG 標準ディレクトリ配下）とは別に port `5273` / repo ローカルの `./.syokan-dev/` を使うので衝突しない。dev server へ投げるには `SYOKAN_BASE_URL=http://localhost:5273` を付ける。portless を介さないなら `PORTLESS=0 bun run dev`（default port `5173`）。
 
 ## envelope
 
@@ -79,7 +79,7 @@ GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
 
 ## テンプレート
 
-気に入った layout は **テンプレート**（保存した envelope + `title`）として `~/.config/syokan/templates/` に残せる。snapshot と違い永続する。syokan は保管・一覧するだけで中身は解釈しない（`GET/POST/DELETE /api/templates`）。
+気に入った layout は **テンプレート**（保存した envelope + `title`）として `~/.local/share/syokan/templates/` に残せる。snapshot と違い永続する。syokan は保管・一覧するだけで中身は解釈しない（`GET/POST/DELETE /api/templates`）。
 
 ## 設定
 
@@ -99,7 +99,7 @@ bun run compile       # → dist/syokan（CLI+server+frontend を 1 バイナリ
 bun run compile:all   # → dist/syokan-<os>-<arch>（cross-compile、Release 配布用）
 ```
 
-dual-mode（[entry.ts](./entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173` / `~/.config/syokan/`（`XDG_CONFIG_HOME` で上書き可）。配布は Release に asset を上げて `mise use -g github:wwwyo/syokan@latest`。
+dual-mode（[entry.ts](./entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173`、永続先は XDG base directory に従い分散する（settings=`~/.config/syokan/`、templates=`~/.local/share/syokan/`、snapshot+runtime/log=`~/.local/state/syokan/`。場所の上書きは `XDG_{CONFIG,DATA,STATE}_HOME` で行う（絶対パスのみ、相対値は無視）。旧レイアウトからの upgrade では templates を起動時に新 location へ自動移行する）。配布は Release に asset を上げて `mise use -g github:wwwyo/syokan@latest`。
 
 ## その他
 

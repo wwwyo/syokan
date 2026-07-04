@@ -84,7 +84,7 @@ LLM に「JSXを書かせる」のではなく、**schema を満たす JSON tree
 
 catalog の type と props 定義は **`src/catalogs` が単一の SSOT**。`manifest.ts` がそれを JSON Schema 化して `GET /api/catalog` で公開し、LLM (skill) は md への転記ではなくこの API から props 契約を引く。md に書き写すと catalog 変更のたびに drift するため、SSOT を 1 箇所に保つ。
 
-「お気に入りの view に再現性を持たせる」ための **templates** も同じ思想で、syokan を SSOT にする。テンプレは「保存した envelope そのもの」で、syokan は中身を解釈せず保管・一覧するだけ (`~/.config/syokan/templates/`、`GET/POST/DELETE /api/templates`)。placeholder の render engine は持たない。雛形からの組み立て (placeholder 置換・可変長リストの展開) は LLM 側 (skill) が担い、syokan は保管庫に徹する。snapshot (ephemeral) と違いテンプレは残す前提。
+「お気に入りの view に再現性を持たせる」ための **templates** も同じ思想で、syokan を SSOT にする。テンプレは「保存した envelope そのもの」で、syokan は中身を解釈せず保管・一覧するだけ (`~/.local/share/syokan/templates/`、`GET/POST/DELETE /api/templates`)。placeholder の render engine は持たない。雛形からの組み立て (placeholder 置換・可変長リストの展開) は LLM 側 (skill) が担い、syokan は保管庫に徹する。snapshot (ephemeral) と違いテンプレは残す前提。
 
 ### Interface フリー
 
@@ -119,7 +119,7 @@ syokan/
 │   ├── router.tsx       # TanStack Router の route tree (root=AppShell)
 │   ├── Home.tsx / ViewPage.tsx / Render.tsx  # 各 route の本文 + JSON tree 再帰 renderer
 │   ├── schema/          # Zod schema (catalog Item / envelope / validation 整形)
-│   ├── lib/             # 横断 util (paths=~/.config/syokan 解決 / cn / date / code / snapshots ...)
+│   ├── lib/             # 横断 util (paths=XDG 3 系統 (config/data/state) 解決 / cn / date / code / snapshots ...)
 │   ├── catalogs/        # ★ LLM が JSON で投げる公開 type。index.ts が registry、manifest.ts が GET /api/catalog 用に JSON Schema 化
 │   └── components/      # catalog 非登録の内部 UI (ui=shadcn / AppShell / AppSidebar / PageLayout ...)
 ├── server/             # Bun.serve (127.0.0.1 bind)。routes.ts=/api/{snapshots,catalog,templates,settings,files}、store.ts=snapshot (ephemeral)、templates.ts=テンプレ保管 (永続)、setting.ts=表示設定 singleton (永続)、fileSource.ts=ファイル読み出し + 変更監視 (接続スコープ runtime state)
@@ -164,7 +164,7 @@ global ツールは **単体実行ファイル** (`bun run compile` → `dist/sy
 - **dual-mode entry**: compile 後は cli + server + frontend が 1 バイナリに同居する。[entry.ts](./entry.ts) が `SYOKAN_SERVE` で CLI / server を分岐。lazy-spawn は「単体バイナリなら自分自身 (`process.execPath`) を `SYOKAN_SERVE=1` で再 exec、dev なら `bun server/index.ts`」する。dev/compiled の判定は `isCompiledBinary()`(execPath の basename が `bun` か) で行う。CLI 引数は両モードとも `argv.slice(2)` (compiled も argv[1] に embedded entry が入る)。
 - **frontend は static `import index from "../index.html"`**。dev は on-the-fly bundle + HMR、compile 時は Bun が frontend を bundle してバイナリへ埋め込む (同一の静的 import で両立)。
 - **tailwind / bun-plugin-tailwind は devDep**。`bun build --compile` (CLI) は plugin を受け取れないため、`build.ts` が `Bun.build({ compile, plugins:[tailwind] })` で明示配線して compile 時に CSS を展開する。
-- **dev / global 分離**: global = `5173` / `~/.config/syokan`、dev = `5273` / repo ローカルの `.syokan-dev/` (gitignore 済み)。port が別なので両者の lazy-spawn server は衝突しない。永続先は `src/lib/paths.ts` に集約し `XDG_CONFIG_HOME` を尊重する (snapshot data / runtime / templates / settings をまとめて `~/.config/syokan` 配下に置く)。dev は `package.json` の `dev` script が `SYOKAN_SETTINGS_FILE` 等を `.syokan-dev/` 配下へ向け、global の設定を汚さない。renderer の変更を手元の snapshot で確認するときは dev server へ向けて投げる: `SYOKAN_BASE_URL=http://localhost:5273 bun cli/syokan.ts snapshot.json` (bare の `syokan` は常に global バイナリ=5173 を見る)。
+- **dev / global 分離**: global = `5173`、dev = `5273` / repo ローカルの `.syokan-dev/` (gitignore 済み)。port が別なので両者の lazy-spawn server は衝突しない。永続先は `src/lib/paths.ts` に集約し、ライフサイクルで XDG base directory に分ける: **settings** (keep, dotfiles 版管理対象) は `~/.config/syokan/settings.json`、**templates** (keep, user data) は `~/.local/share/syokan/templates/`、**snapshot + runtime pid/port + log** (machine-local, 再起動をまたいで残るが backup 不要) は `~/.local/state/syokan/`。かつては全部 config に集約していたが、machine-local データが dotfiles 追跡対象 (`~/.config`) に混ざり誤って git に載せる事故を招くため分離した (`XDG_{CONFIG,DATA,STATE}_HOME` を尊重)。snapshot は cache ではなく state に置く: cache の契約は「第三者が予告なく purge してよい」だが、syokan は snapshot を自動再生成しない (producer の再投稿が要る) ので、使用中に消えると復旧できない。場所の上書きは `SYOKAN_*` の独自 env を持たず `XDG_*_HOME` 一本に集約する。dev は `package.json` の `dev` script が `XDG_{CONFIG,DATA,STATE}_HOME` を `$PWD/.syokan-dev/{config,data,state}` へ向け global の設定を汚さない。XDG env は process 全体に効くので、`portless` 等 pipeline 内の他ツールを巻き込まないよう `env` で server プロセス (bun) にだけスコープする。renderer の変更を手元の snapshot で確認するときは dev server へ向けて投げる: `SYOKAN_BASE_URL=http://localhost:5273 bun cli/syokan.ts snapshot.json` (bare の `syokan` は常に global バイナリ=5173 を見る)。
 - macOS の未署名バイナリは Gatekeeper が止めることがある。ローカルビルドはそのまま動くが、配布/コピー後に弾かれたら `codesign --sign - dist/syokan`。
 - **配布**: `bun run compile:all`(=`build.ts --release`) が各 OS/arch を cross-compile し `dist/syokan-<os>-<arch>` を吐く (名前は mise の `github` backend が OS/arch を判別できる形)。GitHub Release に上げ、`mise use -g github:wwwyo/syokan@latest` で install する。cross-compile は対象の bun runtime を都度 download する。
 
