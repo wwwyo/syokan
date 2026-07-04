@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { detectLang } from "./i18n";
+import { detectLang } from "./index";
 
 describe("detectLang", () => {
   test("ja / ja-JP → ja", () => {

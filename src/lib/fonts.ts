@@ -4,7 +4,10 @@
 // 各プリセットは sans/mono の CSS スタックを自前で持ち、google を持つものは
 // 実行時に Google Fonts の <link> を動的注入する。属性セレクタ方式 (styles.css の
 // data-font ブロック) はやめ、CSS 変数 --app-font-{sans,mono} を直接書き込む。
-import { t } from "@/lib/i18n";
+//
+// i18n には依存しない: この module は server (validation) からも import されるため、
+// client 専用の i18n を引き込むと server process でも評価されてしまう。label は
+// 言語に関わらず常に "System" 固定でよい。
 
 export type FontPreset = {
   value: string;
@@ -37,7 +40,7 @@ function google(family: string): string {
 // 既定 (= system)。getFontPreset の最終フォールバックにも使うので名前付きで持つ。
 const SYSTEM_PRESET: FontPreset = {
   value: "system",
-  label: t.fontSelect.systemPreset,
+  label: "System",
   sans: sansStack(),
   mono: monoStack(),
 };
