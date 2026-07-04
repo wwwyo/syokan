@@ -1,8 +1,7 @@
-import { Outlet } from "@tanstack/react-router";
+import { Outlet, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/PageLayout/sidebarContext";
-import { SnapshotListProvider } from "./snapshotList";
 
 // client 遷移中はメモリ (常駐 shell) で開閉を保つ。hard reload をまたぐぶんだけ
 // localStorage に逃がす (storage 無効環境では throw しうるので握る)。
@@ -27,6 +26,7 @@ function readPersistedOpen(): boolean {
  * 本文の読書位置復元は router の scrollRestoration が担う (自前の補助コードは持たない)。
  */
 export function AppShell() {
+  const router = useRouter();
   const [open, setOpen] = useState(readPersistedOpen);
 
   useEffect(() => {
@@ -38,6 +38,24 @@ export function AppShell() {
     }
   }, [open]);
 
+  // snapshot 作成は外 (CLI/LLM) で起きるため in-app の契機が無い。tab に戻った / 可視化した
+  // タイミングで shell loader だけ再取得し、開いたままのアプリにも新しい一覧を反映する。
+  // background revalidation なので stale-while-revalidate で一覧のちらつきは出ない。
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onActive = () => {
+      if (document.visibilityState !== "hidden") {
+        void router.invalidate({ filter: (m) => m.routeId === "/_shell" });
+      }
+    };
+    window.addEventListener("focus", onActive);
+    document.addEventListener("visibilitychange", onActive);
+    return () => {
+      window.removeEventListener("focus", onActive);
+      document.removeEventListener("visibilitychange", onActive);
+    };
+  }, [router]);
+
   const sidebar = useMemo(
     () => ({ open, toggle: () => setOpen((v) => !v) }),
     [open],
@@ -45,17 +63,15 @@ export function AppShell() {
 
   return (
     <SidebarProvider value={sidebar}>
-      <SnapshotListProvider>
-        <div
-          data-slot="app-shell"
-          className="flex min-h-svh w-full bg-background text-foreground"
-        >
-          <AppSidebar />
-          <div data-slot="page-column" className="flex min-w-0 flex-1 flex-col">
-            <Outlet />
-          </div>
+      <div
+        data-slot="app-shell"
+        className="flex min-h-svh w-full bg-background text-foreground"
+      >
+        <AppSidebar />
+        <div data-slot="page-column" className="flex min-w-0 flex-1 flex-col">
+          <Outlet />
         </div>
-      </SnapshotListProvider>
+      </div>
     </SidebarProvider>
   );
 }
