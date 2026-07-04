@@ -102,7 +102,7 @@ GET /api/settings              # { theme, font } (defaults if unset)
 PUT /api/settings              # partial update (only the keys you send are overwritten). Unknown keys / invalid values: 400
 ```
 
-`theme`: `system` `light` `dark` (SSOT: `src/schema/setting.ts`). `font`: an identifier for a Google Fonts preset (default `system`). The list and how to extend it live in `src/lib/fonts.ts` — adding one entry there adds a font (the actual font is loaded dynamically via `<link>` on selection and `--app-font-*` is rewritten; `styles.css` / `index.html` stay untouched).
+`theme`: `system` `light` `dark` (SSOT: `src/schema/setting.ts`). `font`: an identifier for a font preset (default `system`; most presets load from Google Fonts, but `system`/`moralerspace` do not). The list and how to extend it live in `src/lib/fonts.ts` — adding one entry there adds a font (the actual font is loaded dynamically via `<link>` on selection and `--app-font-*` is rewritten; `styles.css` / `index.html` stay untouched).
 
 ## Build (single binary)
 

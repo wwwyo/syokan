@@ -175,7 +175,7 @@ describe("Diff", () => {
         comments: [{ side: "new", line: 1, body: "orphan" }],
       }),
     );
-    expect(html).toContain("could not be displayed");
+    expect(html).toContain("no file given, or the filename does not match");
   });
 
   test("falls back when the patch cannot be parsed", () => {

@@ -2,11 +2,16 @@
 // 以後は変えない (切替 UI は持たず、ブラウザ言語に従う)。
 export type Lang = "en" | "ja";
 
-/** 言語タグ列から表示言語を決める。"ja" で始まるタグが 1 つでもあれば ja、無ければ en。 */
+// 優先順位を無視して "含まれるか" だけで判定すると、英語を第一希望にした
+// ユーザーが日本語 UI にされてしまう。先頭から見て最初に対応言語と一致した
+// ものを採用する (未対応タグはスキップ)。
 export function detectLang(languages: readonly string[]): Lang {
-  return languages.some((tag) => tag.toLowerCase().startsWith("ja"))
-    ? "ja"
-    : "en";
+  for (const tag of languages) {
+    const lower = tag.toLowerCase();
+    if (lower.startsWith("ja")) return "ja";
+    if (lower.startsWith("en")) return "en";
+  }
+  return "en";
 }
 
 // 非ブラウザ (test / SSR) では navigator が無い・不完全なので空にして en へ落とす
@@ -37,8 +42,7 @@ const en = {
     theme: "Theme",
     themeDescription: "Follow the system setting, or pin light / dark.",
     font: "Font",
-    fontDescription:
-      "Search the Google Fonts presets and pick the display font.",
+    fontDescription: "Search the font presets and pick the display font.",
     usageDoc: `## 1. Create a snapshot — \`POST /api/snapshots\`
 
 Pass a tree of catalog types as \`root\`. The response returns an \`id\`.
@@ -82,8 +86,9 @@ ${FENCE}
 ## Available types
 
 \`Stack\` / \`Card\` / \`Heading\` / \`Text\` / \`Link\` / \`Badge\` / \`Time\` /
-\`Code\` / \`Diff\` / \`MarkdownDoc\` / \`PlainText\`. Each type's props are listed
-in Storybook. Trees that do not match the schema are rejected with 400.`,
+\`Code\` / \`Diff\` / \`MarkdownDoc\` / \`PlainText\` / \`FileDoc\`. Each type's
+props are listed by \`syokan catalog\` (\`GET /api/catalog\`). Trees that do not
+match the schema are rejected with 400.`,
   },
   shell: {
     listError: "Failed to load the snapshot list.",
@@ -151,7 +156,7 @@ const ja: Messages = {
     theme: "テーマ",
     themeDescription: "システム設定に従うか、ライト / ダークを固定するか選べる。",
     font: "フォント",
-    fontDescription: "表示フォントを Google Fonts のプリセットから検索して選べる。",
+    fontDescription: "表示フォントをプリセットから検索して選べる。",
     usageDoc: `## 1. snapshot を作る — \`POST /api/snapshots\`
 
 \`root\` に catalog の type で組んだ tree を渡す。応答に \`id\` が返る。
@@ -194,8 +199,9 @@ ${FENCE}
 ## 投げられる type
 
 \`Stack\` / \`Card\` / \`Heading\` / \`Text\` / \`Link\` / \`Badge\` / \`Time\` /
-\`Code\` / \`Diff\` / \`MarkdownDoc\` / \`PlainText\`。各 type の props は Storybook
-で確認できる。schema に合わない tree は 400 で弾かれる。`,
+\`Code\` / \`Diff\` / \`MarkdownDoc\` / \`PlainText\` / \`FileDoc\`。各 type の props は
+\`syokan catalog\`（\`GET /api/catalog\`）で確認できる。schema に合わない tree は
+400 で弾かれる。`,
   },
   shell: {
     listError: "一覧の取得に失敗しました。",

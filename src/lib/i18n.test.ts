@@ -7,8 +7,9 @@ describe("detectLang", () => {
     expect(detectLang(["ja-JP"])).toBe("ja");
   });
 
-  test("ja が先頭でなくても含まれれば ja", () => {
-    expect(detectLang(["en-US", "ja-JP", "en"])).toBe("ja");
+  test("優先順位の先頭にある対応言語を選ぶ (含まれるかどうかでは判定しない)", () => {
+    expect(detectLang(["en-US", "ja-JP", "en"])).toBe("en");
+    expect(detectLang(["fr", "ja-JP"])).toBe("ja");
   });
 
   test("大文字小文字を無視する", () => {

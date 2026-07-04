@@ -1,7 +1,7 @@
 ---
 name: syokan
 license: MIT
-description: "Build and POST a JSON snapshot envelope to syokan (召喚 — a verb: summon data into a rich view on a personal view layer). Use when the user says \"syokan this\", \"syokan X\", \"show in syokan\", \"post a snapshot\", \"preview this markdown\", or in Japanese 『〜を syokan』『syokan して』『syokan に出して/表示して/投げて』『snapshot を作って/送って』『syokan のUIで見たい』『Markdown をプレビューして/md ファイルをブラウザで見たい』 — for RSS feeds, in-progress PR reviews, meeting-notes markdown, today's TODO, local Markdown files, or any aggregated data the user wants to see as structured UI. Compose the tree only from catalog components (Stack, Card, Heading, Link, Text, Time, MarkdownDoc, PlainText, Diff, Code, Badge, FileDoc) and send it via the syokan CLI or POST /api/snapshots. Never write JSX. Whenever the word syokan appears, use this skill even if the user does not explicitly say snapshot."
+description: "Build and POST a JSON snapshot envelope to syokan (召喚 — a verb: summon data into a rich, living view). Use when the user says \"syokan this\", \"syokan X\", \"show in syokan\", \"post a snapshot\", \"preview this markdown\", or in Japanese 『〜を syokan』『syokan に出して/表示して/投げて』『snapshot を作って/送って』『syokan のUIで見たい』『Markdown をプレビューして/md ファイルをブラウザで見たい』 — for RSS feeds, in-progress PR reviews, meeting-notes markdown, today's TODO, local Markdown files, or any aggregated data the user wants to see as structured UI. Compose the tree only from catalog components (Stack, Card, Heading, Link, Text, Time, MarkdownDoc, PlainText, Diff, Code, Badge, FileDoc) and send it via the syokan CLI or POST /api/snapshots. Never write JSX. Whenever the word syokan appears, use this skill even if the user does not explicitly say snapshot."
 ---
 
 # syokan
