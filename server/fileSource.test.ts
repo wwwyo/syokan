@@ -35,6 +35,11 @@ function waitFor(
   });
 }
 
+// rename(inode 差し替え) 後の再 arm は macOS の fs.watch 挙動前提 (AGENTS.md 落とし穴#7)。
+// Linux(inotify) はファイル自身の watch が inode 差し替えで発火しないため成立しない。
+// 検証対象の macOS でのみ実行する (in-place 変更の watcher テストは全 OS で回す)。
+const rearmOnRename = process.platform === "darwin";
+
 describe("readTextFile", () => {
   test("reads a UTF-8 file", async () => {
     const p = join(dir, "a.md");
@@ -99,7 +104,7 @@ describe("createFileWatcher", () => {
     watcher.closeAll();
   });
 
-  test("survives temp-write→rename (editor save) via re-arm on rename", async () => {
+  test.skipIf(!rearmOnRename)("survives temp-write→rename (editor save) via re-arm on rename", async () => {
     const p = join(dir, "doc.md");
     await writeFile(p, "v1");
     const watcher = createFileWatcher({ notifyDebounceMs: 5 });
@@ -116,7 +121,7 @@ describe("createFileWatcher", () => {
     watcher.closeAll();
   });
 
-  test("re-arms across a brief gap where the path momentarily disappears", async () => {
+  test.skipIf(!rearmOnRename)("re-arms across a brief gap where the path momentarily disappears", async () => {
     const p = join(dir, "gap.md");
     await writeFile(p, "v1");
     const watcher = createFileWatcher({ notifyDebounceMs: 5, rearmDelayMs: 15 });
