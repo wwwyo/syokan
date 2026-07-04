@@ -62,6 +62,7 @@ export function startServer() {
       "/api/catalog": getCatalog,
       "/api/snapshots": {
         POST: api.createSnapshot,
+        PUT: api.updateSnapshot,
         GET: api.listSnapshots,
       },
       "/api/snapshots/:id": {

@@ -27,7 +27,16 @@ const postInputSchema = z
     root: itemSchema,
     metadata: snapshotMetadataSchema.optional(),
     idempotencyKey: z.string().min(1).optional(),
-    allowMissing: z.boolean().optional(),
+  })
+  .strict();
+
+const putInputSchema = z
+  .object({
+    schemaVersion: z.literal(CURRENT_SCHEMA_VERSION).optional(),
+    title: z.string().min(1).optional(),
+    root: itemSchema,
+    metadata: snapshotMetadataSchema.optional(),
+    idempotencyKey: z.string().min(1),
   })
   .strict();
 
@@ -57,6 +66,7 @@ async function readJsonBody(req: Request): Promise<
 
 export type ApiHandlers = {
   createSnapshot: (req: Request) => Promise<Response>;
+  updateSnapshot: (req: Request) => Promise<Response>;
   listSnapshots: () => Promise<Response>;
   getSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
   deleteSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
@@ -64,6 +74,7 @@ export type ApiHandlers = {
 
 export function createApiHandlers(store: SnapshotStore): ApiHandlers {
   return {
+    // POST: 常に新規作成。idempotencyKey を渡すと以後の PUT の的として登録される。
     async createSnapshot(req) {
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
@@ -76,25 +87,34 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
         });
       }
       const input = parsed.data;
+      const envelope = await store.create({
+        title: input.title,
+        root: input.root,
+        metadata: input.metadata,
+        idempotencyKey: input.idempotencyKey,
+      });
+      return Response.json(
+        { id: envelope.id, url: `/snapshots/${envelope.id}`, snapshot: envelope },
+        { status: 201 },
+      );
+    },
 
-      // idempotencyKey が無ければ純粋な create (key の追跡なし、常に新規)。
-      if (input.idempotencyKey === undefined) {
-        const envelope = await store.create({
-          title: input.title,
-          root: input.root,
-          metadata: input.metadata,
+    // PUT: idempotencyKey で特定した既存を置き換える。一致が無ければ 404
+    // (AIP-134 の Update の既定。作りたいときは POST を使う)。
+    async updateSnapshot(req) {
+      const body = await readJsonBody(req);
+      if (!body.ok) return body.response;
+      const parsed = putInputSchema.safeParse(body.value);
+      if (!parsed.success) {
+        return jsonError(400, {
+          error: "validation_failed",
+          message: "Request body does not satisfy the snapshot schema",
+          issues: formatValidationError(parsed.error),
         });
-        return Response.json(
-          { id: envelope.id, url: `/snapshots/${envelope.id}`, snapshot: envelope },
-          { status: 201 },
-        );
       }
-
-      // idempotencyKey があれば update: 一致した既存を置き換える。一致が無ければ
-      // allowMissing:true のときだけ新規作成、それ以外は 404 (AIP-134 準拠)。
+      const input = parsed.data;
       const result = await store.update({
         idempotencyKey: input.idempotencyKey,
-        allowMissing: input.allowMissing,
         title: input.title,
         root: input.root,
         metadata: input.metadata,
@@ -102,17 +122,14 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       if (!result.ok) {
         return jsonError(404, {
           error: "not_found",
-          message: `No snapshot found for idempotencyKey "${input.idempotencyKey}"; set allowMissing:true to create one`,
+          message: `No snapshot found for idempotencyKey "${input.idempotencyKey}"; POST to create one`,
         });
       }
-      return Response.json(
-        {
-          id: result.envelope.id,
-          url: `/snapshots/${result.envelope.id}`,
-          snapshot: result.envelope,
-        },
-        { status: result.created ? 201 : 200 },
-      );
+      return Response.json({
+        id: result.envelope.id,
+        url: `/snapshots/${result.envelope.id}`,
+        snapshot: result.envelope,
+      });
     },
 
     async listSnapshots() {

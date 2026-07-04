@@ -64,19 +64,18 @@ Dev uses port `5273` and the repo-local `./.syokan-dev/` directory, so it never 
 
 ## Envelope
 
-The body of `POST /api/snapshots` is a snapshot **envelope** (**JSON** only; wrap Markdown/plain text in `MarkdownDoc` / `PlainText` nodes):
+A snapshot **envelope** (**JSON** only; wrap Markdown/plain text in `MarkdownDoc` / `PlainText` nodes) is created with `POST /api/snapshots` and refreshed in place with `PUT /api/snapshots`:
 
 ```jsonc
 {
   "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // required: view tree
   "title": "Today's RSS",                              // optional
   "metadata": { "source": { "label": "daily-rss" } }, // optional: origin label, shown in the sidebar and header
-  "idempotencyKey": "rss-2026-06-20",                  // optional: targets a named view. Present ⇒ this POST is an update (AIP-134): a match replaces root/title/metadata in place (same id/url; createdAt is kept); no match is a 404 `not_found` unless `allowMissing` is set
-  "allowMissing": true                                 // optional, default false: with idempotencyKey and no match, create instead of 404ing
+  "idempotencyKey": "rss-2026-06-20"                   // optional on POST, required on PUT: names a view so it can be targeted again later
 }
 ```
 
-Without `idempotencyKey`, every POST creates a fresh snapshot (`201`). With `idempotencyKey`: a match returns `200` (updated in place); no match returns `201` if `allowMissing` was set, otherwise `404` (`not_found`). Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
+`POST` always creates a fresh snapshot (`201`); an `idempotencyKey` just tags it for later `PUT`s. `PUT` requires `idempotencyKey` and targets an existing view by it: a match replaces `root`/`title`/`metadata` in place (same id/url; `createdAt` is kept) and returns `200`; no match returns `404` (`not_found`) — `PUT` never creates (there is no "create if missing" escape hatch; use `POST` for that). Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
 
 ## Catalog
 

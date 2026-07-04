@@ -18,25 +18,29 @@ export type CreateInput = {
   title?: string;
   root: Item;
   metadata?: SnapshotMetadata;
+  // 指定すると id/url とは別に key→id を登録する (以後の update の的になる)。
+  // 既に登録済みの key を渡した場合も無条件に上書きする (create に存在チェックは無い)。
+  idempotencyKey?: string;
 };
 
-export type UpdateInput = CreateInput & {
+export type UpdateInput = {
+  title?: string;
+  root: Item;
+  metadata?: SnapshotMetadata;
   idempotencyKey: string;
-  // false/未指定 (AIP-134 の既定): idempotencyKey に一致する snapshot が無ければ
-  // not_found を返す (create と混同しない、意図した対象を狙い撃つ update)。
-  // true: 無ければ新規作成する (allow_missing upsert)。
-  allowMissing?: boolean;
 };
 
 export type UpdateResult =
-  | { ok: true; created: boolean; envelope: SnapshotEnvelope }
+  | { ok: true; envelope: SnapshotEnvelope }
   | { ok: false; error: "not_found" };
 
 export type SnapshotStore = {
-  // idempotencyKey を持たない新規作成。key の追跡は一切しない。
+  // 常に新規作成する。idempotencyKey を渡すと key→id を登録する (存在チェックなし)。
   create: (input: CreateInput) => Promise<SnapshotEnvelope>;
   // idempotencyKey で特定した既存 snapshot を置き換える (id/url/createdAt は保つ)。
-  // 一致が無ければ allowMissing:true のときだけ新規作成、それ以外は not_found。
+  // 一致が無ければ not_found (AIP-134 の Update の既定。allow_missing は持たない —
+  // 新規作成したいときは create を使う。狙い撃ちを外して黙って作ってしまう
+  // ことがないよう、update は常に「既にある前提」を崩さない)。
   update: (input: UpdateInput) => Promise<UpdateResult>;
   get: (id: string) => Promise<SnapshotEnvelope | undefined>;
   list: () => Promise<SnapshotSummary[]>;
@@ -192,6 +196,9 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
           ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
         };
         data.snapshots[id] = envelope;
+        if (input.idempotencyKey) {
+          data.idempotency[input.idempotencyKey] = id;
+        }
         await write(data);
         return envelope;
       }),
@@ -204,24 +211,20 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         const data = await read();
         const existingId = data.idempotency[input.idempotencyKey];
         const existing = existingId ? data.snapshots[existingId] : undefined;
-        if (!existing && !input.allowMissing) {
-          return { ok: false, error: "not_found" };
-        }
-        // 一致した既存は同じ id/url を保ったまま中身を置き換える。createdAt は
-        // 初回のまま保つ (list の並びを touch のたびに揺らさない)。一致が無く
-        // allowMissing:true のときは新規作成 (AIP-134 の upsert-via-update)。
+        if (!existing) return { ok: false, error: "not_found" };
+        // 同じ id/url を保ったまま中身を置き換える。createdAt は初回のまま保つ
+        // (list の並びを touch のたびに揺らさない)。
         const envelope: SnapshotEnvelope = {
           schemaVersion: CURRENT_SCHEMA_VERSION,
-          id: existing?.id ?? crypto.randomUUID(),
+          id: existing.id,
           root: input.root,
-          createdAt: existing?.createdAt ?? new Date().toISOString(),
+          createdAt: existing.createdAt,
           ...(input.title !== undefined ? { title: input.title } : {}),
           ...(input.metadata !== undefined ? { metadata: input.metadata } : {}),
         };
         data.snapshots[envelope.id] = envelope;
-        data.idempotency[input.idempotencyKey] = envelope.id;
         await write(data);
-        return { ok: true, created: !existing, envelope };
+        return { ok: true, envelope };
       }),
     );
   }
