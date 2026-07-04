@@ -126,9 +126,9 @@ syokan/
 └── .storybook/         # catalog 視覚レビュー基盤
 ```
 
-クライアント側ルーティングは **TanStack Router** で行う (code-based route、Vite プラグインは使わず Bun の bundler に載せる)。常駐 shell (AppShell) が sidebar と本文の置き場を 1 度だけ mount し、route 遷移では `<Outlet />` の中身だけ差し替える。これにより sidebar の開閉・スクロール位置・取得済み一覧が遷移をまたいで残り、本文の読書位置は router の `scrollRestoration` が復元する。直接 URL / reload / 戻る進む は server の SPA fallback (`/*` → HTML) で成立する。どの route にも一致しないパスは root の `notFoundComponent` で受ける。
+クライアント側ルーティングは **TanStack Router** で行う (code-based route、Vite プラグインは使わず Bun の bundler に載せる)。常駐 shell は pathless layout route (`_shell`、component=AppShell) が担い、sidebar と本文の置き場を 1 度だけ mount し、route 遷移では `<Outlet />` の中身だけ差し替える。これにより sidebar の開閉・スクロール位置・取得済み一覧が遷移をまたいで残り、本文の読書位置は router の `scrollRestoration` が復元する。直接 URL / reload / 戻る進む は server の SPA fallback (`/*` → HTML) で成立する。どの route にも一致しないパスは `_shell` 配下の splat route (`path: "$"`) が shell 内で受ける (pathless layout は子がマッチしないと自身も unmatch するため、root 直下では shell を失う)。
 
-snapshot 一覧は常駐 provider が保持し、遷移ごとには取り直さない (loading のちらつきを出さない)。最新化の契機は 2 つ: in-app の削除後 (`refresh()`) と、tab への復帰 (`focus` / `visibilitychange`)。作成は外 (CLI / LLM) で起きるため in-app の契機が無く、開いたままのアプリには tab 復帰時の取り直しで反映する。
+snapshot 一覧は `_shell` layout の loader が持ち、child 遷移では再取得しない (loading のちらつきを出さない)。最新化の契機は 2 つで、どちらも `router.invalidate({ filter: _shell })` で shell loader だけ再実行する (background revalidation = stale-while-revalidate なので一覧は消えない): in-app の削除後と、tab への復帰 (`focus` / `visibilitychange`)。作成は外 (CLI / LLM) で起きるため in-app の契機が無く、開いたままのアプリには tab 復帰時の取り直しで反映する。一覧取得が失敗すると shell 全体が errorComponent に落ちる (本文だけ残さず、操作の起点ごとまとめてエラーにする trade-off)。
 
 > MVP 当初は「ページ間で引き継ぐ状態が無い」前提でフルリロードを採用していた。状態を持つ chrome (sidebar) の追加でその前提が崩れたため、意図的に client routing へ転換した (旧方針「採用しない」からの変更。経緯は `.agent/prd/client-routing/`)。
 
