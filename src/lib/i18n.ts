@@ -55,9 +55,10 @@ curl -X POST http://localhost:5173/api/snapshots \\
     "metadata": { "source": { "label": "rss" } },
     "root": {
       "type": "Stack",
+      "props": {},
       "children": [
         { "type": "Heading", "props": { "text": "Daily RSS" } },
-        { "type": "Text", "props": { "text": "Articles that caught my eye" } }
+        { "type": "Text", "props": { "body": "Articles that caught my eye" } }
       ]
     }
   }'
@@ -169,9 +170,10 @@ curl -X POST http://localhost:5173/api/snapshots \\
     "metadata": { "source": { "label": "rss" } },
     "root": {
       "type": "Stack",
+      "props": {},
       "children": [
         { "type": "Heading", "props": { "text": "今日のRSS" } },
-        { "type": "Text", "props": { "text": "気になった記事をここに並べる" } }
+        { "type": "Text", "props": { "body": "気になった記事をここに並べる" } }
       ]
     }
   }'
