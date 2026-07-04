@@ -1,78 +1,78 @@
 # syokan
 
-個人用の view layer。複数リポジトリ・外部API・ファイルシステムから取得したデータを、事前定義した React component で人間が見る形に描画する。LLM (Claude Code / scheduled agent / CLI) は **JSON tree を投げるだけ**で、JSX を毎回生成しない。
+**syokan (召喚, "summon") is a verb.** An LLM speaks a JSON incantation, and a rich, living interface appears — no JSX written, no build step. Typing `syokan notes.md` reads literally as "syokan notes.md": the command itself is the incantation. Views are ephemeral — summoned when needed, they fade; nothing is hoarded. Under the hood this is a schema-driven renderer: data pulled from multiple repositories, external APIs, and the filesystem is rendered for humans through predefined React components. LLMs (Claude Code / scheduled agents / CLI) **post a JSON tree only** — no per-view JSX is ever generated.
 
-> **セットアップ・使い方 (`POST /api/snapshots` の envelope schema / source.label 仕様 / catalog type 一覧) は [README.md](./README.md) が、CLI コマンドは `syokan --help` (機械可読は `--help --json`) が SSOT。** この AGENTS.md は設計判断 (なぜ) と開発規約 (どういじるか) を扱う。
+> **Setup and usage (the `POST /api/snapshots` envelope schema / source.label spec / catalog type list) live in [README.md](./README.md); CLI commands live in `syokan --help` (machine-readable via `--help --json`) — those are the SSOT.** This AGENTS.md covers design judgments (why) and development conventions (how to change things).
 
-## なぜ作るか
+## Why build this
 
-### 解きたい問題
+### The problem to solve
 
-普段、自分の周りには見たいデータが分散している:
+The data I want to look at is scattered around me:
 
-- 今日のRSSフィード（日次の入力 markdown）
-- 進行中の code review（`gh` で取れる diff + 自分のコメント）
-- 仕事で共有された議事録 markdown（その場で開いて見たいだけ）
-- 今日のCalendar / TODO
-- どこかに保存した記事の読み返し
+- Today's RSS feed (a daily input markdown)
+- An in-progress code review (diff fetched via `gh` + my own comments)
+- Meeting-notes markdown shared at work (I just want to open and read it on the spot)
+- Today's Calendar / TODO
+- Re-reading an article I saved somewhere
 
-これらを **1つの URL で、構造化されたUIで、必要なときだけ** 見たい。Markdownファイルを次々開く運用も、Notionに溜め込む運用も、要件と噛み合わない。
+I want to see these **at a single URL, in structured UI, only when needed**. Opening markdown files one after another doesn't fit the requirement, and neither does hoarding everything in Notion.
 
-### Claude Code に毎回JSXを書かせる選択肢の限界
+### The limits of having Claude Code write JSX every time
 
-Claude Code でviewを作ることは可能だが、毎回 JSX を生成させると:
+Building views with Claude Code is possible, but generating JSX each time means:
 
-- **Token cost** が嵩む（数百行のJSX × 表示頻度）
-- **生成速度** が遅い（数秒〜数十秒のラグ）
-- **正確性** が揺れる（props間違い、型不一致、import漏れ）
-- **デザイン一貫性** が崩れる（同じCardが日ごとに微妙に違う）
-- **Refactor不能** — 各pageが snowflake になり、共通変更ができない
+- **Token cost** balloons (hundreds of lines of JSX × display frequency)
+- **Generation speed** is slow (seconds to tens of seconds of lag)
+- **Accuracy** wobbles (wrong props, type mismatches, missing imports)
+- **Design consistency** erodes (the same Card looks subtly different from day to day)
+- **Un-refactorable** — each page becomes a snowflake; no shared change is possible
 
-LLM の本来の強みは「データを構造化する」ことで、「描画」ではない。**描画は事前に1度設計すれば再利用できる**。この分業を構造化したい。
+An LLM's real strength is structuring data, not rendering it. **Rendering, designed once up front, can be reused.** I want to structure that division of labor.
 
-### 永続化層と分けたい理由
+### Why separate from the persistence layer
 
-データを残すべき場所と、見たいだけの場所はライフサイクルが違う:
+The place where data should be kept and the place where you just want to look at it have different lifecycles:
 
-| | 残す（永続層） | 見るだけ（syokan） |
+| | Keep (persistence layer) | Just look (syokan) |
 |---|---|---|
-| 例 | 「3ヶ月前に学んだ概念」 | 「今日のRSS」「進行中のreview」 |
-| 削除すると失う | 知識 | 何も（再構築可能） |
-| バックアップ | 必須 | 不要 |
-| schema 安定性 | 高 | 緩い |
+| Example | "a concept I learned 3 months ago" | "today's RSS", "an in-progress review" |
+| Lost on deletion | Knowledge | Nothing (reconstructible) |
+| Backup | Required | Unnecessary |
+| Schema stability | High | Loose |
 
-これを同じstoreに混ぜると:
-- 一時的な review state が長期メモリを汚染する
-- 「今日のRSS」が3年後の検索に出てくる
-- 削除/cleanup ポリシーが噛み合わず、結局 retention で別テーブル切る → なら最初から分けろという話
+Mixing these into the same store means:
+- Temporary review state pollutes long-term memory
+- "Today's RSS" shows up in a search three years later
+- Deletion/cleanup policies clash, so you end up carving out a separate table with retention anyway → in which case, separate them from the start
 
-なので **syokan はデータを永続化しない**。残したいものは別の永続層へ明示的に昇格させる（promotion path）。
+Therefore **syokan does not persist data**. Anything worth keeping is explicitly promoted to a separate persistence layer (the promotion path).
 
-### Interface を固定したくない理由
+### Why not pin down the interface
 
-入力経路を MCP に縛ると、CLI や webhook や paste が二級市民になる。実際の使い方は:
+Locking the input path to MCP makes CLI, webhooks, and paste second-class citizens. Actual usage:
 
-- Claude Code がファイル編集ベースで投げる
-- CLI で手元の内容 (共有された議事録など) をその場で envelope に包んで投げて見たい
-- 将来的に scheduled agent が定期push する可能性
-- gh webhook で PR review トリガーする可能性
+- Claude Code posts via file-edit-based workflows
+- From the CLI, wrap local content (shared meeting notes, etc.) into an envelope on the spot and post it to view
+- A scheduled agent may push periodically in the future
+- A gh webhook may trigger on PR reviews
 
-これら全てを `POST /api/snapshots` の同一 JSON envelope に流せれば、入力経路が増えても renderer は不変。
+If all of these flow into the same JSON envelope at `POST /api/snapshots`, the renderer stays unchanged no matter how many input paths are added.
 
-## 設計の核
+## Core design
 
-### 役割の分離
+### Separation of roles
 
-| 層 | 役割 | このプロジェクト |
+| Layer | Role | This project |
 |----|------|----------------|
-| Memory layer (LLM用) | 長期メモリ・wiki・知識query | **対象外**（別の永続層が担当） |
-| View layer (人間用) | 一時的なdashboard、進行中の review、今日のRSS | **これ（syokan）** |
+| Memory layer (for LLMs) | Long-term memory, wiki, knowledge queries | **Out of scope** (a separate persistence layer owns this) |
+| View layer (for humans) | Ephemeral dashboards, in-progress reviews, today's RSS | **This (syokan)** |
 
-syokan は **データを永続化しない**（ephemeral）。長期保存が必要な情報は明示的に別の永続層へ昇格する。
+syokan **does not persist data** (ephemeral). Information that needs long-term storage is explicitly promoted to a separate persistence layer.
 
 ### Schema-driven view
 
-LLM に「JSXを書かせる」のではなく、**schema を満たす JSON tree を出力させる**。Zod で validation、catalog で React component に対応付け。
+Instead of having the LLM "write JSX", have it **output a JSON tree that satisfies a schema**. Zod validates it; the catalog maps it to React components.
 
 ```
 { type: "Heading", props: { text, href } }
@@ -80,15 +80,15 @@ LLM に「JSXを書かせる」のではなく、**schema を満たす JSON tree
         catalog["Heading"] → <Heading {...props} />
 ```
 
-利点: LLM token 削減、生成速度、型安全、デザイン一貫性、refactor 容易。
+Benefits: fewer LLM tokens, generation speed, type safety, design consistency, easy refactoring.
 
-catalog の type と props 定義は **`src/catalogs` が単一の SSOT**。`manifest.ts` がそれを JSON Schema 化して `GET /api/catalog` で公開し、LLM (skill) は md への転記ではなくこの API から props 契約を引く。md に書き写すと catalog 変更のたびに drift するため、SSOT を 1 箇所に保つ。
+The catalog's type and props definitions have **`src/catalogs` as the single SSOT**. `manifest.ts` turns them into JSON Schema and exposes them at `GET /api/catalog`; the LLM (skill) pulls the props contract from this API rather than from a transcription in md. Copying into md drifts on every catalog change, so the SSOT is kept in exactly one place.
 
-「お気に入りの view に再現性を持たせる」ための **templates** も同じ思想で、syokan を SSOT にする。テンプレは「保存した envelope そのもの」で、syokan は中身を解釈せず保管・一覧するだけ (`~/.local/share/syokan/templates/`、`GET/POST/DELETE /api/templates`)。placeholder の render engine は持たない。雛形からの組み立て (placeholder 置換・可変長リストの展開) は LLM 側 (skill) が担い、syokan は保管庫に徹する。snapshot (ephemeral) と違いテンプレは残す前提。
+**Templates** — for "making a favorite view reproducible" — follow the same philosophy, with syokan as the SSOT. A template is "a saved envelope as-is"; syokan does not interpret its contents, it only stores and lists them (`~/.local/share/syokan/templates/`, `GET/POST/DELETE /api/templates`). There is no placeholder render engine. Assembling from a template (placeholder substitution, expanding variable-length lists) is the LLM's (skill's) job; syokan stays a vault. Unlike snapshots (ephemeral), templates are meant to be kept.
 
-### Interface フリー
+### Interface-free
 
-入力経路を MCP / CLI / HTTP / paste のいずれかに固定しない。すべて `POST /api/snapshots` の同一 JSON envelope に統一 (envelope schema は README が SSOT)。
+The input path is not fixed to any one of MCP / CLI / HTTP / paste. Everything is unified into the same JSON envelope at `POST /api/snapshots` (the envelope schema's SSOT is the README).
 
 ```
 [Claude Code]      ──┐
@@ -97,99 +97,100 @@ catalog の type と props 定義は **`src/catalogs` が単一の SSOT**。`man
 [gh webhook]       ──┘
 ```
 
-### File-backed view (ファイル参照ノード)
+### File-backed view (file-reference node)
 
-手元のファイル (markdown / log / json ...) を「渡すだけ」で表示し、元ファイルの編集に view を追従させる。ファイル参照は envelope や store のレベルではなく **catalog node 1 個 (`FileDoc`)** に閉じ込める。こうすると snapshot envelope は従来どおり catalog tree だけを持ち、store は「ファイルを参照している snapshot」を特別扱いしない。「いつ読み直すか」は `FileDoc` component の責務になり、普通の catalog node と同じ snapshot に混在できる。
+Display a local file (markdown / log / json ...) by "just handing it over", with the view following edits to the source file. The file reference is confined to **a single catalog node (`FileDoc`)**, not the envelope or store level. This way the snapshot envelope carries only a catalog tree as before, and the store gives no special treatment to "snapshots that reference files". "When to re-read" becomes the `FileDoc` component's responsibility, and it can coexist in a snapshot with ordinary catalog nodes.
 
-- **描画**: `FileDoc` は props の path (絶対パス) をサーバ経由で読み、拡張子から形式を推論して既存の MarkdownDoc / PlainText / Code に委譲する (data 取得する初の catalog component)。推論規則は `src/lib/fileFormat.ts` が SSOT (`.md`/`.markdown`→markdown、`.json`→code、他→text)。
-- **forward sync**: サーバはファイルを監視し、変更時に SSE (`/api/files/watch`) で「変わった」だけ通知する。内容は client が `GET /api/files` で取り直す。欠落 / 巨大 / バイナリ / 非通常ファイルのエラーを HTTP ステータス (404/413/415/422/403) に素直に乗せ、初回 mount と更新で読み出し経路を 1 本にするため、SSE で内容は push しない。
-- **watcher = f(購読)**: 監視は永続化しない接続スコープの runtime state。SSE 接続の開閉が購読で、path ごとの refcount で watcher を張り/解放する。サーバ再起動後は client の再接続で watcher が張り直る (store と独立)。
-- **CLI auto-wrap**: `syokan <path>` は envelope JSON ならそのまま post、そうでなければ `FileDoc` に自動で包む (従来「CLI はテキストを包まない」の唯一の例外)。dedup 識別子は絶対パスで、既存の idempotency 機構に乗せる (store 無改修)。
-- **ephemeral 原則**: envelope/store にファイル内容は持ち込まない。file-backed snapshot は再現性が元ファイルに依存する点で従来 snapshot とライフサイクルが異なるが、この差を許容して原則を保つ。localhost bind + ユーザー権限を信頼境界とし、ファイル読み出しに allowlist は課さない。判断と経緯は `.agent/prd/file-source-sync/` (prd.md / decision.log)。
+- **Rendering**: `FileDoc` reads the path (absolute) in its props via the server, infers the format from the extension, and delegates to the existing MarkdownDoc / PlainText / Code (the first catalog component that fetches data). The inference rules have `src/lib/fileFormat.ts` as SSOT (`.md`/`.markdown`→markdown, `.json`→code, everything else→text).
+- **Forward sync**: the server watches the file and, on change, notifies only "it changed" via SSE (`/api/files/watch`). The client re-fetches the content with `GET /api/files`. Errors for missing / oversized / binary / non-regular files ride plainly on HTTP status codes (404/413/415/422/403); content is not pushed over SSE so that initial mount and updates share a single read path.
+- **watcher = f(subscription)**: watching is connection-scoped runtime state, never persisted. Opening/closing the SSE connection is the subscription; watchers are armed/released via a per-path refcount. After a server restart, watchers are re-armed by client reconnection (independent of the store).
+- **CLI auto-wrap**: `syokan <path>` posts as-is if the file is envelope JSON; otherwise it auto-wraps it in a `FileDoc` (the sole exception to the previous rule "the CLI does not wrap text"). The dedup identifier is the absolute path, riding the existing idempotency mechanism (no store changes).
+- **Ephemeral principle**: file contents are never brought into the envelope/store. A file-backed snapshot differs in lifecycle from conventional snapshots in that its reproducibility depends on the source file, but this difference is accepted to preserve the principle. The trust boundary is the localhost bind + user permissions; no allowlist is imposed on file reads. Judgment and history: `.agent/prd/file-source-sync/` (prd.md / decision.log).
 
-## ディレクトリ構造
+## Directory structure
 
 ```
 syokan/
-├── entry.ts             # 単体バイナリの dual-mode entry (SYOKAN_SERVE で cli/server 分岐)
-├── cli/syokan.ts        # CLI (post / open / stop / catalog / templates)。server を lazy-spawn (compiled は自分自身)
-├── build.ts             # compile script (host=dist/syokan、--release で各 OS/arch を cross-compile)
+├── entry.ts             # dual-mode entry for the single binary (SYOKAN_SERVE switches cli/server)
+├── cli/syokan.ts        # CLI (post / open / stop / catalog / templates). Lazy-spawns the server (compiled: itself)
+├── build.ts             # compile script (host=dist/syokan; --release cross-compiles each OS/arch)
 ├── src/
 │   ├── frontend.tsx     # RouterProvider mount
-│   ├── router.tsx       # TanStack Router の route tree (root → _shell layout=AppShell → home/view)
-│   ├── Home.tsx / ViewPage.tsx / Render.tsx  # 各 route の本文 + JSON tree 再帰 renderer
-│   ├── schema/          # Zod schema (catalog Item / envelope / validation 整形)
-│   ├── lib/             # 横断 util (paths=XDG 3 系統 (config/data/state) 解決 / cn / date / code / snapshots ...)
-│   ├── catalogs/        # ★ LLM が JSON で投げる公開 type。index.ts が registry、manifest.ts が GET /api/catalog 用に JSON Schema 化
-│   └── components/      # catalog 非登録の内部 UI (ui=shadcn / AppShell / AppSidebar / PageLayout ...)
-├── server/             # Bun.serve (127.0.0.1 bind)。routes.ts=/api/{snapshots,catalog,templates,settings,files}、store.ts=snapshot (ephemeral)、templates.ts=テンプレ保管 (永続)、setting.ts=表示設定 singleton (永続)、fileSource.ts=ファイル読み出し + 変更監視 (接続スコープ runtime state)
-├── skills/syokan/      # ★ LLM 向け syokan skill の SSOT。repo に同梱して配布し、dotfiles 側 (.agents/skills/) はこれを install したコピー。skill を直すときは必ずこちらを編集する
-└── .storybook/         # catalog 視覚レビュー基盤
+│   ├── router.tsx       # TanStack Router route tree (root → _shell layout=AppShell → home/view)
+│   ├── Home.tsx / ViewPage.tsx / Render.tsx  # each route's body + recursive JSON tree renderer
+│   ├── schema/          # Zod schemas (catalog Item / envelope / validation formatting)
+│   ├── lib/             # cross-cutting utils (paths=XDG 3-way (config/data/state) resolution / cn / date / code / snapshots ...)
+│   ├── catalogs/        # ★ public types LLMs post as JSON. index.ts is the registry; manifest.ts JSON-Schemas it for GET /api/catalog
+│   └── components/      # internal UI not registered in the catalog (ui=shadcn / AppShell / AppSidebar / PageLayout ...)
+├── server/             # Bun.serve (127.0.0.1 bind). routes.ts=/api/{snapshots,catalog,templates,settings,files}, store.ts=snapshots (ephemeral), templates.ts=template storage (persistent), setting.ts=display-settings singleton (persistent), fileSource.ts=file reads + change watching (connection-scoped runtime state)
+├── skills/syokan/      # ★ SSOT of the syokan skill for LLMs. Bundled in the repo for distribution; the dotfiles side (.agents/skills/) is an installed copy. Always edit here when fixing the skill
+└── .storybook/         # visual review base for the catalog
 ```
 
-クライアント側ルーティングは **TanStack Router** で行う (code-based route、Vite プラグインは使わず Bun の bundler に載せる)。常駐 shell は pathless layout route (`_shell`、component=AppShell) が担い、sidebar と本文の置き場を 1 度だけ mount し、route 遷移では `<Outlet />` の中身だけ差し替える。これにより sidebar の開閉・スクロール位置・取得済み一覧が遷移をまたいで残り、本文の読書位置は router の `scrollRestoration` が復元する。直接 URL / reload / 戻る進む は server の SPA fallback (`/*` → HTML) で成立する。どの route にも一致しないパスは `_shell` 配下の splat route (`path: "$"`) が shell 内で受ける (pathless layout は子がマッチしないと自身も unmatch するため、root 直下では shell を失う)。
+Client-side routing uses **TanStack Router** (code-based routes; no Vite plugin — it rides Bun's bundler). The resident shell is a pathless layout route (`_shell`, component=AppShell) that mounts the sidebar and content slot exactly once; route transitions swap only the contents of `<Outlet />`. This keeps the sidebar's open/closed state, scroll position, and the already-fetched list alive across transitions, and the router's `scrollRestoration` restores the reading position in the body. Direct URL / reload / back-forward work via the server's SPA fallback (`/*` → HTML). Paths matching no route are caught by a splat route (`path: "$"`) under `_shell` so they render inside the shell (a pathless layout unmatches itself when no child matches, so a root-level splat would lose the shell).
 
-snapshot 一覧は `_shell` layout の loader が持ち、child 遷移では再取得しない (loading のちらつきを出さない)。最新化の契機は 2 つで、どちらも `router.invalidate({ filter: _shell })` で shell loader だけ再実行する (background revalidation = stale-while-revalidate なので一覧は消えない): in-app の削除後と、tab への復帰 (`focus` / `visibilitychange`)。作成は外 (CLI / LLM) で起きるため in-app の契機が無く、開いたままのアプリには tab 復帰時の取り直しで反映する。一覧取得が失敗すると shell 全体が errorComponent に落ちる (本文だけ残さず、操作の起点ごとまとめてエラーにする trade-off)。
+The snapshot list is owned by the `_shell` layout's loader and is not re-fetched on child transitions (no loading flicker). There are two refresh triggers, both re-running only the shell loader via `router.invalidate({ filter: _shell })` (background revalidation = stale-while-revalidate, so the list never disappears): after an in-app deletion, and on returning to the tab (`focus` / `visibilitychange`). Creation happens outside the app (CLI / LLM), so there is no in-app trigger; an app left open picks it up via the tab-return refetch. If the list fetch fails, the whole shell falls to the errorComponent (rather than leaving only the body, errors are surfaced together at the point of interaction — a deliberate trade-off).
 
-> MVP 当初は「ページ間で引き継ぐ状態が無い」前提でフルリロードを採用していた。状態を持つ chrome (sidebar) の追加でその前提が崩れたため、意図的に client routing へ転換した (旧方針「採用しない」からの変更。経緯は `.agent/prd/client-routing/`)。
+> The original MVP used full page reloads, premised on "no state carried between pages". Adding stateful chrome (the sidebar) broke that premise, so we deliberately switched to client routing (a reversal of the old "not adopting it" policy; history in `.agent/prd/client-routing/`).
 
 ### Component collocation
 
-component は `<Name>/index.tsx` に実装し、同じ dir に test (`<Name>.test.tsx`) と story (`<Name>.stories.tsx`) を同居させる。import は `@/components/PageLayout` のように dir を指す (index.tsx に解決)。関連ファイルを 1 箇所に集め、refactor / 削除時の追従漏れを防ぐ。
+Implement a component at `<Name>/index.tsx` and colocate its test (`<Name>.test.tsx`) and story (`<Name>.stories.tsx`) in the same dir. Imports point at the dir, like `@/components/PageLayout` (resolves to index.tsx). Gathering related files in one place prevents stragglers during refactors/deletions.
 
-- **catalog 公開** (LLM が JSON で投げる type) は `catalogs/<Name>/`、**非公開の内部部品**は `components/<Name>/`
-- **内部専用サブパーツ** (その component からのみ使う部品) は親の dir 配下にネストする (例: catalog の `Code/CopyButton/`)。複数 component で共有するようになったら 1 つ上の直下へ昇格させる。スコープ = 置き場所
-- `components/ui/` は例外: shadcn が生成するフラットファイル群 (dir 化しない)
+- **Catalog-public** (types LLMs post as JSON) go in `catalogs/<Name>/`; **non-public internal parts** go in `components/<Name>/`
+- **Internal-only subparts** (used solely by that component) nest under the parent dir (e.g. the catalog's `Code/CopyButton/`). Once shared by multiple components, promote it one level up. Scope = location
+- `components/ui/` is the exception: shadcn's generated flat files (not dir-ified)
 
-## セットアップ / 使い方
+## Setup / usage
 
-セットアップ手順 (mise / bun / portless)、`POST /api/snapshots` の envelope schema、source.label 仕様、catalog type 一覧は [README.md](./README.md) が SSOT。CLI コマンドは catalog と同じ思想で `syokan --help` (機械可読は `--help --json`) が SSOT — md に転記すると drift するため README にも一覧は載せない。重複させないためここには書かない。
+Setup steps (mise / bun / portless), the `POST /api/snapshots` envelope schema, the source.label spec, and the catalog type list have [README.md](./README.md) as SSOT. CLI commands, in the same spirit as the catalog, have `syokan --help` (machine-readable via `--help --json`) as SSOT — transcribing into md drifts, so the README doesn't carry the list either. To avoid duplication, none of it is written here.
 
-Storybook は catalog component の視覚レビュー基盤。`<Name>/<Name>.stories.tsx` で props の variant・edge case・dark/light を一覧化し、`.storybook/preview.tsx` が `src/styles.css` を読み込む。toolbar の `.dark` トグルでテーマ追従を確認できる。`.claude/launch.json` に `storybook` を登録済みなので preview 経由でも起動可能。起動コマンドは README 参照。
+Storybook is the visual review base for catalog components. `<Name>/<Name>.stories.tsx` enumerates prop variants, edge cases, and dark/light; `.storybook/preview.tsx` loads `src/styles.css`. The toolbar's `.dark` toggle verifies theme adherence. `storybook` is registered in `.claude/launch.json`, so it can also be started via preview. See the README for the launch command.
 
-## 技術スタック
+## Tech stack
 
-- **Runtime / Bundler / HMR / TS 実行**: Bun (1 つに集約。Vite / Hono / React Router は使わない)
-- **Frontend**: React + TypeScript (Bun の HTML import + JSX/TSX ネイティブで bundle)
+- **Runtime / bundler / HMR / TS execution**: Bun (consolidated into one; no Vite / Hono / React Router)
+- **Frontend**: React + TypeScript (bundled via Bun's HTML import + native JSX/TSX)
 - **UI**: shadcn/ui (`base-nova` style) + `@base-ui/react` + Tailwind CSS v4
-- **Backend**: `Bun.serve({ routes })` — frontend は `index.html` の import で供給 (dev は on-the-fly bundle + HMR、compile 時はバイナリへ埋め込み)。`/api/*` は同一プロセス内で同居
+- **Backend**: `Bun.serve({ routes })` — the frontend is served via the `index.html` import (dev: on-the-fly bundle + HMR; compile: embedded in the binary). `/api/*` cohabits in the same process
 - **Validation**: Zod
-- **Routing (server)**: `Bun.serve` の routes patterns (`/api/snapshots` ハンドラ + `/*` SPA fallback)
-- **Routing (client)**: TanStack Router (code-based route、Vite プラグイン不使用)。loader / scrollRestoration / pending・notFound・error / 常駐レイアウトの要求を満たす選定
-- **Component catalog**: Storybook (`@storybook/react-vite` + `@tailwindcss/vite`)。catalog を story 化して視覚レビュー。builder は Vite だが **Storybook 専用の devDep** で、アプリ本体の「Vite を使わない」方針はアプリ bundle に限った話（Bun ネイティブの Storybook builder が無いため代替なし）
+- **Routing (server)**: `Bun.serve` routes patterns (`/api/snapshots` handler + `/*` SPA fallback)
+- **Routing (client)**: TanStack Router (code-based routes, no Vite plugin). Chosen for meeting the loader / scrollRestoration / pending, notFound, error / resident-layout requirements
+- **Component catalog**: Storybook (`@storybook/react-vite` + `@tailwindcss/vite`). Catalog components become stories for visual review. The builder is Vite, but it is **a Storybook-only devDep**; the app's "no Vite" policy applies only to the app bundle (there is no Bun-native Storybook builder, so no alternative exists)
 
-## 配布 (compile / dev・global 分離)
+## Distribution (compile / dev-global separation)
 
-global ツールは **単体実行ファイル** (`bun run compile` → `dist/syokan`)。bun/node/npm 無しで動く。「開発中は最新を見たい / 普段使いは確定版」という分離を、CLI でも server でもなく **実行形態** (バイナリ vs `bun run dev`) で成立させている。
+The global tool is **a single executable** (`bun run compile` → `dist/syokan`). It runs without bun/node/npm. The split "see the latest while developing / use the pinned build day-to-day" is achieved not at the CLI or server level but by **execution form** (binary vs `bun run dev`).
 
-- **dual-mode entry**: compile 後は cli + server + frontend が 1 バイナリに同居する。[entry.ts](./entry.ts) が `SYOKAN_SERVE` で CLI / server を分岐。lazy-spawn は「単体バイナリなら自分自身 (`process.execPath`) を `SYOKAN_SERVE=1` で再 exec、dev なら `bun server/index.ts`」する。dev/compiled の判定は `isCompiledBinary()`(execPath の basename が `bun` か) で行う。CLI 引数は両モードとも `argv.slice(2)` (compiled も argv[1] に embedded entry が入る)。
-- **frontend は static `import index from "../index.html"`**。dev は on-the-fly bundle + HMR、compile 時は Bun が frontend を bundle してバイナリへ埋め込む (同一の静的 import で両立)。
-- **tailwind / bun-plugin-tailwind は devDep**。`bun build --compile` (CLI) は plugin を受け取れないため、`build.ts` が `Bun.build({ compile, plugins:[tailwind] })` で明示配線して compile 時に CSS を展開する。
-- **dev / global 分離**: global = `5173`、dev = `5273` / repo ローカルの `.syokan-dev/` (gitignore 済み)。port が別なので両者の lazy-spawn server は衝突しない。永続先は `src/lib/paths.ts` に集約し、ライフサイクルで XDG base directory に分ける: **settings** (keep, dotfiles 版管理対象) は `~/.config/syokan/settings.json`、**templates** (keep, user data) は `~/.local/share/syokan/templates/`、**snapshot + runtime pid/port + log** (machine-local, 再起動をまたいで残るが backup 不要) は `~/.local/state/syokan/`。かつては全部 config に集約していたが、machine-local データが dotfiles 追跡対象 (`~/.config`) に混ざり誤って git に載せる事故を招くため分離した (`XDG_{CONFIG,DATA,STATE}_HOME` を尊重)。snapshot は cache ではなく state に置く: cache の契約は「第三者が予告なく purge してよい」だが、syokan は snapshot を自動再生成しない (producer の再投稿が要る) ので、使用中に消えると復旧できない。場所の上書きは `SYOKAN_*` の独自 env を持たず `XDG_*_HOME` 一本に集約する。dev は `package.json` の `dev` script が `XDG_{CONFIG,DATA,STATE}_HOME` を `$PWD/.syokan-dev/{config,data,state}` へ向け global の設定を汚さない。XDG env は process 全体に効くので、`portless` 等 pipeline 内の他ツールを巻き込まないよう `env` で server プロセス (bun) にだけスコープする。renderer の変更を手元の snapshot で確認するときは dev server へ向けて投げる: `SYOKAN_BASE_URL=http://localhost:5273 bun cli/syokan.ts snapshot.json` (bare の `syokan` は常に global バイナリ=5173 を見る)。
-- macOS の未署名バイナリは Gatekeeper が止めることがある。ローカルビルドはそのまま動くが、配布/コピー後に弾かれたら `codesign --sign - dist/syokan`。
-- **配布**: `bun run compile:all`(=`build.ts --release`) が各 OS/arch を cross-compile し `dist/syokan-<os>-<arch>` を吐く (名前は mise の `github` backend が OS/arch を判別できる形)。GitHub Release に上げ、`mise use -g github:wwwyo/syokan@latest` で install する。cross-compile は対象の bun runtime を都度 download する。
+- **Dual-mode entry**: after compilation, cli + server + frontend live in one binary. [entry.ts](./entry.ts) branches CLI / server on `SYOKAN_SERVE`. Lazy-spawn works as: "for the single binary, re-exec itself (`process.execPath`) with `SYOKAN_SERVE=1`; in dev, run `bun server/index.ts`". The dev/compiled distinction is made by `isCompiledBinary()` (whether execPath's basename is `bun`). CLI args are `argv.slice(2)` in both modes (compiled builds also put the embedded entry in argv[1]).
+- **The frontend is a static `import index from "../index.html"`**. Dev gets an on-the-fly bundle + HMR; at compile time Bun bundles the frontend and embeds it in the binary (the same static import serves both).
+- **tailwind / bun-plugin-tailwind are devDeps**. `bun build --compile` (the CLI) cannot take plugins, so `build.ts` wires them explicitly via `Bun.build({ compile, plugins:[tailwind] })` to expand CSS at compile time.
+- **dev / global separation**: global = `5173`; dev = `5273` with the repo-local `.syokan-dev/` (gitignored). The ports differ, so the two lazy-spawned servers never collide. Persistence locations are consolidated in `src/lib/paths.ts` and split across XDG base directories by lifecycle: **settings** (keep; tracked in dotfiles) at `~/.config/syokan/settings.json`; **templates** (keep; user data) at `~/.local/share/syokan/templates/`; **snapshots + runtime pid/port + logs** (machine-local; survive restarts but need no backup) at `~/.local/state/syokan/`. Everything used to be consolidated under config, but machine-local data mixed into the dotfiles-tracked tree (`~/.config`) invited accidentally committing it to git, so they were separated (respecting `XDG_{CONFIG,DATA,STATE}_HOME`). Snapshots go in state, not cache: cache's contract is "a third party may purge without notice", but syokan does not regenerate snapshots automatically (the producer must re-post), so losing them mid-use is unrecoverable. Location overrides carry no bespoke `SYOKAN_*` envs — they are consolidated on `XDG_*_HOME` alone. In dev, the `dev` script in `package.json` points `XDG_{CONFIG,DATA,STATE}_HOME` at `$PWD/.syokan-dev/{config,data,state}` so global settings stay clean. XDG envs affect the whole process, so they are scoped via `env` to the server process (bun) only, to avoid dragging in other pipeline tools like `portless`. To check renderer changes against a local snapshot, post to the dev server: `SYOKAN_BASE_URL=http://localhost:5273 bun cli/syokan.ts snapshot.json` (bare `syokan` always talks to the global binary = 5173).
+- Gatekeeper may block unsigned binaries on macOS. Local builds run as-is, but if a distributed/copied binary is rejected: `codesign --sign - dist/syokan`.
+- **Distribution**: `bun run compile:all` (= `build.ts --release`) cross-compiles each OS/arch and emits `dist/syokan-<os>-<arch>` (names in a form mise's `github` backend can use to detect OS/arch). Upload to a GitHub Release and install with `mise use -g github:wwwyo/syokan@latest`. Cross-compilation downloads the target bun runtime each time.
 
-## 既知の落とし穴
+## Known pitfalls
 
-### catalog `Code` / `Diff` は dev (StrictMode) で潰れる
+### Catalog `Code` / `Diff` collapse in dev (StrictMode)
 
-`@pierre/diffs` の `File`（catalog の `Code` / `Diff`、および `Code` に委譲する `MarkdownDoc` のコードフェンス）は、**`bun run dev`（React StrictMode）で grammar が cold の初回描画時に高さ0に潰れる**。tab 内や client 遷移で踏みやすい（home「使い方」tab は決定的、ViewPage は時々）。
+`@pierre/diffs`' `File` (the catalog's `Code` / `Diff`, plus the code fences of `MarkdownDoc`, which delegates to `Code`) **collapses to height 0 on first render in `bun run dev` (React StrictMode) when the grammar is cold**. Easy to hit inside tabs or on client transitions (the home "usage" tab is deterministic; ViewPage is intermittent).
 
-- **原因**: File は cold 初回に空プレースホルダ（高さ0）を出し、非同期ハイライト完了時の再描画 callback で本文に差し替える。StrictMode の mount→unmount→remount で、その callback が unmount 時に `cleanUp` 済み（`enabled=false`）の旧インスタンスに届き no-op になるため、潰れたまま固まる。
-- **影響は dev のみ**。warm（grammar キャッシュ済）や本番ビルド（StrictMode 無効）では正常に描画される。`disableWorkerPool` / mount 遅延 / ResizeObserver パッチ除去 / default tab 変更はいずれも効かない（核心は非同期 callback × ライフサイクルのため）。
-- **方針**: ハイライト不要な静的コード片は `components/CodeSnippet`（素の `<pre>`、初回計測に依存せず潰れない）を使う。ハイライトが要る doc は catalog `Code` のまま（dev での見え方は割り切り、本番で出る）。詳細は `src/catalogs/Code/index.tsx` のコメント参照。
-- **上流**: pierre 側が StrictMode 再マウント後に非同期ハイライトの完了 callback を新インスタンスへ張り直さない堅牢性バグ。upstream issue 候補。
+- **Cause**: on a cold first render, File emits an empty placeholder (height 0) and swaps in the body via a re-render callback when async highlighting completes. Under StrictMode's mount→unmount→remount, that callback lands on the old instance, already `cleanUp`'d (`enabled=false`) at unmount, becoming a no-op — so it stays collapsed.
+- **Dev-only impact**. Warm (grammar cached) renders and production builds (StrictMode disabled) render fine. `disableWorkerPool` / delayed mount / removing the ResizeObserver patch / changing the default tab all fail (the core is async callback × lifecycle).
+- **Policy**: for static code fragments that need no highlighting, use `components/CodeSnippet` (a bare `<pre>`; independent of initial measurement, never collapses). Docs that need highlighting stay on catalog `Code` (accept the dev-time appearance; it renders in production). Details in the comment in `src/catalogs/Code/index.tsx`.
+- **Upstream**: a robustness bug on pierre's side — after a StrictMode remount, the async highlight completion callback is not re-attached to the new instance. Candidate for an upstream issue.
 
-### Bun (macOS) の `fs.watch` は親ディレクトリ watch が中の content 変更で発火しない
+### Bun (macOS) `fs.watch`: watching a parent directory does not fire on content changes inside it
 
-`FileDoc` の変更監視 (`server/fileSource.ts`) の実装で踏んだ。
+Hit while implementing `FileDoc`'s change watching (`server/fileSource.ts`).
 
-- **落とし穴**: 「temp 書き込み → rename」保存 (エディタの一般的な atomic save) は対象ファイルの inode を差し替えるため、素朴に `fs.watch(path)` すると差し替え後の変更を見失う。定石は「親ディレクトリを watch して basename でフィルタ」だが、**Bun (macOS) では `fs.watch(dir)` が中のファイルの content 変更で発火しない**ことを実機確認した (dir watch は使えない)。
-- **方針**: ファイル自身を watch し、`rename` イベント (inode 差し替え/削除のシグナル) を受けたら同じ path に watch を張り直す (re-arm)。置換先が未出現なら上限つきでリトライする。これで「rename 保存 → 以降の in-place 書き込み」に追従する。
-- **残る限界**: 削除後しばらくして同じ path で再作成されるケースは re-arm のリトライ上限を過ぎると live 更新が止まる (view は GET で not_found を表示)。MVP 受容。詳細は `.agent/prd/file-source-sync/decision.log` #7。
+- **The pitfall**: a "write temp → rename" save (editors' common atomic save) swaps the target file's inode, so a naive `fs.watch(path)` loses track of changes after the swap. The textbook fix is "watch the parent directory and filter by basename", but on **Bun (macOS), `fs.watch(dir)` does not fire on content changes of files inside it** — verified on a real machine (dir watch is unusable).
+- **Policy**: watch the file itself; on a `rename` event (the signal for inode swap/deletion), re-arm a watch on the same path. If the replacement hasn't appeared yet, retry with a cap. This follows "rename save → subsequent in-place writes".
+- **Remaining limit**: if a file is deleted and re-created at the same path only after a while, live updates stop once the re-arm retry cap is exceeded (the view shows not_found via GET). Accepted for MVP. Details in `.agent/prd/file-source-sync/decision.log` #7.
 
-## コミュニケーション方針
+## Communication policy
 
-- 忖度しない。問題点やリスクがあれば率直に指摘する
-- コメントは「なぜ」を説明する場合にのみ書く
-- 「データを永続化しない」原則を守る。永続化したくなったら別の永続層への昇格 path を考える
+- Docs and product copy are English-first (Japanese versions live in `*.ja.md`, e.g. `README.ja.md`). Use "syokan" as a bare transitive verb in both languages — EN "syokan your notes", JA 「今日の RSS を syokan」 — never "do syokan" / 「syokan する」; "syokan" stands on its own
+- No flattery. Point out problems and risks bluntly
+- Write comments only to explain "why"
+- Uphold the "no data persistence" principle. When persistence becomes tempting, think about a promotion path to a separate persistence layer

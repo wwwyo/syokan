@@ -1,25 +1,25 @@
-# envelope の例
+# Envelope examples
 
-実際に POST できる完成形の envelope を示す。組み合わせの参考。
-type と props の正確な定義は `syokan catalog` が SSOT（下の DiffComment 表も含め、最終的にはそちらで確認する）。
-いずれも `id` と `createdAt` を含まない（server が採番する）。
+Complete envelopes that can be POSTed as-is, shown as composition references.
+The exact definitions of types and props come from `syokan catalog`, which is the SSOT (including the DiffComment table below — always confirm there in the end).
+None of them include `id` or `createdAt` (the server assigns those).
 
-## DiffComment の形
+## DiffComment shape
 
-`Diff` の `comments[]` の各要素は次の形を取る。
+Each element of `Diff`'s `comments[]` takes this shape.
 
-| key | 型 | 必須 | 備考 |
+| key | type | required | notes |
 | --- | --- | --- | --- |
-| `side` | `"old" \| "new"` | 必須 | 旧側（削除行）か新側（追加行）か |
-| `line` | 正の整数 | 必須 | その side の gutter 行番号。patch に含まれる行のみ |
-| `body` | string | 必須 | コメント本文 |
-| `file` | 非空 string | 任意 | 複数ファイル patch で対象を指定する。新ファイル名（rename なら旧名も可）。単一ファイルなら省略できる |
-| `author` | string | 任意 | コメント主 |
+| `side` | `"old" \| "new"` | required | old side (deleted lines) or new side (added lines) |
+| `line` | positive integer | required | gutter line number on that side. Only lines present in the patch |
+| `body` | string | required | comment body |
+| `file` | non-empty string | optional | targets a file in a multi-file patch. New file name (old name also accepted for renames). Can be omitted for a single-file patch |
+| `author` | string | optional | comment author |
 
-## 例 1: RSS や記事の一覧
+## Example 1: RSS or article list
 
-見出しリンク、取得時刻、要約を Card で積む。
-`source` に `url` を相乗りさせている。
+Stack Cards with a heading link, fetch time, and summary.
+`source` piggybacks a `url`.
 
 ```json
 {
@@ -30,14 +30,14 @@ type と props の正確な定義は `syokan catalog` が SSOT（下の DiffComm
     "type": "Stack",
     "props": { "direction": "vertical" },
     "children": [
-      { "type": "Heading", "props": { "text": "2026-06-28 のフィード", "level": 1 } },
+      { "type": "Heading", "props": { "text": "Feed for 2026-06-28", "level": 1 } },
       {
         "type": "Card",
         "props": {},
         "children": [
-          { "type": "Heading", "props": { "text": "記事タイトル", "level": 3, "href": "https://example.com/article" } },
+          { "type": "Heading", "props": { "text": "Article title", "level": 3, "href": "https://example.com/article" } },
           { "type": "Time", "props": { "datetime": "2026-06-28T06:30:00Z", "muted": true } },
-          { "type": "Text", "props": { "body": "記事の要約をここに置く。", "clamp": true } }
+          { "type": "Text", "props": { "body": "Put the article summary here.", "clamp": true } }
         ]
       }
     ]
@@ -45,9 +45,9 @@ type と props の正確な定義は `syokan catalog` が SSOT（下の DiffComm
 }
 ```
 
-## 例 2: PR review（diff と行コメント）
+## Example 2: PR review (diff with line comments)
 
-`Badge` で状態を示し、`Diff` に unified patch と行コメントを載せる。
+Show state with a `Badge`, and put a unified patch plus line comments on a `Diff`.
 
 ```json
 {
@@ -61,7 +61,7 @@ type と props の正確な定義は `syokan catalog` が SSOT（下の DiffComm
         "type": "Stack",
         "props": { "direction": "horizontal" },
         "children": [
-          { "type": "Heading", "props": { "text": "#42 タイトル", "level": 2 } },
+          { "type": "Heading", "props": { "text": "#42 title", "level": 2 } },
           { "type": "Badge", "props": { "text": "changes requested", "variant": "destructive" } }
         ]
       },
@@ -71,7 +71,7 @@ type と props の正確な定義は `syokan catalog` が SSOT（下の DiffComm
           "diffStyle": "unified",
           "patch": "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,3 +1,4 @@\n const a = 1;\n+const b = 2;\n export { a };\n",
           "comments": [
-            { "side": "new", "line": 2, "body": "この値はどこから来る？定数化したい", "author": "reviewer" }
+            { "side": "new", "line": 2, "body": "Where does this value come from? Should be a named constant", "author": "reviewer" }
           ]
         }
       }
@@ -80,29 +80,29 @@ type と props の正確な定義は `syokan catalog` が SSOT（下の DiffComm
 }
 ```
 
-## 例 3: 議事録や記事本文（markdown）
+## Example 3: meeting notes or article body (markdown)
 
-長文は `MarkdownDoc` の 1 node に包む。
-markdown を envelope の外に置いてそのまま投げることはできない。
+Wrap long prose in a single `MarkdownDoc` node.
+Markdown cannot be posted bare outside an envelope.
 
 ```json
 {
-  "title": "1on1 メモ 2026-06-28",
+  "title": "1on1 notes 2026-06-28",
   "metadata": { "source": { "label": "meeting" } },
   "root": {
     "type": "Stack",
     "props": {},
     "children": [
-      { "type": "MarkdownDoc", "props": { "body": "## アジェンダ\n\n- 今期の優先度\n- 次の打ち手\n\n## 決定事項\n\n1. A を進める\n2. B は保留\n" } }
+      { "type": "MarkdownDoc", "props": { "body": "## Agenda\n\n- Priorities this quarter\n- Next moves\n\n## Decisions\n\n1. Proceed with A\n2. B on hold\n" } }
     ]
   }
 }
 ```
 
-投げる。
+Post it.
 
 ```bash
 syokan meeting.json
-# dev renderer で確認するなら次を使う
+# to check against the dev renderer, use:
 SYOKAN_BASE_URL=http://localhost:5273 bun cli/syokan.ts meeting.json
 ```

@@ -8,6 +8,7 @@ import {
   fileBasename,
   inferFileFormat,
 } from "@/lib/fileFormat";
+import { t } from "@/lib/i18n";
 
 export const fileDocPropsSchema = z
   .object({
@@ -34,16 +35,7 @@ export type FileDocState =
   | { kind: "ok"; content: string }
   | { kind: "error"; reason: FileErrorReason };
 
-const ERROR_MESSAGE: Record<FileErrorReason, string> = {
-  not_found: "ファイルが見つかりません（削除された可能性があります）。",
-  not_regular_file: "通常ファイルではないため表示できません。",
-  permission_denied: "読み取り権限がありません。",
-  too_large: "ファイルが大きすぎるため表示できません（上限 2 MiB）。",
-  not_text: "テキストとして表示できません（バイナリ / 非 UTF-8）。",
-  missing_path: "パスが指定されていません。",
-  network: "読み込みに失敗しました（サーバに接続できません）。",
-  error: "読み込みに失敗しました。",
-};
+const ERROR_MESSAGE: Record<FileErrorReason, string> = t.fileDoc.errors;
 
 /** 取得状態を受け取り表示する presentational 部。Storybook / test はここを直接描画する。 */
 export function FileDocBody({
@@ -56,7 +48,7 @@ export function FileDocBody({
   if (state.kind === "loading") {
     return (
       <p data-slot="file-doc-loading" className="text-muted-foreground">
-        読み込み中…
+        {t.common.loading}
       </p>
     );
   }

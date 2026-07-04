@@ -1,5 +1,6 @@
 import { useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
+import { t } from "@/lib/i18n";
 import { deleteSnapshot, nextSnapshotId } from "@/lib/snapshots";
 import type { SnapshotSummary } from "@/schema";
 import { shellRouteApi } from "./shellRouteApi";
@@ -29,7 +30,7 @@ export function useDeleteSnapshot() {
       // 遷移先は削除前の並びから決める (削除後は隣接位置が失われるため)。
       const next = nextSnapshotId(before, id);
       if (!(await deleteSnapshot(id))) {
-        if (typeof window !== "undefined") window.alert("削除に失敗しました");
+        if (typeof window !== "undefined") window.alert(t.view.deleteFailed);
         return;
       }
       // shell loader だけ再実行して sidebar を最新化する。表示中の envelope は再取得しない

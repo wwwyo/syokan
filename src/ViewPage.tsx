@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n";
 import type { SnapshotEnvelope } from "@/schema";
 import { PageLayout } from "./components/PageLayout";
 import { ViewHeader } from "./components/ViewHeader";
@@ -41,7 +42,7 @@ export function ViewPending() {
   return (
     <PageLayout header={<ViewHeader />}>
       <p data-slot="view-loading" className="text-muted-foreground">
-        Loading…
+        {t.common.loading}
       </p>
     </PageLayout>
   );
@@ -53,11 +54,13 @@ export function ViewNotFound({ id }: { id: string }) {
     <PageLayout header={<ViewHeader />}>
       <div data-slot="view-not-found">
         <p className="text-muted-foreground">
-          404 — Snapshot <code className="font-mono">{id}</code> not found.
+          {t.view.notFoundBefore}
+          <code className="font-mono">{id}</code>
+          {t.view.notFoundAfter}
         </p>
         <p className="mt-6">
           <a className="text-primary underline underline-offset-4" href="/">
-            Back to home
+            {t.common.backToHome}
           </a>
         </p>
       </div>

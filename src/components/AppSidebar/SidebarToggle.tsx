@@ -3,6 +3,7 @@ import {
   SIDEBAR_ID,
   useSidebar,
 } from "@/components/PageLayout/sidebarContext";
+import { t } from "@/lib/i18n";
 
 // AppSidebar を開閉するハンバーガー。provider 外 (単体描画) では何も出さない。
 export function SidebarToggle() {
@@ -12,7 +13,7 @@ export function SidebarToggle() {
     <button
       type="button"
       data-slot="view-sidebar-toggle"
-      aria-label="ページ一覧"
+      aria-label={t.shell.sidebarLabel}
       aria-controls={SIDEBAR_ID}
       aria-expanded={sidebar.open}
       onClick={sidebar.toggle}

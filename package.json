@@ -1,7 +1,7 @@
 {
   "name": "syokan",
   "version": "0.0.3",
-  "description": "Personal, schema-driven view layer. Post a JSON tree, render it with pre-defined React components.",
+  "description": "syokan — LLMs summon rich UI: post a JSON tree and predefined React components render an ephemeral view.",
   "type": "module",
   "private": true,
   "scripts": {
