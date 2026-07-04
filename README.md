@@ -99,7 +99,7 @@ bun run compile       # → dist/syokan（CLI+server+frontend を 1 バイナリ
 bun run compile:all   # → dist/syokan-<os>-<arch>（cross-compile、Release 配布用）
 ```
 
-dual-mode（[entry.ts](./entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173`、永続先は XDG base directory に従い分散する（settings=`~/.config/syokan/`、templates=`~/.local/share/syokan/`、snapshot+runtime/log=`~/.local/state/syokan/`。各 `XDG_*_HOME` のほか `SYOKAN_{DATA_DIR,TEMPLATES_DIR,RUNTIME_DIR,SETTINGS_FILE}` でカテゴリ単位に上書きできる。旧レイアウトからの upgrade では templates を起動時に新 location へ自動移行する）。配布は Release に asset を上げて `mise use -g github:wwwyo/syokan@latest`。
+dual-mode（[entry.ts](./entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173`、永続先は XDG base directory に従い分散する（settings=`~/.config/syokan/`、templates=`~/.local/share/syokan/`、snapshot+runtime/log=`~/.local/state/syokan/`。場所の上書きは `XDG_{CONFIG,DATA,STATE}_HOME` で行う（絶対パスのみ、相対値は無視）。旧レイアウトからの upgrade では templates を起動時に新 location へ自動移行する）。配布は Release に asset を上げて `mise use -g github:wwwyo/syokan@latest`。
 
 ## その他
 

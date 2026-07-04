@@ -529,13 +529,6 @@ export const helpManifest = {
       summary:
         "State root (default ~/.local/state); snapshots, pidfile, and log live under <root>/syokan",
     },
-    { name: "SYOKAN_DATA_DIR", summary: "Override the snapshot data dir" },
-    { name: "SYOKAN_TEMPLATES_DIR", summary: "Override the templates dir" },
-    { name: "SYOKAN_SETTINGS_FILE", summary: "Override the settings file path" },
-    {
-      name: "SYOKAN_RUNTIME_DIR",
-      summary: "Override the server pidfile/log dir",
-    },
   ],
   output:
     "catalog/templates print JSON to stdout; post prints the view URL; every error prints a JSON object to stderr.",

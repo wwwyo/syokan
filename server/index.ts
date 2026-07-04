@@ -36,7 +36,6 @@ function resolvePort(): number {
 // 移行済み or 現行運用中なので触らない。best-effort (失敗しても起動は続行する)。
 function migrateLegacyTemplates(): void {
   const legacy = legacyTemplatesDir();
-  if (!legacy) return;
   const dest = templatesDir();
   if (legacy === dest || !existsSync(legacy) || existsSync(dest)) return;
   try {
