@@ -1,9 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    // share 自身の import は "syokan/*" (package exports) を使う。この paths は
-    // 取り込まれる syokan 側 source の内部 import ("@/lib/...") を tsc が解決するためだけに残す
-    // (tsc は compile 対象 project の paths で全ファイルを解決する)
+    // share's own imports use "syokan/*" (package exports). This paths mapping only exists
+    // so tsc can resolve the internal imports ("@/lib/...") in the pulled-in syokan source
+    // (tsc resolves every file in the compiled project through that project's paths).
     "paths": {
       "@/*": ["../syokan/src/*"]
     }

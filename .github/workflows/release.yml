@@ -1,23 +1,23 @@
 name: release
 
-# `bun run release` (apps/syokan/scripts/release.ts) が bump + commit + v* tag + push する。
-# その tag を起点に、cross-compile したバイナリを添付した release を publish する。
-# 版を決めるのは人間 (tag)、重い compile と asset upload を CI に逃がす分担。
-# (package.json が git root にないため npm version 組み込みの tag は使えず、script が明示的に打つ)
+# `bun run release` (apps/syokan/scripts/release.ts) does bump + commit + v* tag + push.
+# That tag triggers this workflow, which publishes a release with cross-compiled binaries attached.
+# The human decides the version (tag); the heavy compile and asset upload are offloaded to CI.
+# (package.json isn't at the git root, so npm version's built-in tagging can't be used — the script tags explicitly.)
 on:
   push:
     tags:
       - "v*"
 
 permissions:
-  contents: write # release 作成・asset upload に必要
+  contents: write # required to create the release and upload assets
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0 / mise.toml の bun を手元と同一版で入れる
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0 / installs the same bun version as local per mise.toml
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun test
