@@ -70,7 +70,7 @@ export function toLineAnnotations(
  */
 function DiffComment({ body, author }: CommentMeta) {
   return (
-    <div className="mx-3 my-2 flex gap-2 rounded-md border border-border bg-card p-3 text-sm text-card-foreground shadow-sm">
+    <div className="mx-3 my-2 flex gap-2 rounded-md bg-card p-3 text-sm text-card-foreground ring-1 ring-foreground/10">
       <MessageSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0">
         {author ? <div className="mb-0.5 font-semibold">{author}</div> : null}

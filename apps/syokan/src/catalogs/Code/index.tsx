@@ -55,7 +55,7 @@ export function Code({ code, lang, filename }: CodeProps) {
   return (
     <div
       data-slot="code"
-      className="group relative my-4 overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+      className="group relative my-4 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
     >
       {filename ? (
         <div
