@@ -12,8 +12,9 @@ export const ja: Messages = {
     loading: "読み込み中…",
   },
   home: {
-    intro:
-      "syokan（召喚）は動詞。LLM がリッチな UI を召喚する — JSON を唱えると、構造化された view が現れる。今日の RSS、進行中の review、手元の markdown を、必要なときだけ呼び出す。JSX は書かない。view は ephemeral。",
+    introLead: "JSON の呪文を唱えると、生きた UI がその場に立ち上がる。",
+    introBody:
+      "今日の RSS、進行中のレビュー、手元の markdown ——必要なときに呼び出し、用が済めば跡形もなく消えていく。JSX は書かない。何も溜め込まない。",
     tabSettings: "設定",
     tabUsage: "使い方",
     theme: "テーマ",

@@ -10,8 +10,9 @@ export const en = {
     loading: "Loading…",
   },
   home: {
-    intro:
-      "syokan (召喚) is a verb. LLMs summon rich UI — speak a JSON incantation, and a living interface appears: today's RSS, an in-flight review, a local markdown file, called up only when you need them. No JSX, ephemeral by design.",
+    introLead: "Speak a JSON incantation, and a living UI rises on the spot.",
+    introBody:
+      "Today's RSS, an in-flight review, a local markdown file — summoned only when you need them, they fade once the need has passed. No JSX. Nothing hoarded.",
     tabSettings: "Settings",
     tabUsage: "Usage",
     theme: "Theme",

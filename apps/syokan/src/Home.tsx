@@ -18,7 +18,8 @@ export function Home() {
       }
     >
       <h1 className="text-3xl font-semibold tracking-tight">syokan</h1>
-      <p className="mt-3 text-muted-foreground">{t.home.intro}</p>
+      <p className="mt-4 text-lg font-medium tracking-tight">{t.home.introLead}</p>
+      <p className="mt-2 text-muted-foreground">{t.home.introBody}</p>
 
       <Tabs defaultValue="settings" className="mt-10 gap-6">
         <TabsList>
