@@ -292,6 +292,19 @@ describe("cli main: post (default action)", () => {
     );
   });
 
+  test("a type field alone does not make a tree (package.json-like input is rejected)", async () => {
+    const { deps, calls, err } = makeDeps({
+      files: { "package.json": JSON.stringify({ type: "module", name: "x" }) },
+      respond: () => okResponse(),
+    });
+    const result = await main(["package.json"], deps);
+    expect(result.exitCode).toBe(1);
+    expect(calls).toEqual([]);
+    expect((JSON.parse(err[0] as string) as { error: string }).error).toBe(
+      "unsupported_input",
+    );
+  });
+
   test("a .json file over the sniff limit is wrapped as a TreeDoc without reading its contents", async () => {
     let read = false;
     const { deps, calls } = makeDeps({

@@ -29,6 +29,7 @@ export type TreeDocErrorReason =
   | "too_large"
   | "not_text"
   | "missing_path"
+  | "invalid_path"
   | "network"
   | "error"
   | "invalid_json"
@@ -119,6 +120,10 @@ export function TreeDoc({ path }: TreeDocProps) {
     let loadId = 0;
     const controller = new AbortController();
     const query = `path=${encodeURIComponent(path)}`;
+
+    // A changed path points at a different file — the previous subtree is not "last valid content"
+    // for it, so drop it instead of showing it as stale (costs one redundant render on mount).
+    setState({ root: null, error: null, loading: true });
 
     function fail(reason: TreeDocErrorReason) {
       setState((prev) => ({ root: prev.root, error: reason, loading: false }));

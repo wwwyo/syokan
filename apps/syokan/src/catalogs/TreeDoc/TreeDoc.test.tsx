@@ -88,6 +88,8 @@ describe("parseTreeContent", () => {
 describe("reasonFromStatus", () => {
   test("prefers a known body.error", () => {
     expect(reasonFromStatus(500, { error: "not_text" })).toBe("not_text");
+    // the server's 400 splits into missing_path / invalid_path via the body
+    expect(reasonFromStatus(400, { error: "invalid_path" })).toBe("invalid_path");
   });
 
   test("falls back to the status when the body is unreadable", () => {

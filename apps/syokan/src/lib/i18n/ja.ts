@@ -88,6 +88,7 @@ export const ja: Messages = {
       too_large: "ファイルが大きすぎるため表示できません（上限 2 MiB）。",
       not_text: "テキストとして読めません（バイナリ / 非 UTF-8）。",
       missing_path: "パスが指定されていません。",
+      invalid_path: "パスが使えません（絶対パスのみ指定できます）。",
       network: "読み込みに失敗しました（サーバに接続できません）。",
       error: "読み込みに失敗しました。",
       invalid_json: "ファイルが正しい JSON ではありません。",

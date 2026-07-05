@@ -87,6 +87,7 @@ export const en = {
       too_large: "File is too large to display (limit: 2 MiB).",
       not_text: "Cannot be read as text (binary / non-UTF-8).",
       missing_path: "No path specified.",
+      invalid_path: "The path is not usable (an absolute local path is required).",
       network: "Failed to load (cannot reach the server).",
       error: "Failed to load.",
       invalid_json: "The file is not valid JSON.",

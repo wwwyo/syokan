@@ -225,14 +225,20 @@ function looksLikeEnvelope(value: unknown): boolean {
   );
 }
 
-// Lightweight check for whether it's a bare catalog tree (`{ type: string, ... }`). A broken tree
-// passes here and lets the client render / publish validation surface the error.
+// Lightweight check for whether it's a bare catalog tree (`{ type: string, props: object }`).
+// Requiring props keeps unrelated JSON that happens to carry a type field (e.g. package.json's
+// "type": "module") on the rejection path. A broken tree passes here and lets the client render /
+// publish validation surface the error.
 function looksLikeTree(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const { type, props } = value as { type?: unknown; props?: unknown };
   return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    typeof (value as { type?: unknown }).type === "string"
+    typeof type === "string" &&
+    typeof props === "object" &&
+    props !== null &&
+    !Array.isArray(props)
   );
 }
 
