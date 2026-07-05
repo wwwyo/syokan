@@ -5,8 +5,8 @@
   "workspaces": ["apps/*"],
   "scripts": {
     "dev": "portless run --app-port 5273 env XDG_CONFIG_HOME=$PWD/.syokan-dev/config XDG_DATA_HOME=$PWD/.syokan-dev/data XDG_STATE_HOME=$PWD/.syokan-dev/state bun --hot apps/syokan/server/index.ts",
-    "compile": "bun --filter syokan compile",
-    "compile:all": "bun --filter syokan compile:all",
+    "compile": "bun --filter @syokan/app compile",
+    "compile:all": "bun --filter @syokan/app compile:all",
     "release": "bun apps/syokan/scripts/release.ts",
     "build:share": "bun --filter @syokan/share build",
     "deploy:share": "bun --filter @syokan/share deploy",

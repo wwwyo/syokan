@@ -1,5 +1,5 @@
 {
-  // share's own imports use "syokan/*" (package exports); the pulled-in syokan source
+  // share's own imports use "@syokan/app/*" (package exports); the pulled-in syokan source
   // uses relative imports only, so no path alias is needed.
   "extends": "../../tsconfig.base.json",
   "include": [

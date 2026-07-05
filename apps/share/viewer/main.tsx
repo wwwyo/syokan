@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CodeSnippet } from "syokan/components/CodeSnippet";
-import { Render } from "syokan/render";
-import type { Item } from "syokan/schema";
+import { CodeSnippet } from "@syokan/app/components/CodeSnippet";
+import { Render } from "@syokan/app/render";
+import type { Item } from "@syokan/app/schema";
 import type { PublicShareResponse } from "../types";
 
 const GITHUB_URL = "https://github.com/wwwyo/syokan";

@@ -1,5 +1,5 @@
 {
-  "name": "syokan",
+  "name": "@syokan/app",
   "version": "0.0.3",
   "description": "syokan — LLMs summon rich UI: post a JSON tree and predefined React components render an ephemeral view.",
   "type": "module",
@@ -9,6 +9,11 @@
     "./schema": "./src/schema/index.ts",
     "./components/CodeSnippet": "./src/components/CodeSnippet/index.tsx",
     "./styles.css": "./src/styles.css"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*",
+    "#components/*": "./src/components/*",
+    "#hooks/*": "./src/hooks/*"
   },
   "scripts": {
     "compile": "bun build.ts",

@@ -111,7 +111,7 @@ Display a local file (markdown / log / json ...) by "just handing it over", with
 
 ```
 syokan/                      # bun workspace root (package "syokan-workspace"): delegation scripts only, no deps. tsconfig.base.json is the shared compilerOptions base
-├── apps/syokan/             # the app (workspace package "syokan"; version SSOT = its package.json)
+├── apps/syokan/             # the app (workspace package "@syokan/app"; version SSOT = its package.json)
 │   ├── entry.ts             # dual-mode entry for the single binary (SYOKAN_SERVE switches cli/server)
 │   ├── cli/syokan.ts        # CLI (post / open / stop / catalog / templates). Lazy-spawns the server (compiled: itself)
 │   ├── build.ts             # compile script (host=dist/syokan; --release cross-compiles each OS/arch)
@@ -137,11 +137,11 @@ The snapshot list is owned by the `_shell` layout's loader and is not re-fetched
 
 ### Component collocation
 
-Implement a component at `<Name>/index.tsx` and colocate its test (`<Name>.test.tsx`) and story (`<Name>.stories.tsx`) in the same dir. Imports point at the dir with a relative path, like `../PageLayout` (resolves to index.tsx). No `@/` alias — the share package pulls syokan sources across the workspace boundary, and a root-level alias made that resolution setup-dependent (tsconfig paths / Vite alias / Bun all had to agree), so imports are relative only. Gathering related files in one place prevents stragglers during refactors/deletions.
+Implement a component at `<Name>/index.tsx` and colocate its test (`<Name>.test.tsx`) and story (`<Name>.stories.tsx`) in the same dir. Imports point at the dir with a relative path, like `../PageLayout` (resolves to index.tsx). No `@/` alias — the share package pulls syokan sources across the workspace boundary, and a root-level alias made that resolution setup-dependent (tsconfig paths / Vite alias / Bun all had to agree), so imports are relative only (sole exception: `components/ui/`, below). Gathering related files in one place prevents stragglers during refactors/deletions.
 
 - **Catalog-public** (types LLMs post as JSON) go in `catalogs/<Name>/`; **non-public internal parts** go in `components/<Name>/`
 - **Internal-only subparts** (used solely by that component) nest under the parent dir (e.g. the catalog's `Code/CopyButton/`). Once shared by multiple components, promote it one level up. Scope = location
-- `components/ui/` is the exception: shadcn's generated flat files (not dir-ified). components.json aliases are relative-from-package-root (`src/...`) so `shadcn add` places files correctly without a tsconfig alias, but the CLI also writes the alias string verbatim into import specifiers — after an add, rewrite the generated `"src/lib/utils"` / `"src/components/ui/x"` imports to relative (`../../lib/utils` / `./x`); typecheck catches any missed ones
+- `components/ui/` is the exception: shadcn's generated flat files (not dir-ified), and the one zone using `#` subpath imports (`#lib/utils.ts` etc.). components.json aliases point at package.json `imports` entries — officially supported by the shadcn CLI, so `add` output lands in the right place with working imports, untouched. `#` is Node-standard and resolves against this package's own package.json, so it has none of the cross-package ambiguity that got the `@/` alias removed. (Relative aliases in components.json don't work: the alias string doubles as the verbatim import specifier in generated files, and a placement-correct value is import-broken and vice versa)
 
 ## Setup / usage
 
