@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // bun run release — interactively pick the bump kind, then version bump + tag + push.
 // .github/workflows/release.yml picks up the pushed tag and releases (publishes) the binary.
+import { fileURLToPath } from "node:url";
 import { $ } from "bun";
 
 type Bump = "patch" | "minor" | "major";
@@ -50,8 +51,12 @@ if (dirty) {
   process.exit(1);
 }
 const tag = `v${nextVersion}`;
-await $`bun pm version --no-git-tag-version ${choice.key}`;
+// version SSOT is apps/syokan/package.json, but this script runs from the git root.
+// bun pm version operates on cwd's package.json, so pin cwd to this package's dir.
+const appDir = fileURLToPath(new URL("..", import.meta.url));
+await $`bun pm version --no-git-tag-version ${choice.key}`.cwd(appDir);
 await $`git commit -am ${tag}`;
-await $`git tag ${tag}`;
+// annotated tag (-a): git push --follow-tags only carries annotated tags, not lightweight ones.
+await $`git tag -a ${tag} -m ${tag}`;
 await $`git push --follow-tags`;
 console.log(`\n✓ pushed ${tag}. CI will publish the release.`);
