@@ -153,7 +153,9 @@ export function createShareApp(deps: ShareAppDeps) {
       return c.json({ login: auth.login });
     })
     .post("/api/auth/login", async (c) => {
-      if (crossOrigin(c.req.raw)) return c.json({ error: "forbidden" }, 403);
+      if (crossOrigin(c.req.raw)) {
+        return c.json({ error: "forbidden" } satisfies ShareErrorResponse, 403);
+      }
       const body = await parseOptionalJsonBody(c.req.raw);
       if (!body.ok) {
         return c.json(
@@ -218,7 +220,9 @@ export function createShareApp(deps: ShareAppDeps) {
       return c.json({ ok: true });
     })
     .post("/api/snapshots/:id/publish", async (c) => {
-      if (crossOrigin(c.req.raw)) return c.json({ error: "forbidden" }, 403);
+      if (crossOrigin(c.req.raw)) {
+        return c.json({ error: "forbidden" } satisfies ShareErrorResponse, 403);
+      }
       const body = await parseOptionalJsonBody(c.req.raw);
       if (!body.ok) {
         return c.json(
@@ -350,7 +354,9 @@ export function createShareApp(deps: ShareAppDeps) {
       },
     )
     .delete("/api/shares/:id", async (c) => {
-      if (crossOrigin(c.req.raw)) return c.json({ error: "forbidden" }, 403);
+      if (crossOrigin(c.req.raw)) {
+        return c.json({ error: "forbidden" } satisfies ShareErrorResponse, 403);
+      }
       const auth = await readAuth(deps.authFilePath);
       if (!auth) {
         return c.json(
