@@ -32,7 +32,8 @@ describe("publishSnapshot", () => {
     stubFetch((url, init) => {
       expect(url).toBe("/api/snapshots/k3f9q2/publish");
       expect(init?.method).toBe("POST");
-      expect(init?.body).toBe("{}");
+      // hc sends no body; the server treats an empty body as {} (expiresIn omitted)
+      expect(init?.body).toBeUndefined();
       return Response.json(share, { status: 201 });
     });
     const result = await publishSnapshot("k3f9q2");

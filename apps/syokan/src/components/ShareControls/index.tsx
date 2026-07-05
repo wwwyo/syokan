@@ -12,15 +12,19 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../ui/popover";
+import { hc, type InferResponseType } from "hono/client";
 import { formatDateTime } from "../../lib/date";
 import { t } from "../../lib/i18n";
-import type {
-  CreateShareResponse,
-  ListSharesResponse,
-} from "../../../../share/types";
+import type { ShareAppType } from "../../../server/share";
+
+// The FE's API contract is its own server (server/share.ts); the Worker's shape reaches here only through it.
+const client = hc<ShareAppType>("");
 
 /** The publish response as-is. The list (ShareSummary) is a superset, so it is assignable to this type. */
-export type ShareEntry = CreateShareResponse;
+export type ShareEntry = InferResponseType<
+  (typeof client.api.snapshots)[":id"]["publish"]["$post"],
+  201
+>;
 
 export type PublishResult =
   | { kind: "success"; share: ShareEntry }
@@ -30,33 +34,29 @@ export type PublishResult =
 /** Publishes. Every outcome is folded into a PublishResult for the dialog (never throws). */
 export async function publishSnapshot(id: string): Promise<PublishResult> {
   try {
-    const res = await fetch(
-      `/api/snapshots/${encodeURIComponent(id)}/publish`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      },
-    );
-    if (res.ok) {
-      const share = (await res.json()) as CreateShareResponse;
-      return { kind: "success", share };
+    const res = await client.api.snapshots[":id"].publish.$post({
+      param: { id },
+    });
+    if (res.status === 201) {
+      return { kind: "success", share: await res.json() };
     }
     if (res.status === 401) return { kind: "not_logged_in" };
-    let body: { error?: string; path?: string } | null = null;
-    try {
-      body = (await res.json()) as { error?: string; path?: string };
-    } catch {
-      body = null;
-    }
-    if (body?.error === "materialize_failed") {
+    if (res.status === 422) {
+      const body = await res.json();
       return {
         kind: "error",
-        message: t.share.errors.materializeFailed(body.path ?? ""),
+        message: t.share.errors.materializeFailed(body.path),
       };
     }
-    if (body?.error === "share_api_unreachable" || res.status === 502) {
-      return { kind: "error", message: t.share.errors.unreachable };
+    if (res.status === 502) {
+      const body = await res.json().catch(() => null);
+      return {
+        kind: "error",
+        message:
+          body?.error === "share_api_unreachable"
+            ? t.share.errors.unreachable
+            : t.share.errors.generic,
+      };
     }
     return { kind: "error", message: t.share.errors.generic };
   } catch {
@@ -66,14 +66,14 @@ export async function publishSnapshot(id: string): Promise<PublishResult> {
 
 export async function fetchShares(snapshotId: string): Promise<ShareEntry[]> {
   try {
-    const res = await fetch(
-      `/api/shares?snapshot=${encodeURIComponent(snapshotId)}`,
-    );
-    if (!res.ok) return [];
-    const data = (await res.json()) as ListSharesResponse;
-    // A 200 doesn't guarantee shares is an array (e.g. a proxy passing through the Worker's non-JSON).
-    // Putting undefined into state would crash the whole ViewHeader on the chip's shares.length.
-    return Array.isArray(data?.shares) ? data.shares : [];
+    const res = await client.api.shares.$get({
+      query: { snapshot: snapshotId },
+    });
+    if (res.status !== 200) return [];
+    const data = await res.json();
+    // The type is compile-time only; a broken proxy behind the local server can still hand over
+    // a non-array. Putting undefined into state would crash the whole ViewHeader on shares.length.
+    return Array.isArray(data.shares) ? data.shares : [];
   } catch {
     return [];
   }
@@ -81,9 +81,7 @@ export async function fetchShares(snapshotId: string): Promise<ShareEntry[]> {
 
 export async function unpublishShare(id: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/shares/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
+    const res = await client.api.shares[":id"].$delete({ param: { id } });
     return res.ok;
   } catch {
     return false;

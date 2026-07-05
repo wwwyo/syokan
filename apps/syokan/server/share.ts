@@ -1,14 +1,19 @@
-import type { BunRequest } from "bun";
 import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { Hono } from "hono";
 import { hc } from "hono/client";
+import { validator } from "hono/validator";
 import { z } from "zod";
 import { authFile } from "../src/lib/paths";
 import { formatValidationError } from "../src/schema";
 // AppType is exported by apps/share/worker.ts (the Hono app). The SSOT for the API shape is
 // .agent/prd/public-share/contract.md and apps/share/types.ts.
 import type { AppType } from "../../share/worker";
-import { SHARE_API_DEFAULT_ORIGIN } from "../../share/types";
+import {
+  type ListSharesResponse,
+  SHARE_API_DEFAULT_ORIGIN,
+  type ShareErrorResponse,
+} from "../../share/types";
 import { materializeTree } from "./materialize";
 import type { SnapshotStore } from "./store";
 
@@ -48,13 +53,6 @@ async function writeAuth(path: string, data: AuthData): Promise<void> {
   await chmod(path, 0o600);
 }
 
-function jsonError(
-  status: number,
-  payload: { error: string; [key: string]: unknown },
-) {
-  return Response.json(payload, { status });
-}
-
 async function readJsonSafe(res: Response): Promise<unknown> {
   try {
     return await res.json();
@@ -77,6 +75,28 @@ const authResponseSchema = z
   .object({ token: z.string().min(1), login: z.string().min(1) })
   .loose();
 
+// Worker error bodies pass through only on this status set so the hc-visible response types
+// stay literal (422 is deliberately absent: it is reserved for the local materialize_failed).
+// Anything else — unknown status or a body without an `error` string — folds into 502.
+const PASS_THROUGH_STATUSES = [400, 401, 403, 404, 413, 429] as const;
+
+const workerErrorBodySchema = z.object({ error: z.string() }).loose();
+
+type WorkerFailure = {
+  body: z.infer<typeof workerErrorBodySchema> | ShareErrorResponse;
+  status: (typeof PASS_THROUGH_STATUSES)[number] | 502;
+};
+
+async function workerFailure(res: Response): Promise<WorkerFailure> {
+  const parsed = workerErrorBodySchema.safeParse(await readJsonSafe(res));
+  return {
+    body: parsed.success
+      ? parsed.data
+      : ({ error: "share_api_error" } satisfies ShareErrorResponse),
+    status: PASS_THROUGH_STATUSES.find((s) => s === res.status) ?? 502,
+  };
+}
+
 // The localhost server is only hit by the same-origin app and the Origin-less CLI. Reject any
 // cross-origin request that carries an Origin (a malicious web page CSRFing publish to leak local
 // file contents to a public URL). CLI/curl send no Origin, so they pass.
@@ -94,64 +114,63 @@ function crossOrigin(req: Request): boolean {
 // Accept no body / empty body as {} (omitting expiresIn is the normal path for publish).
 async function parseOptionalJsonBody(
   req: Request,
-): Promise<{ ok: true; value: unknown } | { ok: false; response: Response }> {
+): Promise<{ ok: true; value: unknown } | { ok: false }> {
   const text = await req.text();
   if (text.trim() === "") return { ok: true, value: {} };
   try {
     return { ok: true, value: JSON.parse(text) };
   } catch {
-    return {
-      ok: false,
-      response: jsonError(400, {
-        error: "invalid_json",
-        message: "Request body is not valid JSON",
-      }),
-    };
+    return { ok: false };
   }
 }
 
-export type ShareApiHandlers = {
-  loginStatus: () => Promise<Response>;
-  login: (req: Request) => Promise<Response>;
-  logout: () => Promise<Response>;
-  publishSnapshot: (
-    req: BunRequest<"/api/snapshots/:id/publish">,
-  ) => Promise<Response>;
-  listShares: (req: Request) => Promise<Response>;
-  deleteShare: (req: BunRequest<"/api/shares/:id">) => Promise<Response>;
-};
-
-export type ShareHandlerDeps = {
+export type ShareAppDeps = {
   store: SnapshotStore;
   fetch: typeof fetch;
   origin: string;
   authFilePath: string;
 };
 
-export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
+/**
+ * The share API as a Hono sub-app so the response types reach the frontend via hc
+ * (the FE imports ShareAppType only; the Worker's shape reaches it solely through this proxy).
+ */
+export function createShareApp(deps: ShareAppDeps) {
   const client = hc<AppType>(deps.origin, { fetch: deps.fetch });
   const bearer = (token: string) => ({
     headers: { authorization: `Bearer ${token}` },
   });
 
-  return {
-    async loginStatus() {
+  return new Hono()
+    .get("/api/auth/login", async (c) => {
       const auth = await readAuth(deps.authFilePath);
-      if (!auth) return jsonError(401, { error: "not_logged_in" });
-      return Response.json({ login: auth.login });
-    },
-
-    async login(req) {
-      if (crossOrigin(req)) return jsonError(403, { error: "forbidden" });
-      const body = await parseOptionalJsonBody(req);
-      if (!body.ok) return body.response;
+      if (!auth) {
+        return c.json(
+          { error: "not_logged_in" } satisfies ShareErrorResponse,
+          401,
+        );
+      }
+      return c.json({ login: auth.login });
+    })
+    .post("/api/auth/login", async (c) => {
+      if (crossOrigin(c.req.raw)) return c.json({ error: "forbidden" }, 403);
+      const body = await parseOptionalJsonBody(c.req.raw);
+      if (!body.ok) {
+        return c.json(
+          { error: "invalid_json", message: "Request body is not valid JSON" },
+          400,
+        );
+      }
       const parsed = loginInputSchema.safeParse(body.value);
       if (!parsed.success) {
-        return jsonError(400, {
-          error: "validation_failed",
-          message: "Request body does not satisfy the login schema",
-          issues: formatValidationError(parsed.error),
-        });
+        return c.json(
+          {
+            error: "validation_failed",
+            message: "Request body does not satisfy the login schema",
+            issues: formatValidationError(parsed.error),
+          },
+          400,
+        );
       }
       let res: Response;
       try {
@@ -159,28 +178,32 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
           json: { githubAccessToken: parsed.data.githubAccessToken },
         });
       } catch {
-        return jsonError(502, { error: "share_api_unreachable" });
+        return c.json(
+          { error: "share_api_unreachable" } satisfies ShareErrorResponse,
+          502,
+        );
       }
-      const data = await readJsonSafe(res);
       if (!res.ok) {
         // Pass Worker-side errors (e.g. GitHub verification failure) through by status and body.
-        return Response.json(
-          data ?? { error: "share_api_error", status: res.status },
-          { status: res.status },
-        );
+        const failure = await workerFailure(res);
+        return c.json(failure.body, failure.status);
       }
       // A 200 doesn't guarantee the body shape (e.g. a proxy's non-JSON response). Writing auth
       // without validating would persist a broken auth.json — "logged in yet not_logged_in".
-      const auth = authResponseSchema.safeParse(data);
-      if (!auth.success) return jsonError(502, { error: "share_api_error" });
+      const auth = authResponseSchema.safeParse(await readJsonSafe(res));
+      if (!auth.success) {
+        return c.json(
+          { error: "share_api_error" } satisfies ShareErrorResponse,
+          502,
+        );
+      }
       await writeAuth(deps.authFilePath, {
         token: auth.data.token,
         login: auth.data.login,
       });
-      return Response.json({ login: auth.data.login });
-    },
-
-    async logout() {
+      return c.json({ login: auth.data.login });
+    })
+    .delete("/api/auth/login", async (c) => {
       // Revoke the Worker-side token too; otherwise a leaked token can publish/delete until its TTL.
       // Still succeed the logout even if the Worker is unreachable (always clear the local copy).
       const auth = await readAuth(deps.authFilePath);
@@ -192,42 +215,57 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
         }
       }
       await rm(deps.authFilePath, { force: true });
-      return Response.json({ ok: true });
-    },
-
-    async publishSnapshot(req) {
-      if (crossOrigin(req)) return jsonError(403, { error: "forbidden" });
-      const body = await parseOptionalJsonBody(req);
-      if (!body.ok) return body.response;
+      return c.json({ ok: true });
+    })
+    .post("/api/snapshots/:id/publish", async (c) => {
+      if (crossOrigin(c.req.raw)) return c.json({ error: "forbidden" }, 403);
+      const body = await parseOptionalJsonBody(c.req.raw);
+      if (!body.ok) {
+        return c.json(
+          { error: "invalid_json", message: "Request body is not valid JSON" },
+          400,
+        );
+      }
       const parsed = publishInputSchema.safeParse(body.value);
       if (!parsed.success) {
-        return jsonError(400, {
-          error: "validation_failed",
-          message: "Request body does not satisfy the publish schema",
-          issues: formatValidationError(parsed.error),
-        });
+        return c.json(
+          {
+            error: "validation_failed",
+            message: "Request body does not satisfy the publish schema",
+            issues: formatValidationError(parsed.error),
+          },
+          400,
+        );
       }
-      const id = req.params.id;
+      const id = c.req.param("id");
       const envelope = await deps.store.get(id);
       if (!envelope) {
-        return jsonError(404, {
-          error: "not_found",
-          message: `Snapshot ${id} not found`,
-        });
+        return c.json(
+          { error: "not_found", message: `Snapshot ${id} not found` },
+          404,
+        );
       }
       // Check auth before materializing; reading every FileDoc file is wasted work when not logged in.
       const auth = await readAuth(deps.authFilePath);
-      if (!auth) return jsonError(401, { error: "not_logged_in" });
+      if (!auth) {
+        return c.json(
+          { error: "not_logged_in" } satisfies ShareErrorResponse,
+          401,
+        );
+      }
       const materialized = await materializeTree(envelope.root);
       if (!materialized.ok) {
         // Don't publish with an unreadable node missing: a single failure fails the whole publish.
-        return jsonError(422, {
-          error: "materialize_failed",
-          path: materialized.path,
-          reason: materialized.reason,
-        });
+        return c.json(
+          {
+            error: "materialize_failed",
+            path: materialized.path,
+            reason: materialized.reason,
+          } satisfies ShareErrorResponse,
+          422,
+        );
       }
-      let res: Response;
+      let res: Awaited<ReturnType<typeof client.api.v1.shares.$post>>;
       try {
         res = await client.api.v1.shares.$post(
           {
@@ -242,61 +280,118 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
           bearer(auth.token),
         );
       } catch {
-        return jsonError(502, { error: "share_api_unreachable" });
+        return c.json(
+          { error: "share_api_unreachable" } satisfies ShareErrorResponse,
+          502,
+        );
       }
-      const data = await readJsonSafe(res);
+      if (res.status === 201) {
+        try {
+          return c.json(await res.json(), 201);
+        } catch {
+          // A 201 with a non-JSON body means a broken proxy between us and the Worker.
+          return c.json(
+            { error: "share_api_error" } satisfies ShareErrorResponse,
+            502,
+          );
+        }
+      }
+      const failure = await workerFailure(res);
       // A Worker 401 = stored token expired. Surface it to the client as "log in again".
-      if (res.status === 401) return jsonError(401, { error: "not_logged_in" });
-      if (!res.ok) {
-        return Response.json(
-          data ?? { error: "share_api_error", status: res.status },
-          { status: res.status },
+      if (failure.status === 401) {
+        return c.json(
+          { error: "not_logged_in" } satisfies ShareErrorResponse,
+          401,
         );
       }
-      return Response.json(data, { status: 201 });
-    },
-
-    async listShares(req) {
+      return c.json(failure.body, failure.status);
+    })
+    .get(
+      "/api/shares",
+      validator("query", (value) => ({
+        snapshot:
+          typeof value.snapshot === "string" ? value.snapshot : undefined,
+      })),
+      async (c) => {
+        const auth = await readAuth(deps.authFilePath);
+        // Not logged in returns an empty list with 200 (the UI's "published" chip degrades quietly).
+        if (!auth) return c.json({ shares: [] } satisfies ListSharesResponse);
+        const { snapshot } = c.req.valid("query");
+        let res: Awaited<ReturnType<typeof client.api.v1.shares.$get>>;
+        try {
+          res = await client.api.v1.shares.$get(
+            { query: snapshot !== undefined ? { snapshot } : {} },
+            bearer(auth.token),
+          );
+        } catch {
+          return c.json(
+            { error: "share_api_unreachable" } satisfies ShareErrorResponse,
+            502,
+          );
+        }
+        if (res.status === 200) {
+          try {
+            return c.json(await res.json(), 200);
+          } catch {
+            return c.json(
+              { error: "share_api_error" } satisfies ShareErrorResponse,
+              502,
+            );
+          }
+        }
+        const failure = await workerFailure(res);
+        if (failure.status === 401) {
+          return c.json(
+            { error: "not_logged_in" } satisfies ShareErrorResponse,
+            401,
+          );
+        }
+        return c.json(failure.body, failure.status);
+      },
+    )
+    .delete("/api/shares/:id", async (c) => {
+      if (crossOrigin(c.req.raw)) return c.json({ error: "forbidden" }, 403);
       const auth = await readAuth(deps.authFilePath);
-      // Not logged in returns an empty list with 200 (the UI's "published" chip degrades quietly).
-      if (!auth) return Response.json({ shares: [] });
-      const snapshot = new URL(req.url).searchParams.get("snapshot");
-      let res: Response;
-      try {
-        res = await client.api.v1.shares.$get(
-          { query: snapshot ? { snapshot } : {} },
-          bearer(auth.token),
+      if (!auth) {
+        return c.json(
+          { error: "not_logged_in" } satisfies ShareErrorResponse,
+          401,
         );
-      } catch {
-        return jsonError(502, { error: "share_api_unreachable" });
       }
-      const data = await readJsonSafe(res);
-      if (res.status === 401) return jsonError(401, { error: "not_logged_in" });
-      return Response.json(
-        data ?? { error: "share_api_error", status: res.status },
-        { status: res.status },
-      );
-    },
-
-    async deleteShare(req) {
-      if (crossOrigin(req)) return jsonError(403, { error: "forbidden" });
-      const auth = await readAuth(deps.authFilePath);
-      if (!auth) return jsonError(401, { error: "not_logged_in" });
-      let res: Response;
+      let res: Awaited<
+        ReturnType<(typeof client.api.v1.shares)[":id"]["$delete"]>
+      >;
       try {
         res = await client.api.v1.shares[":id"].$delete(
-          { param: { id: req.params.id } },
+          { param: { id: c.req.param("id") } },
           bearer(auth.token),
         );
       } catch {
-        return jsonError(502, { error: "share_api_unreachable" });
+        return c.json(
+          { error: "share_api_unreachable" } satisfies ShareErrorResponse,
+          502,
+        );
       }
-      const data = await readJsonSafe(res);
-      if (res.status === 401) return jsonError(401, { error: "not_logged_in" });
-      return Response.json(
-        data ?? { error: "share_api_error", status: res.status },
-        { status: res.status },
-      );
-    },
-  };
+      if (res.status === 200) {
+        try {
+          return c.json(await res.json(), 200);
+        } catch {
+          return c.json(
+            { error: "share_api_error" } satisfies ShareErrorResponse,
+            502,
+          );
+        }
+      }
+      const failure = await workerFailure(res);
+      if (failure.status === 401) {
+        return c.json(
+          { error: "not_logged_in" } satisfies ShareErrorResponse,
+          401,
+        );
+      }
+      return c.json(failure.body, failure.status);
+    });
 }
+
+/** The FE's API contract. Imported type-only, so no server code reaches the browser bundle. */
+export type ShareAppType = ReturnType<typeof createShareApp>;
