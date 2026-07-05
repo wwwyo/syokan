@@ -1,0 +1,14 @@
+{
+  // share's own imports use "syokan/*" (package exports). The `@/*` alias for the pulled-in
+  // syokan source is inherited from tsconfig.base.json (single definition for the whole monorepo).
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "types.ts",
+    "worker.ts",
+    "worker.test.ts",
+    "build.ts",
+    "csp.generated.ts",
+    "viewer"
+  ],
+  "exclude": ["node_modules", "viewer/dist"]
+}

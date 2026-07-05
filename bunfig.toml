@@ -2,6 +2,9 @@
 exact = true
 # 7 days (= 604800s) — supply-chain risk mitigation
 minimumReleaseAge = 604800
+# root は deps なしの workspace root。isolated だと bin (tsc/storybook) が各 package 側にしか
+# 生えず root の委譲 scripts が PATH で引けないため hoist する
+linker = "hoisted"
 
 [serve.static]
 plugins = ["bun-plugin-tailwind"]

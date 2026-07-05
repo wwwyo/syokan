@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": ["src", "server", "cli", "scripts", "build.ts", "entry.ts", "index.html"],
+  "exclude": ["node_modules", "dist", "build"]
+}
