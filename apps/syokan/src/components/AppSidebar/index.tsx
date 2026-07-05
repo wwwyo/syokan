@@ -1,13 +1,13 @@
 import { Link, useParams } from "@tanstack/react-router";
 import { X } from "lucide-react";
-import { shellRouteApi } from "@/components/AppShell/shellRouteApi";
-import { useDeleteSnapshot } from "@/components/AppShell/useDeleteSnapshot";
+import { shellRouteApi } from "../AppShell/shellRouteApi";
+import { useDeleteSnapshot } from "../AppShell/useDeleteSnapshot";
 import {
   SIDEBAR_ID,
   useSidebar,
-} from "@/components/PageLayout/sidebarContext";
-import { t } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+} from "../PageLayout/sidebarContext";
+import { t } from "../../lib/i18n";
+import { cn } from "../../lib/utils";
 import { ViewList } from "./ViewList";
 
 /**

@@ -12,9 +12,8 @@ export const ja: Messages = {
     loading: "読み込み中…",
   },
   home: {
-    introLead: "JSON の呪文を唱えると、生きた UI がその場に立ち上がる。",
-    introBody:
-      "今日の RSS、進行中のレビュー、手元の markdown ——必要なときに呼び出し、用が済めば跡形もなく消えていく。JSX は書かない。何も溜め込まない。",
+    introLead: "review や日々のメモを、シームレスに syokan（召喚）。",
+    introBody: "LLM が生成した catalog JSON を、そのままリッチな UI として表示。",
     tabSettings: "設定",
     tabUsage: "使い方",
     theme: "テーマ",

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { z } from "zod";
-import { Card as UICard } from "@/components/ui/card";
+import { Card as UICard } from "../../components/ui/card";
 
 export const cardPropsSchema = z.object({}).strict();
 

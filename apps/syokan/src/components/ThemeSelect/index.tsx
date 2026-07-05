@@ -1,8 +1,8 @@
 import { Monitor, Moon, Sun } from "lucide-react";
 import type { ComponentType } from "react";
-import { t } from "@/lib/i18n";
-import { type Theme, useTheme } from "@/lib/theme";
-import { cn } from "@/lib/utils";
+import { t } from "../../lib/i18n";
+import { type Theme, useTheme } from "../../lib/theme";
+import { cn } from "../../lib/utils";
 
 const OPTIONS: ReadonlyArray<{
   value: Theme;

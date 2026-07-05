@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Card } from "@/catalogs/Card";
-import { Heading } from "@/catalogs/Heading";
-import { MarkdownDoc } from "@/catalogs/MarkdownDoc";
-import { Stack } from "@/catalogs/Stack";
-import { Text } from "@/catalogs/Text";
+import { Card } from "../../catalogs/Card";
+import { Heading } from "../../catalogs/Heading";
+import { MarkdownDoc } from "../../catalogs/MarkdownDoc";
+import { Stack } from "../../catalogs/Stack";
+import { Text } from "../../catalogs/Text";
 import { PageLayout } from ".";
 
 const meta = {

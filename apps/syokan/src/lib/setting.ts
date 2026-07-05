@@ -1,4 +1,4 @@
-import type { Setting, SettingPatch } from "@/schema";
+import type { Setting, SettingPatch } from "../schema";
 
 // If useFont and useTheme mount at the same time and each fetch, the same GET fires
 // twice. Share the in-flight promise to collapse the duplicate into one (it is discarded

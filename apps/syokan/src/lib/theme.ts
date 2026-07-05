@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { type Setting, THEME_VALUES } from "@/schema";
+import { type Setting, THEME_VALUES } from "../schema";
 import { fetchSetting, putSetting } from "./setting";
 
 export type Theme = Setting["theme"];

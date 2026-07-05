@@ -1,9 +1,9 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { z } from "zod";
-import { Code } from "@/catalogs/Code";
-import { Mermaid } from "@/catalogs/MarkdownDoc/Mermaid";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Code } from "../Code";
+import { Mermaid } from "./Mermaid";
+import { Checkbox } from "../../components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -11,8 +11,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { resolveCodeInfo } from "@/lib/code";
+} from "../../components/ui/table";
+import { resolveCodeInfo } from "../../lib/code";
 
 export const markdownDocPropsSchema = z
   .object({

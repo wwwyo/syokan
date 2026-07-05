@@ -1,4 +1,4 @@
-import type { SnapshotEnvelope, SnapshotSummary } from "@/schema";
+import type { SnapshotEnvelope, SnapshotSummary } from "../schema";
 
 /**
  * Decide the "open next" id after deleting a snapshot from the list (newest first).

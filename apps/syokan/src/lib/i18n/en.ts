@@ -10,9 +10,8 @@ export const en = {
     loading: "Loading…",
   },
   home: {
-    introLead: "Speak a JSON incantation, and a living UI rises on the spot.",
-    introBody:
-      "Today's RSS, an in-flight review, a local markdown file — summoned only when you need them, they fade once the need has passed. No JSX. Nothing hoarded.",
+    introLead: "Seamlessly syokan your reviews and daily notes.",
+    introBody: "LLM-generated catalog JSON renders straight into a rich UI.",
     tabSettings: "Settings",
     tabUsage: "Usage",
     theme: "Theme",

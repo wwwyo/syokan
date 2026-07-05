@@ -5,11 +5,11 @@ import {
   notFound,
   useParams,
 } from "@tanstack/react-router";
-import { AppShell } from "@/components/AppShell";
-import { useDeleteSnapshot } from "@/components/AppShell/useDeleteSnapshot";
-import { PageLayout } from "@/components/PageLayout";
-import { t } from "@/lib/i18n";
-import { fetchSnapshotEnvelope, fetchSnapshotList } from "@/lib/snapshots";
+import { AppShell } from "./components/AppShell";
+import { useDeleteSnapshot } from "./components/AppShell/useDeleteSnapshot";
+import { PageLayout } from "./components/PageLayout";
+import { t } from "./lib/i18n";
+import { fetchSnapshotEnvelope, fetchSnapshotList } from "./lib/snapshots";
 import { Home } from "./Home";
 import { ViewError, ViewNotFound, ViewPage, ViewPending } from "./ViewPage";
 

@@ -2,8 +2,8 @@ import { Menu } from "lucide-react";
 import {
   SIDEBAR_ID,
   useSidebar,
-} from "@/components/PageLayout/sidebarContext";
-import { t } from "@/lib/i18n";
+} from "../PageLayout/sidebarContext";
+import { t } from "../../lib/i18n";
 
 // The hamburger that toggles the AppSidebar. Renders nothing outside the provider (standalone render).
 export function SidebarToggle() {

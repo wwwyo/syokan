@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import type { SnapshotEnvelope } from "@/schema";
+import type { SnapshotEnvelope } from "./schema";
 import { ViewError, ViewNotFound, ViewPage, ViewPending } from "./ViewPage";
 
 const envelope: SnapshotEnvelope = {

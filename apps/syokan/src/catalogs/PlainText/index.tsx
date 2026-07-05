@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Code } from "@/catalogs/Code";
+import { Code } from "../Code";
 
 export const plainTextPropsSchema = z
   .object({

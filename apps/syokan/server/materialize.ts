@@ -2,8 +2,8 @@ import {
   codeLangForPath,
   fileBasename,
   inferFileFormat,
-} from "@/lib/fileFormat";
-import type { Item } from "@/schema";
+} from "../src/lib/fileFormat";
+import type { Item } from "../src/schema";
 import { type ReadFileFailure, readTextFile } from "./fileSource";
 
 export type MaterializeResult =

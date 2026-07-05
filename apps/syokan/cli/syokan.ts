@@ -12,7 +12,7 @@ import {
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runtimeDir } from "@/lib/paths";
+import { runtimeDir } from "../src/lib/paths";
 // At compile time the whole JSON is embedded into the binary (= that binary's version)
 import pkg from "../package.json";
 import { type Command, createRouter } from "./router";

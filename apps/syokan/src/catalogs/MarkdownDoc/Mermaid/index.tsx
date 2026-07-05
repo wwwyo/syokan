@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { useColorScheme } from "@/lib/useColorScheme";
+import { useColorScheme } from "../../../lib/useColorScheme";
 
 type MermaidProps = {
   chart: string;

@@ -1,10 +1,10 @@
 import { Check, ChevronsUpDown, Search } from "lucide-react";
 import { type CSSProperties, useMemo, useState } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useFont } from "@/lib/font";
-import { FONT_PRESETS, getFontPreset } from "@/lib/fonts";
-import { t } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { useFont } from "../../lib/font";
+import { FONT_PRESETS, getFontPreset } from "../../lib/fonts";
+import { t } from "../../lib/i18n";
+import { cn } from "../../lib/utils";
 
 /**
  * Search the preset table (src/lib/fonts.ts) to pick the display font. Each candidate is

@@ -1,10 +1,10 @@
-import { MarkdownDoc } from "@/catalogs/MarkdownDoc";
-import { SidebarToggle } from "@/components/AppSidebar/SidebarToggle";
-import { FontSelect } from "@/components/FontSelect";
-import { PageLayout } from "@/components/PageLayout";
-import { ThemeSelect } from "@/components/ThemeSelect";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { t } from "@/lib/i18n";
+import { MarkdownDoc } from "./catalogs/MarkdownDoc";
+import { SidebarToggle } from "./components/AppSidebar/SidebarToggle";
+import { FontSelect } from "./components/FontSelect";
+import { PageLayout } from "./components/PageLayout";
+import { ThemeSelect } from "./components/ThemeSelect";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { t } from "./lib/i18n";
 
 export function Home() {
   return (

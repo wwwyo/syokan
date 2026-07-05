@@ -5,10 +5,10 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from "@/components/ui/context-menu";
-import { t } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
-import type { SnapshotSummary } from "@/schema";
+} from "../ui/context-menu";
+import { t } from "../../lib/i18n";
+import { cn } from "../../lib/utils";
+import type { SnapshotSummary } from "../../schema";
 
 export type RenderLinkArgs = {
   id: string;

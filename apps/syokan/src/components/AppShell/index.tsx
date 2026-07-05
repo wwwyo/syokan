@@ -1,7 +1,7 @@
 import { Outlet, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { AppSidebar } from "@/components/AppSidebar";
-import { SidebarProvider } from "@/components/PageLayout/sidebarContext";
+import { AppSidebar } from "../AppSidebar";
+import { SidebarProvider } from "../PageLayout/sidebarContext";
 
 // During client transitions the open/closed state lives in memory (the resident shell);
 // only what needs to survive a hard reload is spilled to localStorage (guarded, since

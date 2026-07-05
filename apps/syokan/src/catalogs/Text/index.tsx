@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { cn } from "@/lib/utils";
+import { cn } from "../../lib/utils";
 
 export const textPropsSchema = z
   .object({

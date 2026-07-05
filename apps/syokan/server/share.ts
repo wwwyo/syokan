@@ -3,8 +3,8 @@ import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { hc } from "hono/client";
 import { z } from "zod";
-import { authFile } from "@/lib/paths";
-import { formatValidationError } from "@/schema";
+import { authFile } from "../src/lib/paths";
+import { formatValidationError } from "../src/schema";
 // AppType is exported by apps/share/worker.ts (the Hono app). The SSOT for the API shape is
 // .agent/prd/public-share/contract.md and apps/share/types.ts.
 import type { AppType } from "../../share/worker";

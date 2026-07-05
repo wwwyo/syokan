@@ -1,5 +1,5 @@
-import { t } from "@/lib/i18n";
-import type { SnapshotEnvelope } from "@/schema";
+import { t } from "./lib/i18n";
+import type { SnapshotEnvelope } from "./schema";
 import { PageLayout } from "./components/PageLayout";
 import { ViewHeader } from "./components/ViewHeader";
 import { Render } from "./Render";

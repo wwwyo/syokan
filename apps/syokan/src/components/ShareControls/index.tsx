@@ -1,19 +1,19 @@
 import { Check, Copy, Loader2, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "../ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "../ui/dialog";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { formatDateTime } from "@/lib/date";
-import { t } from "@/lib/i18n";
+} from "../ui/popover";
+import { formatDateTime } from "../../lib/date";
+import { t } from "../../lib/i18n";
 import type {
   CreateShareResponse,
   ListSharesResponse,

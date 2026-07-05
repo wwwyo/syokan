@@ -1,14 +1,14 @@
 import { Ellipsis, Trash2 } from "lucide-react";
-import { SidebarToggle } from "@/components/AppSidebar/SidebarToggle";
-import { ShareControls } from "@/components/ShareControls";
+import { SidebarToggle } from "../AppSidebar/SidebarToggle";
+import { ShareControls } from "../ShareControls";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { t } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+} from "../ui/dropdown-menu";
+import { t } from "../../lib/i18n";
+import { cn } from "../../lib/utils";
 
 export type ViewHeaderProps = {
   sourceLabel?: string;

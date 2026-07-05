@@ -1,13 +1,13 @@
 import { mkdir, open, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { writeJsonAtomic } from "@/lib/fsAtomic";
+import { writeJsonAtomic } from "../src/lib/fsAtomic";
 import {
   CURRENT_SCHEMA_VERSION,
   type Item,
   type SnapshotEnvelope,
   type SnapshotMetadata,
   type SnapshotSummary,
-} from "@/schema";
+} from "../src/schema";
 
 type StoreFile = {
   snapshots: Record<string, SnapshotEnvelope>;

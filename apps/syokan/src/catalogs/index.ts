@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import type { z } from "zod";
-import { type ComponentSpec, createCatalog, defineComponent } from "@/schema";
+import { type ComponentSpec, createCatalog, defineComponent } from "../schema";
 import { Badge, badgePropsSchema } from "./Badge";
 import { Card, cardPropsSchema } from "./Card";
 import { Code, codePropsSchema } from "./Code";

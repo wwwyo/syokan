@@ -1,8 +1,8 @@
 import { useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
-import { t } from "@/lib/i18n";
-import { deleteSnapshot, nextSnapshotId } from "@/lib/snapshots";
-import type { SnapshotSummary } from "@/schema";
+import { t } from "../../lib/i18n";
+import { deleteSnapshot, nextSnapshotId } from "../../lib/snapshots";
+import type { SnapshotSummary } from "../../schema";
 import { shellRouteApi } from "./shellRouteApi";
 
 export type DeleteOptions = {

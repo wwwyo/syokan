@@ -1,16 +1,16 @@
 import type { BunRequest } from "bun";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import { itemSchema } from "@/catalogs";
-import { catalogManifest } from "@/catalogs/manifest";
-import { isFontValue } from "@/lib/fonts";
+import { itemSchema } from "../src/catalogs";
+import { catalogManifest } from "../src/catalogs/manifest";
+import { isFontValue } from "../src/lib/fonts";
 import {
   CURRENT_SCHEMA_VERSION,
   formatValidationError,
   settingPatchSchema,
   type SnapshotEnvelope,
   snapshotMetadataSchema,
-} from "@/schema";
+} from "../src/schema";
 import {
   type FileWatcher,
   FILE_SIZE_LIMIT,

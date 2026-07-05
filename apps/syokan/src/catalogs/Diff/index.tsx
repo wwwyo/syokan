@@ -3,9 +3,9 @@ import { type DiffLineAnnotation, FileDiff } from "@pierre/diffs/react";
 import { MessageSquare } from "lucide-react";
 import { useMemo } from "react";
 import { z } from "zod";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { t } from "@/lib/i18n";
-import { useColorScheme } from "@/lib/useColorScheme";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
+import { t } from "../../lib/i18n";
+import { useColorScheme } from "../../lib/useColorScheme";
 
 const diffCommentSchema = z.object({
   // Specifies the target file in a multi-file patch. The new filename (e.g. "src/a.ts"),

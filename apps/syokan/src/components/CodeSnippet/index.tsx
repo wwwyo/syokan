@@ -1,7 +1,7 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
-import { t } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+import { t } from "../../lib/i18n";
+import { cn } from "../../lib/utils";
 
 export type CodeSnippetProps = {
   code: string;

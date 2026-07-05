@@ -7,7 +7,7 @@ import {
   legacyTemplatesDir,
   settingFile,
   templatesDir,
-} from "@/lib/paths";
+} from "../src/lib/paths";
 import index from "../index.html";
 // version is a compatibility marker so the CLI doesn't silently reuse a server from an old build.
 import pkg from "../package.json";

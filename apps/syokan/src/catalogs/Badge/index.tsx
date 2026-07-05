@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Badge as UIBadge } from "@/components/ui/badge";
+import { Badge as UIBadge } from "../../components/ui/badge";
 
 export const badgePropsSchema = z
   .object({

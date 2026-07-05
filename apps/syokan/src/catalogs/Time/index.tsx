@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { formatDateTime } from "@/lib/date";
-import { cn } from "@/lib/utils";
+import { formatDateTime } from "../../lib/date";
+import { cn } from "../../lib/utils";
 
 export const timePropsSchema = z
   .object({

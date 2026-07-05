@@ -137,11 +137,11 @@ The snapshot list is owned by the `_shell` layout's loader and is not re-fetched
 
 ### Component collocation
 
-Implement a component at `<Name>/index.tsx` and colocate its test (`<Name>.test.tsx`) and story (`<Name>.stories.tsx`) in the same dir. Imports point at the dir, like `@/components/PageLayout` (resolves to index.tsx). Gathering related files in one place prevents stragglers during refactors/deletions.
+Implement a component at `<Name>/index.tsx` and colocate its test (`<Name>.test.tsx`) and story (`<Name>.stories.tsx`) in the same dir. Imports point at the dir with a relative path, like `../PageLayout` (resolves to index.tsx). No `@/` alias — the share package pulls syokan sources across the workspace boundary, and a root-level alias made that resolution setup-dependent (tsconfig paths / Vite alias / Bun all had to agree), so imports are relative only. Gathering related files in one place prevents stragglers during refactors/deletions.
 
 - **Catalog-public** (types LLMs post as JSON) go in `catalogs/<Name>/`; **non-public internal parts** go in `components/<Name>/`
 - **Internal-only subparts** (used solely by that component) nest under the parent dir (e.g. the catalog's `Code/CopyButton/`). Once shared by multiple components, promote it one level up. Scope = location
-- `components/ui/` is the exception: shadcn's generated flat files (not dir-ified)
+- `components/ui/` is the exception: shadcn's generated flat files (not dir-ified). components.json aliases are relative-from-package-root (`src/...`) so `shadcn add` places files correctly without a tsconfig alias, but the CLI also writes the alias string verbatim into import specifiers — after an add, rewrite the generated `"src/lib/utils"` / `"src/components/ui/x"` imports to relative (`../../lib/utils` / `./x`); typecheck catches any missed ones
 
 ## Setup / usage
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { httpUrl } from "@/lib/url";
+import { httpUrl } from "../../lib/url";
 
 export const linkPropsSchema = z
   .object({

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ResizablePanelGroup } from "@/components/ui/resizable";
+import { ResizablePanelGroup } from "../../components/ui/resizable";
 import { Stack } from ".";
 
 describe("Stack", () => {

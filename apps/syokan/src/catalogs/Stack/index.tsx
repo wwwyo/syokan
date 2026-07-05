@@ -4,8 +4,8 @@ import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from "@/components/ui/resizable";
-import { cn } from "@/lib/utils";
+} from "../../components/ui/resizable";
+import { cn } from "../../lib/utils";
 
 export const stackPropsSchema = z
   .object({

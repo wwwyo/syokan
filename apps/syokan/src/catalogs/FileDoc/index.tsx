@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { Code } from "@/catalogs/Code";
-import { MarkdownDoc } from "@/catalogs/MarkdownDoc";
-import { PlainText } from "@/catalogs/PlainText";
+import { Code } from "../Code";
+import { MarkdownDoc } from "../MarkdownDoc";
+import { PlainText } from "../PlainText";
 import {
   codeLangForPath,
   fileBasename,
   inferFileFormat,
-} from "@/lib/fileFormat";
-import { t } from "@/lib/i18n";
+} from "../../lib/fileFormat";
+import { t } from "../../lib/i18n";
 
 export const fileDocPropsSchema = z
   .object({

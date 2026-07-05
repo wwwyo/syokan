@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement, type ReactElement } from "react";
 import { renderToString } from "react-dom/server";
-import type { Item } from "@/schema";
+import type { Item } from "./schema";
 import { Heading } from "./catalogs/Heading";
 import { Stack } from "./catalogs/Stack";
 import { UnknownComponent } from "./components/UnknownComponent";

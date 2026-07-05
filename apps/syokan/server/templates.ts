@@ -1,6 +1,6 @@
 import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { writeJsonAtomic } from "@/lib/fsAtomic";
+import { writeJsonAtomic } from "../src/lib/fsAtomic";
 
 // A template is a vault for "saving an envelope the LLM assembled and reusing it as a base later".
 // syokan does not interpret the contents (json). Unlike a snapshot (ephemeral), it's meant to be kept.

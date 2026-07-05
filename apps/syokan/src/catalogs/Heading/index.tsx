@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { httpUrl } from "@/lib/url";
-import { cn } from "@/lib/utils";
+import { httpUrl } from "../../lib/url";
+import { cn } from "../../lib/utils";
 
 export const headingPropsSchema = z
   .object({

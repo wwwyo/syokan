@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { writeJsonAtomic } from "@/lib/fsAtomic";
+import { writeJsonAtomic } from "../src/lib/fsAtomic";
 import {
   DEFAULT_SETTING,
   type Setting,
   type SettingPatch,
   storedSettingSchema,
-} from "@/schema";
+} from "../src/schema";
 
 export type SettingStore = {
   get: () => Promise<Setting>;

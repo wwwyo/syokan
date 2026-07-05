@@ -1,9 +1,9 @@
 import { File } from "@pierre/diffs/react";
 import type { CSSProperties } from "react";
 import { z } from "zod";
-import { toCodeLang } from "@/lib/code";
-import { useColorScheme } from "@/lib/useColorScheme";
-import { cn } from "@/lib/utils";
+import { toCodeLang } from "../../lib/code";
+import { useColorScheme } from "../../lib/useColorScheme";
+import { cn } from "../../lib/utils";
 import { CopyButton } from "./CopyButton";
 
 export const codePropsSchema = z
