@@ -1,5 +1,11 @@
 {
   "compilerOptions": {
+    // `@/*` は monorepo 全体で apps/syokan/src を指す単一定義。値は root 基準の相対 (`./`)。
+    // apps/share もこれを継承し、取り込んだ syokan ソース内部の `@/` を解決する
+    // (paths は定義した tsconfig の位置基準で解決される。baseUrl は TS7.0 で廃止のため使わない)。
+    "paths": {
+      "@/*": ["./apps/syokan/src/*"]
+    },
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",

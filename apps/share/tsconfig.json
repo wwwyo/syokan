@@ -1,13 +1,7 @@
 {
+  // share's own imports use "syokan/*" (package exports). The `@/*` alias for the pulled-in
+  // syokan source is inherited from tsconfig.base.json (single definition for the whole monorepo).
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    // share's own imports use "syokan/*" (package exports). This paths mapping only exists
-    // so tsc can resolve the internal imports ("@/lib/...") in the pulled-in syokan source
-    // (tsc resolves every file in the compiled project through that project's paths).
-    "paths": {
-      "@/*": ["../syokan/src/*"]
-    }
-  },
   "include": [
     "types.ts",
     "worker.ts",
