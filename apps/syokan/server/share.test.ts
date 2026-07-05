@@ -14,7 +14,7 @@ type WorkerCall = {
   body: unknown;
 };
 
-// hc (hono/client) が投げる fetch を捕捉する stub。呼び出しは Request に正規化して記録する。
+// A stub that captures the fetch hc (hono/client) issues. It normalizes each call to a Request and records it.
 function makeWorkerFetch(
   respond: (call: WorkerCall) => Response | Promise<Response>,
 ) {
@@ -158,12 +158,54 @@ describe("share routes", () => {
       expect(await after.json()).toEqual({ login: "octocat" });
     });
 
-    test("DELETE /api/auth/login removes auth.json", async () => {
+    test("POST /api/auth/login rejects a 200 whose body lacks token/login (502, no auth written)", async () => {
+      const { stub } = makeWorkerFetch(() => Response.json({ login: "octocat" }));
+      const share = handlers(stub);
+      const res = await share.login(
+        makeRequest("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ githubAccessToken: "ok" }),
+        }),
+      );
+      expect(res.status).toBe(502);
+      expect(await readAuth(authFilePath)).toBeUndefined();
+    });
+
+    test("DELETE /api/auth/login revokes the worker token and removes auth.json", async () => {
+      await loginDirectly("tok-1");
+      const { stub, calls } = makeWorkerFetch(() => Response.json({ ok: true }));
+      const share = handlers(stub);
+      const res = await share.logout();
+      expect(await res.json()).toEqual({ ok: true });
+      expect(calls[0]?.method).toBe("DELETE");
+      expect(calls[0]?.url).toBe(`${ORIGIN}/api/v1/auth/token`);
+      expect(calls[0]?.headers.authorization).toBe("Bearer tok-1");
+      expect((await share.loginStatus()).status).toBe(401);
+    });
+
+    test("logout still succeeds when the worker is unreachable", async () => {
       await loginDirectly();
       const share = handlers(failingFetch());
       const res = await share.logout();
       expect(await res.json()).toEqual({ ok: true });
       expect((await share.loginStatus()).status).toBe(401);
+    });
+
+    test("publish from a cross-origin browser request is rejected 403", async () => {
+      const env = await store.create({
+        root: { type: "Heading", props: { text: "S" } },
+      });
+      await loginDirectly();
+      const { stub, calls } = makeWorkerFetch(() => Response.json({}));
+      const share = handlers(stub);
+      const res = await share.publishSnapshot(
+        makeParamRequest(`/api/snapshots/${env.id}/publish`, { id: env.id }, {
+          method: "POST",
+          headers: { origin: "https://evil.example" },
+        }) as never,
+      );
+      expect(res.status).toBe(403);
+      expect(calls).toEqual([]);
     });
   });
 
@@ -210,7 +252,7 @@ describe("share routes", () => {
       expect(body.sourceSnapshotId).toBe(env.id);
       expect(body.expiresIn).toBe(3600);
       expect(body.envelope.id).toBe(env.id);
-      // FileDoc は publish 時点の内容で具象ノードに凍結されている
+      // The FileDoc is frozen into a concrete node with its content at publish time
       expect(body.envelope.root.children[0]).toEqual({
         type: "MarkdownDoc",
         props: { body: "# frozen" },
@@ -256,6 +298,7 @@ describe("share routes", () => {
       const env = await store.create({
         root: { type: "FileDoc", props: { path: missing } },
       });
+      await loginDirectly();
       const { stub, calls } = makeWorkerFetch(() => Response.json({}));
       const share = handlers(stub);
       const res = await share.publishSnapshot(

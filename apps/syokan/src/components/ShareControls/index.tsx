@@ -19,7 +19,7 @@ import type {
   ListSharesResponse,
 } from "../../../../share/types";
 
-/** publish 応答そのまま。一覧 (ShareSummary) は superset なのでこの型に代入できる。 */
+/** The publish response as-is. The list (ShareSummary) is a superset, so it is assignable to this type. */
 export type ShareEntry = CreateShareResponse;
 
 export type PublishResult =
@@ -27,7 +27,7 @@ export type PublishResult =
   | { kind: "not_logged_in" }
   | { kind: "error"; message: string };
 
-/** publish する。結果はすべて dialog 表示用の PublishResult に畳む (throw しない)。 */
+/** Publishes. Every outcome is folded into a PublishResult for the dialog (never throws). */
 export async function publishSnapshot(id: string): Promise<PublishResult> {
   try {
     const res = await fetch(
@@ -64,7 +64,6 @@ export async function publishSnapshot(id: string): Promise<PublishResult> {
   }
 }
 
-/** 公開中一覧。失敗 (未 login / offline 含む) は [] に静かに劣化する。 */
 export async function fetchShares(snapshotId: string): Promise<ShareEntry[]> {
   try {
     const res = await fetch(
@@ -72,7 +71,9 @@ export async function fetchShares(snapshotId: string): Promise<ShareEntry[]> {
     );
     if (!res.ok) return [];
     const data = (await res.json()) as ListSharesResponse;
-    return data.shares;
+    // A 200 doesn't guarantee shares is an array (e.g. a proxy passing through the Worker's non-JSON).
+    // Putting undefined into state would crash the whole ViewHeader on the chip's shares.length.
+    return Array.isArray(data?.shares) ? data.shares : [];
   } catch {
     return [];
   }
@@ -95,7 +96,6 @@ export function shareDialogTitle(result: PublishResult): string {
   return t.share.errorTitle;
 }
 
-// URL をコピーし、成功したら 1.5s だけチェックマークに切り替える。
 function CopyUrlButton({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -110,7 +110,7 @@ function CopyUrlButton({ url }: { url: string }) {
       await navigator.clipboard.writeText(url);
       setCopied(true);
     } catch {
-      // clipboard 不可環境 (非 secure context 等) ではコピーを諦める
+      // Where clipboard is unavailable (e.g. non-secure context), give up on copying
     }
   };
 
@@ -128,7 +128,7 @@ function CopyUrlButton({ url }: { url: string }) {
   );
 }
 
-/** publish 結果 (dialog の中身) の presentational 部。Storybook / test はここを直接描画する。 */
+/** The presentational part of the publish result (the dialog's contents). Storybook / tests render this directly. */
 export function ShareDialogBody({ result }: { result: PublishResult }) {
   if (result.kind === "success") {
     return (
@@ -163,7 +163,7 @@ export function ShareDialogBody({ result }: { result: PublishResult }) {
   );
 }
 
-/** 公開中一覧 (chip popover の中身) の presentational 部。 */
+/** The presentational part of the active-shares list (the chip popover's contents). */
 export function ShareList({
   shares,
   onUnpublish,
@@ -211,15 +211,14 @@ export function ShareList({
 
 export type ShareControlsProps = {
   snapshotId: string;
-  /** Storybook / test 用: server なしで公開中状態を再現する (指定時は mount fetch を抑止) */
+  /** For Storybook / tests: reproduce the active-shares state without a server (when set, suppresses the mount fetch) */
   initialShares?: ShareEntry[];
-  /** Storybook 用: dialog を開いた状態から始める */
+  /** For Storybook: start with the dialog open */
   initialDialog?: PublishResult;
 };
 
 /**
- * ViewHeader に置く公開 (public share) 操作一式。SSOT は KV 側なので公開中状態は
- * ローカルに永続せず、mount 時の GET /api/shares から毎回導出する。
+ * KV is the SSOT for publish state. Nothing is persisted locally; it's derived from GET /api/shares on every mount.
  */
 export function ShareControls({
   snapshotId,

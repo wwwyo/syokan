@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CodeSnippet } from "@/components/CodeSnippet";
-import { Render } from "@/Render";
-import type { Item } from "@/schema";
+import { CodeSnippet } from "syokan/components/CodeSnippet";
+import { Render } from "syokan/render";
+import type { Item } from "syokan/schema";
 import type { PublicShareResponse } from "../types";
 
 const GITHUB_URL = "https://github.com/wwwyo/syokan";
@@ -19,8 +19,8 @@ function formatDate(iso: string): string {
 
 type ShareEnvelope = { root: Item; title?: string };
 
-// envelope は unknown (古い binary が post したものもありうる)。root の存在だけ
-// 確かめて Render に委ねる — 未知 type は UnknownComponent が劣化表示する。
+// The envelope is unknown (it may have been posted by an old binary). Just verify
+// root exists and hand off to Render — unknown types degrade gracefully via UnknownComponent.
 function toShareEnvelope(value: unknown): ShareEnvelope | null {
   if (typeof value !== "object" || value === null) return null;
   const { root, title } = value as { root?: unknown; title?: unknown };
@@ -32,7 +32,7 @@ function toShareEnvelope(value: unknown): ShareEnvelope | null {
   };
 }
 
-// ViewPage.isFullBleed と同じ規則: resizable Stack だけ幅制約を外す
+// Same rule as ViewPage.isFullBleed: drop the width constraint only for a resizable Stack
 function isFullBleed(root: Item): boolean {
   return (
     root.type === "Stack" &&
@@ -192,7 +192,7 @@ function Landing() {
         <CodeSnippet
           code={INSTALL_COMMAND}
           className="mt-8"
-          // 公開面は English-first。app i18n の locale auto-switch に乗せない
+          // The public surface is English-first. Don't ride the app i18n's locale auto-switch
           labels={{ copy: "Copy", copied: "Copied" }}
         />
         <p className="mt-2 text-sm text-muted-foreground">
@@ -216,9 +216,6 @@ function Landing() {
       <footer className="mx-auto flex w-full max-w-xl items-center gap-4 px-6 py-6 text-xs text-muted-foreground">
         <a href={GITHUB_URL} className="hover:text-foreground">
           GitHub
-        </a>
-        <a href="/terms" className="hover:text-foreground">
-          Terms
         </a>
       </footer>
     </Shell>
@@ -254,6 +251,6 @@ if (!container) {
   throw new Error("Root container #root not found");
 }
 
-// StrictMode は使わない: pierre の Code/Diff が StrictMode の remount で
-// 潰れる既知問題があり、viewer は production 相当の挙動に固定する (AGENTS.md)。
+// Don't use StrictMode: pierre's Code/Diff has a known issue where it collapses on
+// StrictMode's remount, so pin the viewer to production-equivalent behavior (AGENTS.md).
 createRoot(container).render(<App />);

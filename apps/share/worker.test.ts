@@ -6,10 +6,11 @@ import {
 	SHARE_MAX_TTL_SECONDS,
 	SHARE_QUOTA_PER_USER,
 	type ShareRecord,
+	SHARE_TOKEN_TTL_SECONDS,
 } from "./types";
 import app from "./worker";
 
-// ---- GitHub API stub (POST /api/v1/auth/token の本人確認先) ----
+// ---- GitHub API stub (identity verification target for POST /api/v1/auth/token) ----
 
 const GITHUB_USERS: Record<string, { login: string; id: number }> = {
 	"gh-token-octocat": { login: "octocat", id: 1 },
@@ -34,6 +35,7 @@ afterAll(() => {
 
 class MemoryKV {
 	store = new Map<string, string>();
+	ttl = new Map<string, number | undefined>();
 
 	async get(key: string, type?: "json" | "text") {
 		const value = this.store.get(key);
@@ -41,8 +43,9 @@ class MemoryKV {
 		return type === "json" ? JSON.parse(value) : value;
 	}
 
-	async put(key: string, value: string, _opts?: { expirationTtl?: number }) {
+	async put(key: string, value: string, opts?: { expirationTtl?: number }) {
 		this.store.set(key, value);
+		this.ttl.set(key, opts?.expirationTtl);
 	}
 
 	async delete(key: string) {
@@ -70,7 +73,6 @@ function createEnv() {
 	};
 	const env = {
 		SHARES: kv as unknown as KVNamespace,
-		SHARE_ORIGIN: "https://share.test",
 		GITHUB_API_BASE: `http://127.0.0.1:${github.port}`,
 		ASSETS: assets as unknown as Fetcher,
 	};
@@ -148,7 +150,7 @@ describe("POST /api/v1/auth/token", () => {
 		const record = JSON.parse(kv.store.get(tokenKeys[0] as string) as string);
 		expect(record.owner).toBe("octocat");
 		expect(record.ownerId).toBe(1);
-		// 生 token も GitHub token も KV に現れない
+		// Neither the raw token nor the GitHub token appears in KV
 		expect(tokenKeys[0]).not.toContain(token);
 		for (const value of kv.store.values()) {
 			expect(value).not.toContain("gh-token-octocat");
@@ -167,6 +169,27 @@ describe("POST /api/v1/auth/token", () => {
 		expect(((await res.json()) as { error: string }).error).toBe(
 			"github_verification_failed",
 		);
+	});
+
+	test("発行した token に TTL が付く", async () => {
+		const { env, kv } = createEnv();
+		await login(env);
+		const key = [...kv.store.keys()].find((k) => k.startsWith("token:"));
+		expect(kv.ttl.get(key as string)).toBe(SHARE_TOKEN_TTL_SECONDS);
+	});
+
+	test("DELETE /api/v1/auth/token で自 token を revoke する", async () => {
+		const { env, kv } = createEnv();
+		const { token } = await login(env);
+		const key = [...kv.store.keys()].find((k) => k.startsWith("token:"));
+		expect(kv.store.has(key as string)).toBe(true);
+		const res = await app.request(
+			"/api/v1/auth/token",
+			{ method: "DELETE", headers: { authorization: `Bearer ${token}` } },
+			env,
+		);
+		expect(res.status).toBe(200);
+		expect(kv.store.has(key as string)).toBe(false);
 	});
 });
 
@@ -197,7 +220,7 @@ describe("POST /api/v1/shares", () => {
 			url: string;
 			expiresAt: string;
 		};
-		expect(body.url).toBe(`https://share.test/shares/${body.id}`);
+		expect(body.url).toBe(`http://localhost/shares/${body.id}`);
 		const expiresAt = Date.parse(body.expiresAt);
 		expect(expiresAt).toBeGreaterThanOrEqual(
 			before + SHARE_DEFAULT_TTL_SECONDS * 1000,
@@ -213,7 +236,7 @@ describe("POST /api/v1/shares", () => {
 		expect(record.ownerId).toBe(1);
 		expect(record.sourceSnapshotId).toBe("snap-1");
 		expect(record.envelope).toEqual(makeEnvelope());
-		expect(kv.store.has(`user:octocat:${body.id}`)).toBe(true);
+		expect(kv.store.has(`user:1:${body.id}`)).toBe(true);
 	});
 
 	test("expiresIn は SHARE_MAX_TTL_SECONDS に clamp される", async () => {
@@ -279,7 +302,7 @@ describe("POST /api/v1/shares", () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
 		for (let i = 0; i < SHARE_QUOTA_PER_USER; i++) {
-			kv.store.set(`user:octocat:existing-${i}`, "");
+			kv.store.set(`user:1:existing-${i}`, "");
 		}
 		const res = await publish(env, token);
 		expect(res.status).toBe(429);
@@ -326,8 +349,8 @@ describe("GET /api/v1/shares", () => {
 		const b = (await (
 			await publish(env, token, { sourceSnapshotId: "snap-b" })
 		).json()) as { id: string };
-		// list と get の間に expire した share (index だけ残存) は skip される
-		kv.store.set("user:octocat:expired-id", "");
+		// A share that expired between list and get (only the index remains) is skipped
+		kv.store.set("user:1:expired-id", "");
 
 		const listRes = await app.request(
 			"/api/v1/shares",
@@ -341,7 +364,7 @@ describe("GET /api/v1/shares", () => {
 		expect(shares.map((s) => s.id).sort()).toEqual([a.id, b.id].sort());
 		for (const share of shares) {
 			expect(share).not.toContainKey("envelope");
-			expect(share.url).toBe(`https://share.test/shares/${share.id}`);
+			expect(share.url).toBe(`http://localhost/shares/${share.id}`);
 		}
 
 		const filteredRes = await app.request(
@@ -374,7 +397,7 @@ describe("DELETE /api/v1/shares/:id", () => {
 		expect(res.status).toBe(200);
 		expect((await res.json()) as { ok: boolean }).toEqual({ ok: true });
 		expect(kv.store.has(`share:${id}`)).toBe(false);
-		expect(kv.store.has(`user:octocat:${id}`)).toBe(false);
+		expect(kv.store.has(`user:1:${id}`)).toBe(false);
 
 		const getRes = await app.request(`/api/v1/shares/${id}`, {}, env);
 		expect(getRes.status).toBe(404);
@@ -406,12 +429,12 @@ describe("asset fallback", () => {
 		const { env, assetUrls } = createEnv();
 		const res = await app.request("/shares/some-id", {}, env);
 		expect(res.status).toBe(200);
-		// app.request の既定 origin は http://localhost
+		// app.request's default origin is http://localhost
 		expect(assetUrls).toEqual(["http://localhost/index.html"]);
 		expect(res.headers.get("x-robots-tag")).toBe("noindex");
 		const csp = res.headers.get("content-security-policy") ?? "";
 		expect(csp).toContain("script-src 'self'");
-		// inline theme script が CSP hash で許可されている (csp.generated.ts 経由)
+		// The inline theme script is allowed via a CSP hash (through csp.generated.ts)
 		expect(csp).toMatch(/script-src 'self' 'sha256-[A-Za-z0-9+/]+=*'/);
 	});
 

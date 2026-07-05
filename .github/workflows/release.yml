@@ -1,9 +1,9 @@
 name: release
 
-# apps/syokan で `npm version <patch|minor|major>` を実行して bump + tag し
-# `git push --follow-tags` した tag を起点に、cross-compile したバイナリを添付した
-# release を publish する。
+# `bun run release` (apps/syokan/scripts/release.ts) が bump + commit + v* tag + push する。
+# その tag を起点に、cross-compile したバイナリを添付した release を publish する。
 # 版を決めるのは人間 (tag)、重い compile と asset upload を CI に逃がす分担。
+# (package.json が git root にないため npm version 組み込みの tag は使えず、script が明示的に打つ)
 on:
   push:
     tags:

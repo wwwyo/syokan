@@ -15,16 +15,16 @@ import {
 	type ShareErrorResponse,
 	type ShareRecord,
 	type ShareSummary,
+	SHARE_TOKEN_TTL_SECONDS,
 } from "./types";
 
 type Bindings = {
 	SHARES: KVNamespace;
-	SHARE_ORIGIN: string;
 	GITHUB_API_BASE?: string;
 	ASSETS: Fetcher;
 };
 
-/** KV `token:<sha256hex>` の value。GitHub token 自体は保存しない */
+/** Value for KV `token:<sha256hex>`. The GitHub token itself is not stored */
 type TokenRecord = {
 	owner: string;
 	ownerId: number;
@@ -33,8 +33,8 @@ type TokenRecord = {
 
 type Env = { Bindings: Bindings; Variables: { auth: TokenRecord } };
 
-// catalogs/index.ts の props union は import しない (React が worker bundle に混入する)。
-// 未知 type は viewer の UnknownComponent で劣化表示されるので構造検証で足りる。
+// Don't import the props union from catalogs/index.ts (it would pull React into the worker bundle).
+// Unknown types degrade gracefully via the viewer's UnknownComponent, so structural validation suffices.
 type StructuralItem = {
 	type: string;
 	props: Record<string, unknown>;
@@ -87,8 +87,10 @@ function toHex(bytes: Uint8Array): string {
 	return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function shareUrl(origin: string, id: string): string {
-	return `${origin}/shares/${id}`;
+// Derive the URL from the request origin. run_worker_first routes every request through the worker,
+// so custom domain / preview / dev all yield the correct share URL with zero config (no env placeholder needed).
+function shareUrl(reqUrl: string, id: string): string {
+	return `${new URL(reqUrl).origin}/shares/${id}`;
 }
 
 const requireAuth = createMiddleware<Env>(async (c, next) => {
@@ -128,7 +130,7 @@ const app = new Hono<Env>()
 				headers: {
 					authorization: `Bearer ${githubAccessToken}`,
 					accept: "application/vnd.github+json",
-					// GitHub API は User-Agent 必須
+					// The GitHub API requires a User-Agent
 					"user-agent": "syokan-share",
 				},
 			});
@@ -150,10 +152,17 @@ const app = new Hono<Env>()
 			await c.env.SHARES.put(
 				`token:${await sha256Hex(token)}`,
 				JSON.stringify(record),
+				{ expirationTtl: SHARE_TOKEN_TTL_SECONDS },
 			);
 			return c.json({ token, login: user.login } satisfies AuthTokenResponse);
 		},
 	)
+	.delete("/api/v1/auth/token", requireAuth, async (c) => {
+		const header = c.req.header("authorization");
+		const token = header?.startsWith("Bearer ") ? header.slice(7) : "";
+		await c.env.SHARES.delete(`token:${await sha256Hex(token)}`);
+		return c.json({ ok: true });
+	})
 	.post(
 		"/api/v1/shares",
 		requireAuth,
@@ -179,7 +188,9 @@ const app = new Hono<Env>()
 					400,
 				);
 			}
-			if (JSON.stringify(envelope).length > SHARE_MAX_BYTES) {
+			// SHARE_MAX_BYTES is a byte count. JSON.stringify(...).length counts UTF-16 code units,
+			// which underestimates multi-byte characters, so measure the real byte length with TextEncoder.
+			if (new TextEncoder().encode(JSON.stringify(envelope)).byteLength > SHARE_MAX_BYTES) {
 				return c.json(
 					{
 						error: "payload_too_large",
@@ -188,9 +199,9 @@ const app = new Hono<Env>()
 					413,
 				);
 			}
-			// quota は user index の件数で判定 (100 << list の 1 page 上限 1000)
+			// Quota is judged by the user index count (100 << list's 1000-per-page cap)
 			const existing = await c.env.SHARES.list({
-				prefix: `user:${auth.owner}:`,
+				prefix: `user:${auth.ownerId}:`,
 			});
 			if (existing.keys.length >= SHARE_QUOTA_PER_USER) {
 				return c.json(
@@ -216,14 +227,16 @@ const app = new Hono<Env>()
 				createdAt: new Date(now).toISOString(),
 				expiresAt,
 			};
-			const value = JSON.stringify(record);
+			// Key the index on the immutable ownerId; a GitHub login can be renamed/reused, so it's unsafe for ownership.
 			await Promise.all([
-				c.env.SHARES.put(`share:${id}`, value, { expirationTtl: ttl }),
-				c.env.SHARES.put(`user:${auth.owner}:${id}`, "", {
+				c.env.SHARES.put(`share:${id}`, JSON.stringify(record), {
+					expirationTtl: ttl,
+				}),
+				c.env.SHARES.put(`user:${auth.ownerId}:${id}`, "", {
 					expirationTtl: ttl,
 				}),
 			]);
-			return c.json({ id, url: shareUrl(c.env.SHARE_ORIGIN, id), expiresAt }, 201);
+			return c.json({ id, url: shareUrl(c.req.url, id), expiresAt }, 201);
 		},
 	)
 	.get("/api/v1/shares/:id", async (c) => {
@@ -236,7 +249,7 @@ const app = new Hono<Env>()
 		if (!record) {
 			return c.json({ error: "not_found" } satisfies ShareErrorResponse, 404);
 		}
-		// sourceSnapshotId は owner 向け一覧にのみ返す (public に露出する理由がない)
+		// sourceSnapshotId is returned only in the owner's listing (no reason to expose it publicly)
 		return c.json({
 			envelope: record.envelope,
 			publishedBy: record.owner,
@@ -247,20 +260,28 @@ const app = new Hono<Env>()
 	.get("/api/v1/shares", requireAuth, async (c) => {
 		const auth = c.get("auth");
 		const snapshot = c.req.query("snapshot");
-		const prefix = `user:${auth.owner}:`;
+		const prefix = `user:${auth.ownerId}:`;
 		const listed = await c.env.SHARES.list({ prefix });
+		const records = await Promise.all(
+			listed.keys.map(async (key) => {
+				const id = key.name.slice(prefix.length);
+				const record = await c.env.SHARES.get<ShareRecord>(
+					`share:${id}`,
+					"json",
+				);
+				return { id, record };
+			}),
+		);
 		const shares: ShareSummary[] = [];
-		for (const key of listed.keys) {
-			const id = key.name.slice(prefix.length);
-			const record = await c.env.SHARES.get<ShareRecord>(`share:${id}`, "json");
-			// list と get の間に expire した share は skip
+		for (const { id, record } of records) {
+			// Skip a share that expired between list and get
 			if (!record) continue;
 			if (snapshot !== undefined && record.sourceSnapshotId !== snapshot) {
 				continue;
 			}
 			shares.push({
 				id,
-				url: shareUrl(c.env.SHARE_ORIGIN, id),
+				url: shareUrl(c.req.url, id),
 				sourceSnapshotId: record.sourceSnapshotId,
 				createdAt: record.createdAt,
 				expiresAt: record.expiresAt,
@@ -272,25 +293,25 @@ const app = new Hono<Env>()
 		const auth = c.get("auth");
 		const id = c.req.param("id");
 		const record = await c.env.SHARES.get<ShareRecord>(`share:${id}`, "json");
-		// 他人の share は存在自体を漏らさない (owner 不一致も 404)
-		if (!record || record.owner !== auth.owner) {
+		// Don't leak the existence of someone else's share (owner mismatch also returns 404)
+		if (!record || record.ownerId !== auth.ownerId) {
 			return c.json({ error: "not_found" } satisfies ShareErrorResponse, 404);
 		}
 		await Promise.all([
 			c.env.SHARES.delete(`share:${id}`),
-			c.env.SHARES.delete(`user:${auth.owner}:${id}`),
+			c.env.SHARES.delete(`user:${auth.ownerId}:${id}`),
 		]);
 		return c.json({ ok: true });
 	})
 	.all("*", async (c) => {
 		const url = new URL(c.req.url);
-		// /shares/* は SPA fallback (viewer が client 側で :id を解決する)
+		// /shares/* is the SPA fallback (the viewer resolves :id client-side)
 		const isSharePage =
 			url.pathname === "/shares" || url.pathname.startsWith("/shares/");
 		const assetRequest = isSharePage
 			? new Request(new URL("/index.html", url.origin), c.req.raw)
 			: c.req.raw;
-		// workers-types の Request/Response は lib.dom と構造が僅かに違うため境界で cast する
+		// workers-types' Request/Response differ slightly in shape from lib.dom, so cast at the boundary
 		const res = (await c.env.ASSETS.fetch(
 			assetRequest as unknown as Parameters<Fetcher["fetch"]>[0],
 		)) as unknown as Response;

@@ -6,14 +6,14 @@ import { cn } from "@/lib/utils";
 export type CodeSnippetProps = {
   code: string;
   className?: string;
-  /** copy ボタンの文言上書き。既定は app の i18n (auto-switch)。English 固定面 (share viewer) が使う */
+  /** Override the copy button labels. Defaults to app i18n (locale auto-switch); pass this where locale-independence is wanted. */
   labels?: { copy: string; copied: string };
 };
 
 /**
- * 静的な短いコード片を等幅で見せる軽量ブロック。
- * catalog の Code (pierre File) は仮想化前提で初回計測に依存し tab/折り畳みの中で
- * 崩れるため、ハイライト不要な doc 用途には素の <pre> を使う。
+ * A lightweight block that shows short static code fragments in monospace.
+ * The catalog's Code (pierre File) assumes virtualization and depends on initial measurement,
+ * so it collapses inside tabs/folds; for highlight-free doc use, a bare <pre> is used instead.
  */
 export function CodeSnippet({ code, className, labels }: CodeSnippetProps) {
   const [copied, setCopied] = useState(false);
@@ -24,7 +24,7 @@ export function CodeSnippet({ code, className, labels }: CodeSnippetProps) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      // clipboard 不可環境 (非 secure context 等) ではコピーを諦める
+      // Where clipboard is unavailable (e.g. non-secure context), give up on copying
     }
   };
 

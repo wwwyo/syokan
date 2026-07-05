@@ -4,6 +4,12 @@
   "description": "syokan — LLMs summon rich UI: post a JSON tree and predefined React components render an ephemeral view.",
   "type": "module",
   "private": true,
+  "exports": {
+    "./render": "./src/Render.tsx",
+    "./schema": "./src/schema/index.ts",
+    "./components/CodeSnippet": "./src/components/CodeSnippet/index.tsx",
+    "./styles.css": "./src/styles.css"
+  },
   "scripts": {
     "compile": "bun build.ts",
     "compile:all": "bun build.ts --release",

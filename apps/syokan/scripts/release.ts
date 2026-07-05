@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// bun run release — 対話的に bump 種別を選び、version bump + tag + push する。
-// 押した tag を .github/workflows/release.yml が拾って binary を release(publish) する。
+// bun run release — interactively pick the bump kind, then version bump + tag + push.
+// .github/workflows/release.yml picks up the pushed tag and releases (publishes) the binary.
 import { $ } from "bun";
 
 type Bump = "patch" | "minor" | "major";
@@ -41,7 +41,17 @@ if (prompt(`\nv${pkg.version} → v${nextVersion} で bump して push? [y/N]:`)
   process.exit(0);
 }
 
-// dirty な working tree だと bun pm version 自身が止める (release 前のガードとして妥当)。
-await $`bun pm version ${choice.key}`;
+// package.json は git root ではなく apps/syokan にあるため、bun pm / npm version の
+// 組み込み git commit/tag は無言で no-op になる。bump は --no-git-tag-version で行い、
+// commit と tag は root から明示的に打つ。組み込みの dirty-tree ガードも失うので自前で確認する。
+const dirty = (await $`git status --porcelain`.text()).trim();
+if (dirty) {
+  console.error("aborted: working tree が dirty です");
+  process.exit(1);
+}
+const tag = `v${nextVersion}`;
+await $`bun pm version --no-git-tag-version ${choice.key}`;
+await $`git commit -am ${tag}`;
+await $`git tag ${tag}`;
 await $`git push --follow-tags`;
-console.log(`\n✓ v${nextVersion} を push。CI が release を publish します。`);
+console.log(`\n✓ ${tag} を push。CI が release を publish します。`);

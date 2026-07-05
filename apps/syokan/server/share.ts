@@ -5,8 +5,8 @@ import { hc } from "hono/client";
 import { z } from "zod";
 import { authFile } from "@/lib/paths";
 import { formatValidationError } from "@/schema";
-// AppType は apps/share/worker.ts (Hono app) が export する。API の形の SSOT は
-// .agent/prd/public-share/contract.md と apps/share/types.ts。
+// AppType is exported by apps/share/worker.ts (the Hono app). The SSOT for the API shape is
+// .agent/prd/public-share/contract.md and apps/share/types.ts.
 import type { AppType } from "../../share/worker";
 import { SHARE_API_DEFAULT_ORIGIN } from "../../share/types";
 import { materializeTree } from "./materialize";
@@ -14,12 +14,12 @@ import type { SnapshotStore } from "./store";
 
 export type AuthData = { token: string; login: string };
 
-/** local server が Worker を呼ぶ origin。deploy 先切替は env 一本で行う。 */
+/** The origin the local server calls the Worker at. Switch deploy targets with a single env var. */
 export function shareApiOrigin(): string {
   return process.env.SYOKAN_SHARE_API ?? SHARE_API_DEFAULT_ORIGIN;
 }
 
-/** auth.json を読む。未 login (未存在 / 壊れている) は undefined。 */
+/** Read auth.json. Not logged in (missing / corrupt) yields undefined. */
 export async function readAuth(
   path: string = authFile(),
 ): Promise<AuthData | undefined> {
@@ -35,13 +35,13 @@ export async function readAuth(
       return { token: parsed.token, login: parsed.login };
     }
   } catch {
-    // 壊れた auth.json は未 login 扱い (login し直しで復旧する)
+    // Treat a corrupt auth.json as not logged in (logging in again recovers it)
   }
   return undefined;
 }
 
-// token は secret なので所有者のみ読めるようにする。writeFile の mode は
-// 既存ファイルに効かないため chmod で常に 0600 へ揃える。
+// The token is a secret, so make it readable only by the owner. writeFile's mode doesn't
+// apply to an existing file, so chmod always to 0600.
 async function writeAuth(path: string, data: AuthData): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(data), { mode: 0o600 });
@@ -67,11 +67,31 @@ const loginInputSchema = z
   .object({ githubAccessToken: z.string().min(1) })
   .strict();
 
+// Keep min(60) in sync with the Worker's createShareSchema. Returning 400 up front
+// avoids leaking the Worker's validation_failed after a materialize + round-trip.
 const publishInputSchema = z
-  .object({ expiresIn: z.number().int().positive().optional() })
+  .object({ expiresIn: z.number().int().min(60).optional() })
   .strict();
 
-// body なし / 空 body を {} として受ける (publish は expiresIn 省略が普通の経路)。
+const authResponseSchema = z
+  .object({ token: z.string().min(1), login: z.string().min(1) })
+  .loose();
+
+// The localhost server is only hit by the same-origin app and the Origin-less CLI. Reject any
+// cross-origin request that carries an Origin (a malicious web page CSRFing publish to leak local
+// file contents to a public URL). CLI/curl send no Origin, so they pass.
+function crossOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  try {
+    const host = new URL(origin).hostname;
+    return host !== "localhost" && host !== "127.0.0.1" && host !== "[::1]";
+  } catch {
+    return true;
+  }
+}
+
+// Accept no body / empty body as {} (omitting expiresIn is the normal path for publish).
 async function parseOptionalJsonBody(
   req: Request,
 ): Promise<{ ok: true; value: unknown } | { ok: false; response: Response }> {
@@ -122,6 +142,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
     },
 
     async login(req) {
+      if (crossOrigin(req)) return jsonError(403, { error: "forbidden" });
       const body = await parseOptionalJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = loginInputSchema.safeParse(body.value);
@@ -142,23 +163,40 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
       }
       const data = await readJsonSafe(res);
       if (!res.ok) {
-        // Worker 側エラー (GitHub 検証失敗等) は status と body を透過する。
+        // Pass Worker-side errors (e.g. GitHub verification failure) through by status and body.
         return Response.json(
           data ?? { error: "share_api_error", status: res.status },
           { status: res.status },
         );
       }
-      const { token, login } = data as { token: string; login: string };
-      await writeAuth(deps.authFilePath, { token, login });
-      return Response.json({ login });
+      // A 200 doesn't guarantee the body shape (e.g. a proxy's non-JSON response). Writing auth
+      // without validating would persist a broken auth.json — "logged in yet not_logged_in".
+      const auth = authResponseSchema.safeParse(data);
+      if (!auth.success) return jsonError(502, { error: "share_api_error" });
+      await writeAuth(deps.authFilePath, {
+        token: auth.data.token,
+        login: auth.data.login,
+      });
+      return Response.json({ login: auth.data.login });
     },
 
     async logout() {
+      // Revoke the Worker-side token too; otherwise a leaked token can publish/delete until its TTL.
+      // Still succeed the logout even if the Worker is unreachable (always clear the local copy).
+      const auth = await readAuth(deps.authFilePath);
+      if (auth) {
+        try {
+          await client.api.v1.auth.token.$delete({}, bearer(auth.token));
+        } catch {
+          // best-effort: the token expires on its own at TTL
+        }
+      }
       await rm(deps.authFilePath, { force: true });
       return Response.json({ ok: true });
     },
 
     async publishSnapshot(req) {
+      if (crossOrigin(req)) return jsonError(403, { error: "forbidden" });
       const body = await parseOptionalJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = publishInputSchema.safeParse(body.value);
@@ -177,17 +215,18 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
           message: `Snapshot ${id} not found`,
         });
       }
+      // Check auth before materializing; reading every FileDoc file is wasted work when not logged in.
+      const auth = await readAuth(deps.authFilePath);
+      if (!auth) return jsonError(401, { error: "not_logged_in" });
       const materialized = await materializeTree(envelope.root);
       if (!materialized.ok) {
-        // 読めないノードを欠いたまま公開しない: 1 件でも失敗なら publish 全体を失敗させる。
+        // Don't publish with an unreadable node missing: a single failure fails the whole publish.
         return jsonError(422, {
           error: "materialize_failed",
           path: materialized.path,
           reason: materialized.reason,
         });
       }
-      const auth = await readAuth(deps.authFilePath);
-      if (!auth) return jsonError(401, { error: "not_logged_in" });
       let res: Response;
       try {
         res = await client.api.v1.shares.$post(
@@ -206,7 +245,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
         return jsonError(502, { error: "share_api_unreachable" });
       }
       const data = await readJsonSafe(res);
-      // Worker の 401 = 保存済み token の失効。client には「login し直し」として見せる。
+      // A Worker 401 = stored token expired. Surface it to the client as "log in again".
       if (res.status === 401) return jsonError(401, { error: "not_logged_in" });
       if (!res.ok) {
         return Response.json(
@@ -219,7 +258,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
 
     async listShares(req) {
       const auth = await readAuth(deps.authFilePath);
-      // 未 login は空一覧で 200 (UI の「公開中」chip が静かに劣化する)。
+      // Not logged in returns an empty list with 200 (the UI's "published" chip degrades quietly).
       if (!auth) return Response.json({ shares: [] });
       const snapshot = new URL(req.url).searchParams.get("snapshot");
       let res: Response;
@@ -240,6 +279,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareApiHandlers {
     },
 
     async deleteShare(req) {
+      if (crossOrigin(req)) return jsonError(403, { error: "forbidden" });
       const auth = await readAuth(deps.authFilePath);
       if (!auth) return jsonError(401, { error: "not_logged_in" });
       let res: Response;

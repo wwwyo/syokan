@@ -10,8 +10,8 @@ export type MaterializeResult =
   | { ok: true; root: Item }
   | { ok: false; path: string; reason: ReadFileFailure };
 
-// FileDoc を publish 時点の内容で具象ノードに畳む。推論規則 (fileFormat.ts) と
-// props の対応は FileDocBody の描画分岐と揃える。
+// Fold a FileDoc into a concrete node using its content at publish time. The inference rules
+// (fileFormat.ts) and props mapping mirror FileDocBody's render branching.
 function concreteNode(path: string, content: string): Item {
   const format = inferFileFormat(path);
   if (format === "markdown") {
@@ -31,8 +31,8 @@ function concreteNode(path: string, content: string): Item {
 }
 
 /**
- * tree をコピーしつつ FileDoc をファイル内容ごと具象ノードへ凍結する。
- * 読み失敗は 1 件でも全体を fail にする (欠けた公開物を作らない)。元 tree は変更しない。
+ * Copy the tree while freezing each FileDoc into a concrete node with its file content.
+ * A single read failure fails the whole thing (don't produce an incomplete publication). The original tree is not mutated.
  */
 export async function materializeTree(item: Item): Promise<MaterializeResult> {
   if (item.type === "FileDoc") {
@@ -45,9 +45,9 @@ export async function materializeTree(item: Item): Promise<MaterializeResult> {
   }
   let children: Item[] | undefined;
   if (item.children) {
+    const results = await Promise.all(item.children.map(materializeTree));
     children = [];
-    for (const child of item.children) {
-      const result = await materializeTree(child);
+    for (const result of results) {
       if (!result.ok) return result;
       children.push(result.root);
     }

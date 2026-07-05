@@ -7,10 +7,6 @@
 		// id は deploy 時に `wrangler kv namespace create SHARES` の結果へ差し替える
 		{ "binding": "SHARES", "id": "PLACEHOLDER" }
 	],
-	"vars": {
-		// placeholder: 本番 domain 確定後に差し替える (design.md 未決事項 #1)
-		"SHARE_ORIGIN": "https://syokan.dev"
-	},
 	"assets": {
 		"directory": "./viewer/dist",
 		"binding": "ASSETS",
