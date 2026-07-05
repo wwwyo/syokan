@@ -216,7 +216,9 @@ const app = new Hono<Env>()
 				expiresIn ?? SHARE_DEFAULT_TTL_SECONDS,
 				SHARE_MAX_TTL_SECONDS,
 			);
-			const id = crypto.randomUUID();
+			// Widen away randomUUID's template-literal type: the contract says id is a plain string,
+			// and the UUID shape would otherwise leak into every hc consumer.
+			const id: string = crypto.randomUUID();
 			const now = Date.now();
 			const expiresAt = new Date(now + ttl * 1000).toISOString();
 			const record: ShareRecord = {

@@ -52,7 +52,9 @@ export type ShareErrorCode =
 	| "materialize_failed"
 	| "share_api_unreachable"
 	| "share_api_error"
-	| "invalid_json";
+	| "invalid_json"
+	// local server only: the localhost proxy's cross-origin (CSRF) rejection
+	| "forbidden";
 
 export type ShareErrorResponse = {
 	error: ShareErrorCode;

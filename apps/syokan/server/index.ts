@@ -20,7 +20,7 @@ import {
   getCatalog,
 } from "./routes";
 import { createSettingStore } from "./setting";
-import { createShareHandlers, shareApiOrigin } from "./share";
+import { createShareApp, shareApiOrigin } from "./share";
 import { createSnapshotStore } from "./store";
 import { createTemplateStore } from "./templates";
 
@@ -57,12 +57,13 @@ export function startServer() {
   const setting = createSettingHandlers(createSettingStore(settingFile()));
   // File watching is connection-scoped runtime state, never persisted. It lives as long as the server.
   const file = createFileHandlers(createFileWatcher());
-  const share = createShareHandlers({
+  const shareApp = createShareApp({
     store,
     fetch: globalThis.fetch,
     origin: shareApiOrigin(),
     authFilePath: authFile(),
   });
+  const share = (req: Request) => shareApp.fetch(req);
   const server = serve({
     routes: {
       "/api/health": () => Response.json({ ok: true, version: pkg.version }),
@@ -79,14 +80,14 @@ export function startServer() {
       },
       // public share: publish freezes a store snapshot and sends it to the Worker; auth
       // exchanges and holds the Worker token; shares is an authenticated proxy to the Worker.
-      "/api/snapshots/:id/publish": { POST: share.publishSnapshot },
+      "/api/snapshots/:id/publish": { POST: share },
       "/api/auth/login": {
-        GET: share.loginStatus,
-        POST: share.login,
-        DELETE: share.logout,
+        GET: share,
+        POST: share,
+        DELETE: share,
       },
-      "/api/shares": { GET: share.listShares },
-      "/api/shares/:id": { DELETE: share.deleteShare },
+      "/api/shares": { GET: share },
+      "/api/shares/:id": { DELETE: share },
       "/api/templates": {
         GET: templates.listTemplates,
         POST: templates.createTemplate,

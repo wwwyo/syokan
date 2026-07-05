@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createShareHandlers, readAuth } from "./share";
+import { createShareApp, readAuth } from "./share";
 import { createSnapshotStore, type SnapshotStore } from "./store";
 
 const ORIGIN = "https://share.test";
@@ -45,22 +45,6 @@ function failingFetch(): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-function makeRequest(url: string, init?: RequestInit) {
-  return new Request(`http://test${url}`, init);
-}
-
-function makeParamRequest(
-  url: string,
-  params: Record<string, string>,
-  init?: RequestInit,
-) {
-  const req = new Request(`http://test${url}`, init) as Request & {
-    params: Record<string, string>;
-  };
-  Object.defineProperty(req, "params", { value: params });
-  return req;
-}
-
 describe("share routes", () => {
   let dir: string;
   let store: SnapshotStore;
@@ -76,8 +60,8 @@ describe("share routes", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  function handlers(fetchImpl: typeof fetch) {
-    return createShareHandlers({
+  function app(fetchImpl: typeof fetch) {
+    return createShareApp({
       store,
       fetch: fetchImpl,
       origin: ORIGIN,
@@ -94,13 +78,10 @@ describe("share routes", () => {
       const { stub, calls } = makeWorkerFetch(() =>
         Response.json({ token: "api-token-1", login: "octocat" }),
       );
-      const share = handlers(stub);
-      const res = await share.login(
-        makeRequest("/api/auth/login", {
-          method: "POST",
-          body: JSON.stringify({ githubAccessToken: "gh-abc" }),
-        }),
-      );
+      const res = await app(stub).request("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ githubAccessToken: "gh-abc" }),
+      });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ login: "octocat" });
 
@@ -120,23 +101,23 @@ describe("share routes", () => {
       const { stub } = makeWorkerFetch(() =>
         Response.json({ error: "github_verification_failed" }, { status: 401 }),
       );
-      const share = handlers(stub);
-      const res = await share.login(
-        makeRequest("/api/auth/login", {
-          method: "POST",
-          body: JSON.stringify({ githubAccessToken: "bad" }),
-        }),
-      );
+      const res = await app(stub).request("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ githubAccessToken: "bad" }),
+      });
       expect(res.status).toBe(401);
+      expect(((await res.json()) as { error: string }).error).toBe(
+        "github_verification_failed",
+      );
       expect(await readAuth(authFilePath)).toBeUndefined();
     });
 
     test("POST /api/auth/login returns 400 validation_failed without githubAccessToken", async () => {
       const { stub, calls } = makeWorkerFetch(() => Response.json({}));
-      const share = handlers(stub);
-      const res = await share.login(
-        makeRequest("/api/auth/login", { method: "POST", body: "{}" }),
-      );
+      const res = await app(stub).request("/api/auth/login", {
+        method: "POST",
+        body: "{}",
+      });
       expect(res.status).toBe(400);
       expect(((await res.json()) as { error: string }).error).toBe(
         "validation_failed",
@@ -145,28 +126,25 @@ describe("share routes", () => {
     });
 
     test("GET /api/auth/login returns { login } when logged in, 401 when not", async () => {
-      const share = handlers(failingFetch());
-      const before = await share.loginStatus();
+      const share = app(failingFetch());
+      const before = await share.request("/api/auth/login");
       expect(before.status).toBe(401);
       expect(((await before.json()) as { error: string }).error).toBe(
         "not_logged_in",
       );
 
       await loginDirectly();
-      const after = await share.loginStatus();
+      const after = await share.request("/api/auth/login");
       expect(after.status).toBe(200);
       expect(await after.json()).toEqual({ login: "octocat" });
     });
 
     test("POST /api/auth/login rejects a 200 whose body lacks token/login (502, no auth written)", async () => {
       const { stub } = makeWorkerFetch(() => Response.json({ login: "octocat" }));
-      const share = handlers(stub);
-      const res = await share.login(
-        makeRequest("/api/auth/login", {
-          method: "POST",
-          body: JSON.stringify({ githubAccessToken: "ok" }),
-        }),
-      );
+      const res = await app(stub).request("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ githubAccessToken: "ok" }),
+      });
       expect(res.status).toBe(502);
       expect(await readAuth(authFilePath)).toBeUndefined();
     });
@@ -174,21 +152,21 @@ describe("share routes", () => {
     test("DELETE /api/auth/login revokes the worker token and removes auth.json", async () => {
       await loginDirectly("tok-1");
       const { stub, calls } = makeWorkerFetch(() => Response.json({ ok: true }));
-      const share = handlers(stub);
-      const res = await share.logout();
+      const share = app(stub);
+      const res = await share.request("/api/auth/login", { method: "DELETE" });
       expect(await res.json()).toEqual({ ok: true });
       expect(calls[0]?.method).toBe("DELETE");
       expect(calls[0]?.url).toBe(`${ORIGIN}/api/v1/auth/token`);
       expect(calls[0]?.headers.authorization).toBe("Bearer tok-1");
-      expect((await share.loginStatus()).status).toBe(401);
+      expect((await share.request("/api/auth/login")).status).toBe(401);
     });
 
     test("logout still succeeds when the worker is unreachable", async () => {
       await loginDirectly();
-      const share = handlers(failingFetch());
-      const res = await share.logout();
+      const share = app(failingFetch());
+      const res = await share.request("/api/auth/login", { method: "DELETE" });
       expect(await res.json()).toEqual({ ok: true });
-      expect((await share.loginStatus()).status).toBe(401);
+      expect((await share.request("/api/auth/login")).status).toBe(401);
     });
 
     test("publish from a cross-origin browser request is rejected 403", async () => {
@@ -197,12 +175,12 @@ describe("share routes", () => {
       });
       await loginDirectly();
       const { stub, calls } = makeWorkerFetch(() => Response.json({}));
-      const share = handlers(stub);
-      const res = await share.publishSnapshot(
-        makeParamRequest(`/api/snapshots/${env.id}/publish`, { id: env.id }, {
+      const res = await app(stub).request(
+        `/api/snapshots/${env.id}/publish`,
+        {
           method: "POST",
           headers: { origin: "https://evil.example" },
-        }) as never,
+        },
       );
       expect(res.status).toBe(403);
       expect(calls).toEqual([]);
@@ -229,12 +207,12 @@ describe("share routes", () => {
       const { stub, calls } = makeWorkerFetch(() =>
         Response.json(created, { status: 201 }),
       );
-      const share = handlers(stub);
-      const res = await share.publishSnapshot(
-        makeParamRequest(`/api/snapshots/${env.id}/publish`, { id: env.id }, {
+      const res = await app(stub).request(
+        `/api/snapshots/${env.id}/publish`,
+        {
           method: "POST",
           body: JSON.stringify({ expiresIn: 3600 }),
-        }) as never,
+        },
       );
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(created);
@@ -270,11 +248,9 @@ describe("share routes", () => {
           { status: 201 },
         ),
       );
-      const share = handlers(stub);
-      const res = await share.publishSnapshot(
-        makeParamRequest(`/api/snapshots/${env.id}/publish`, { id: env.id }, {
-          method: "POST",
-        }) as never,
+      const res = await app(stub).request(
+        `/api/snapshots/${env.id}/publish`,
+        { method: "POST" },
       );
       expect(res.status).toBe(201);
       expect(
@@ -283,11 +259,9 @@ describe("share routes", () => {
     });
 
     test("unknown snapshot id -> 404 not_found", async () => {
-      const share = handlers(failingFetch());
-      const res = await share.publishSnapshot(
-        makeParamRequest("/api/snapshots/missing/publish", { id: "missing" }, {
-          method: "POST",
-        }) as never,
+      const res = await app(failingFetch()).request(
+        "/api/snapshots/missing/publish",
+        { method: "POST" },
       );
       expect(res.status).toBe(404);
       expect(((await res.json()) as { error: string }).error).toBe("not_found");
@@ -300,11 +274,9 @@ describe("share routes", () => {
       });
       await loginDirectly();
       const { stub, calls } = makeWorkerFetch(() => Response.json({}));
-      const share = handlers(stub);
-      const res = await share.publishSnapshot(
-        makeParamRequest(`/api/snapshots/${env.id}/publish`, { id: env.id }, {
-          method: "POST",
-        }) as never,
+      const res = await app(stub).request(
+        `/api/snapshots/${env.id}/publish`,
+        { method: "POST" },
       );
       expect(res.status).toBe(422);
       expect(await res.json()).toEqual({
@@ -320,11 +292,9 @@ describe("share routes", () => {
         root: { type: "Heading", props: { text: "S" } },
       });
       const { stub, calls } = makeWorkerFetch(() => Response.json({}));
-      const share = handlers(stub);
-      const res = await share.publishSnapshot(
-        makeParamRequest(`/api/snapshots/${env.id}/publish`, { id: env.id }, {
-          method: "POST",
-        }) as never,
+      const res = await app(stub).request(
+        `/api/snapshots/${env.id}/publish`,
+        { method: "POST" },
       );
       expect(res.status).toBe(401);
       expect(((await res.json()) as { error: string }).error).toBe(
@@ -341,11 +311,9 @@ describe("share routes", () => {
       const { stub } = makeWorkerFetch(() =>
         Response.json({ error: "unauthorized" }, { status: 401 }),
       );
-      const share = handlers(stub);
-      const res = await share.publishSnapshot(
-        makeParamRequest(`/api/snapshots/${env.id}/publish`, { id: env.id }, {
-          method: "POST",
-        }) as never,
+      const res = await app(stub).request(
+        `/api/snapshots/${env.id}/publish`,
+        { method: "POST" },
       );
       expect(res.status).toBe(401);
       expect(((await res.json()) as { error: string }).error).toBe(
@@ -361,14 +329,30 @@ describe("share routes", () => {
       const { stub } = makeWorkerFetch(() =>
         Response.json({ error: "too_large" }, { status: 413 }),
       );
-      const share = handlers(stub);
-      const res = await share.publishSnapshot(
-        makeParamRequest(`/api/snapshots/${env.id}/publish`, { id: env.id }, {
-          method: "POST",
-        }) as never,
+      const res = await app(stub).request(
+        `/api/snapshots/${env.id}/publish`,
+        { method: "POST" },
       );
       expect(res.status).toBe(413);
       expect(((await res.json()) as { error: string }).error).toBe("too_large");
+    });
+
+    test("a worker error outside the pass-through set folds into 502 share_api_error", async () => {
+      const env = await store.create({
+        root: { type: "Heading", props: { text: "S" } },
+      });
+      await loginDirectly();
+      const { stub } = makeWorkerFetch(
+        () => new Response("upstream broke", { status: 500 }),
+      );
+      const res = await app(stub).request(
+        `/api/snapshots/${env.id}/publish`,
+        { method: "POST" },
+      );
+      expect(res.status).toBe(502);
+      expect(((await res.json()) as { error: string }).error).toBe(
+        "share_api_error",
+      );
     });
 
     test("network failure -> 502 share_api_unreachable", async () => {
@@ -376,11 +360,9 @@ describe("share routes", () => {
         root: { type: "Heading", props: { text: "S" } },
       });
       await loginDirectly();
-      const share = handlers(failingFetch());
-      const res = await share.publishSnapshot(
-        makeParamRequest(`/api/snapshots/${env.id}/publish`, { id: env.id }, {
-          method: "POST",
-        }) as never,
+      const res = await app(failingFetch()).request(
+        `/api/snapshots/${env.id}/publish`,
+        { method: "POST" },
       );
       expect(res.status).toBe(502);
       expect(((await res.json()) as { error: string }).error).toBe(
@@ -392,8 +374,7 @@ describe("share routes", () => {
   describe("GET /api/shares", () => {
     test("not logged in -> 200 with an empty list; worker is not called", async () => {
       const { stub, calls } = makeWorkerFetch(() => Response.json({}));
-      const share = handlers(stub);
-      const res = await share.listShares(makeRequest("/api/shares?snapshot=x"));
+      const res = await app(stub).request("/api/shares?snapshot=x");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ shares: [] });
       expect(calls).toEqual([]);
@@ -411,10 +392,7 @@ describe("share routes", () => {
         },
       ];
       const { stub, calls } = makeWorkerFetch(() => Response.json({ shares }));
-      const share = handlers(stub);
-      const res = await share.listShares(
-        makeRequest("/api/shares?snapshot=snap-1"),
-      );
+      const res = await app(stub).request("/api/shares?snapshot=snap-1");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ shares });
       expect(calls[0]?.method).toBe("GET");
@@ -427,12 +405,9 @@ describe("share routes", () => {
 
   describe("DELETE /api/shares/:id", () => {
     test("not logged in -> 401", async () => {
-      const share = handlers(failingFetch());
-      const res = await share.deleteShare(
-        makeParamRequest("/api/shares/s1", { id: "s1" }, {
-          method: "DELETE",
-        }) as never,
-      );
+      const res = await app(failingFetch()).request("/api/shares/s1", {
+        method: "DELETE",
+      });
       expect(res.status).toBe(401);
       expect(((await res.json()) as { error: string }).error).toBe(
         "not_logged_in",
@@ -442,12 +417,9 @@ describe("share routes", () => {
     test("logged in -> proxies the delete to the worker", async () => {
       await loginDirectly("tok-2");
       const { stub, calls } = makeWorkerFetch(() => Response.json({ ok: true }));
-      const share = handlers(stub);
-      const res = await share.deleteShare(
-        makeParamRequest("/api/shares/s1", { id: "s1" }, {
-          method: "DELETE",
-        }) as never,
-      );
+      const res = await app(stub).request("/api/shares/s1", {
+        method: "DELETE",
+      });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ ok: true });
       expect(calls[0]?.method).toBe("DELETE");
