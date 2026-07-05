@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { z } from "zod";
+import { Card as UICard } from "@/components/ui/card";
 
 export const cardPropsSchema = z.object({}).strict();
 
@@ -13,12 +14,5 @@ export type CardProps = {
  * the contents are expressed by composing Heading / Text / Link / Stack and the like.
  */
 export function Card({ children }: CardProps) {
-  return (
-    <div
-      data-slot="card"
-      className="rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm transition-shadow hover:shadow"
-    >
-      {children}
-    </div>
-  );
+  return <UICard>{children}</UICard>;
 }
