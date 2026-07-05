@@ -12,7 +12,7 @@ export const ja: Messages = {
     loading: "読み込み中…",
   },
   home: {
-    introLead: "review や日々のメモを、シームレスに syokan（召喚）。",
+    introLead: "UI を、コードを書かずにその場で syokan（召喚）。",
     introBody: "LLM が生成した catalog JSON を、そのままリッチな UI として表示。",
     tabSettings: "設定",
     tabUsage: "使い方",

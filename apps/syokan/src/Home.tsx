@@ -38,7 +38,7 @@ export function Home() {
               </div>
               <ThemeSelect />
             </div>
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="font-medium">{t.home.font}</p>
                 <p className="text-sm text-muted-foreground">

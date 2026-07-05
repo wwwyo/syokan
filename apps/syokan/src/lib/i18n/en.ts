@@ -10,7 +10,7 @@ export const en = {
     loading: "Loading…",
   },
   home: {
-    introLead: "Seamlessly syokan your reviews and daily notes.",
+    introLead: "Syokan (summon) UI on the spot, without writing code.",
     introBody: "LLM-generated catalog JSON renders straight into a rich UI.",
     tabSettings: "Settings",
     tabUsage: "Usage",
