@@ -115,7 +115,7 @@ describe("materializeTree", () => {
       props: {},
       children: [
         { type: "Heading", props: { text: "S" }, key: "h" },
-        { type: "Text", props: { text: "b" } },
+        { type: "Text", props: { body: "b" } },
       ],
     };
     const result = await materializeTree(tree);

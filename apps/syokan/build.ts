@@ -45,7 +45,13 @@ async function compile(outfile: string, target?: Build.CompileTarget) {
 // "invalid or unsupported format" で失敗するため)。
 async function adhocSign(outfile: string, target?: Build.CompileTarget) {
   const forDarwin = target ? target.includes("darwin") : process.platform === "darwin";
-  if (!forDarwin || process.platform !== "darwin") return;
+  if (!forDarwin) return;
+  // codesign は macOS でしか動かない。CI (ubuntu) で cross-compile した darwin 版は未署名で出る。
+  // 黙って skip すると気づけないので警告する (配布物の Gatekeeper 対応は notarization が別途必要)
+  if (process.platform !== "darwin") {
+    console.warn(`syokan: ${outfile} left unsigned (cross-compiled on ${process.platform}; codesign needs macOS)`);
+    return;
+  }
   await Bun.$`codesign --remove-signature ${outfile}`.quiet().nothrow();
   const signed = await Bun.$`codesign --sign - --force ${outfile}`.quiet().nothrow();
   if (signed.exitCode !== 0) {
