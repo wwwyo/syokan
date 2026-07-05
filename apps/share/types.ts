@@ -66,5 +66,5 @@ export const SHARE_TOKEN_TTL_SECONDS = 90 * 24 * 60 * 60;
 export const SHARE_MAX_BYTES = 1024 * 1024;
 export const SHARE_QUOTA_PER_USER = 100;
 
-/** Placeholder until the deploy target is decided. The local server can override via env SYOKAN_SHARE_API */
+/** 本番 Worker の origin (local server が Worker を叩く先)。env SYOKAN_SHARE_API で上書き可 */
 export const SHARE_API_DEFAULT_ORIGIN = "https://syokan.dev";

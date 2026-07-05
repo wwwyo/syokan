@@ -60,7 +60,7 @@ mise install && bun install
 bun run dev    # Bun.serve + HMR (https://syokan.localhost via portless)
 ```
 
-Dev uses port `5273` and the repo-local `./.syokan-dev/` directory, so it never collides with a global install (port `5173` / standard XDG directories). To post to the dev server, set `SYOKAN_BASE_URL=http://localhost:5273`. To skip portless, use `PORTLESS=0 bun run dev` (default port `5173`).
+Dev uses port `5273` and the repo-local `./.syokan-dev/` directory, so it never collides with a global install (port `5173` / standard XDG directories). Inside this repo the mise `[shell_alias]` points `syokan` at the local-source CLI pinned to the dev server (`SYOKAN_BASE_URL=http://localhost:5273`), so `syokan <file>` posts to dev, not your production instance; outside the repo `syokan` is the global install. To skip portless, use `PORTLESS=0 bun run dev` (default port `5173`).
 
 ## Envelope
 
