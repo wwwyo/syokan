@@ -1,18 +1,20 @@
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
-// XDG base directory spec は「これらの変数は絶対パスでなければならない。相対値は無効
-// として無視する」と定めている。空文字や相対値を受けると CWD 配下へ書き込む事故になる
-// ので、絶対パスのときだけ採用し、それ以外は spec 標準の default にフォールバックする。
+// The XDG base directory spec states "these variables must be absolute paths; relative
+// values are invalid and ignored". Accepting an empty or relative value risks writing
+// under CWD, so adopt only absolute paths and otherwise fall back to the spec's default.
 function absEnv(name: string): string | undefined {
   const v = process.env[name];
   return v && isAbsolute(v) ? v : undefined;
 }
 
-// 永続先は XDG base directory spec でライフサイクル別に分ける。全部を config に集約
-// すると snapshot / log が dotfiles 追跡対象 (~/.config) に混ざり、誤って git に載せる
-// 事故を招く。keep(config/data)・machine-local(state) を分離する。場所の上書きは
-// SYOKAN_* の独自 env を増やさず XDG_*_HOME 一本に集約する (dev もこれで隔離する)。
+// Persistence locations are split by lifecycle per the XDG base directory spec.
+// Consolidating everything into config would mix snapshots / logs into the
+// dotfiles-tracked tree (~/.config) and risk accidentally committing them to git.
+// Separate keep (config/data) from machine-local (state). Location overrides are
+// consolidated on XDG_*_HOME alone rather than adding bespoke SYOKAN_* envs (dev is
+// isolated the same way).
 function configHome(): string {
   return absEnv("XDG_CONFIG_HOME") ?? join(homedir(), ".config");
 }
@@ -25,37 +27,38 @@ function stateHome(): string {
   return absEnv("XDG_STATE_HOME") ?? join(homedir(), ".local", "state");
 }
 
-// snapshot は cache ではなく state に置く。cache の契約は「第三者が予告なく purge
-// してよい」だが、syokan は snapshot を自動再生成せず (producer の再投稿が要る)、
-// 再起動をまたいで残ってほしい。この「persist するが backup 不要」は state の領分。
+// Snapshots go in state, not cache. Cache's contract is "a third party may purge
+// without notice", but syokan does not regenerate snapshots automatically (the
+// producer must re-post) and they should survive restarts. This "persist but no
+// backup needed" is state's domain.
 export function dataDir(): string {
   return join(stateHome(), "syokan");
 }
 
-// pid/port と log も machine-local な state。snapshot と同じ state dir に同居する。
+// pid/port and logs are also machine-local state. They live in the same state dir as snapshots.
 export function runtimeDir(): string {
   return join(stateHome(), "syokan");
 }
 
-// templates は設定ではないが「残す」user data なので data home に置く。
+// Templates are not settings but "keep" user data, so they go in data home.
 export function templatesDir(): string {
   return join(dataHome(), "syokan", "templates");
 }
 
-// 旧レイアウト (全カテゴリを config 集約) での templates 位置。data home への移設で
-// keep data が upgrade 時に消えるのを防ぐ 1 回限りの移行にのみ使う。
+// The templates location under the old layout (all categories consolidated in config).
+// Used only for the one-time migration to data home, to keep upgrades from losing keep data.
 export function legacyTemplatesDir(): string {
   return join(configHome(), "syokan", "templates");
 }
 
-// 設定は singleton なので dir ではなく単一 file。config home に置く
-// (この 1 ファイルだけが ~/.config/syokan 配下に残り、dotfiles で安全に版管理できる)。
+// Settings are a singleton, so a single file rather than a dir. Placed in config home
+// (only this one file remains under ~/.config/syokan and can be safely versioned in dotfiles).
 export function settingFile(): string {
   return join(configHome(), "syokan", "settings.json");
 }
 
-// share API token は machine-local な secret。dotfiles 追跡対象 (config) に混ぜず
-// state に置く (0600 での保存は書き込み側が担う)。
+// The share API token is a machine-local secret. Kept in state rather than mixed into
+// the dotfiles-tracked config (saving it with 0600 is the writer's responsibility).
 export function authFile(): string {
   return join(stateHome(), "syokan", "auth.json");
 }

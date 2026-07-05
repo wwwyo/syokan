@@ -10,34 +10,34 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const richBody = `# 見出し1
+const richBody = `# Heading 1
 
-段落のテキスト。**強調** や \`inline code\`、[リンク](https://example.com)、~~取り消し線~~ を含む。
+A paragraph of text. Includes **bold**, \`inline code\`, a [link](https://example.com), and ~~strikethrough~~.
 
-## 箇条書き
+## Bullet list
 
-- りんご
-- みかん
-  - ネスト
+- Apple
+- Orange
+  - Nested
 
-## タスクリスト
+## Task list
 
-- [x] Storybook を導入
-- [ ] story を量産
-- [ ] CI に組み込む
+- [x] Set up Storybook
+- [ ] Write lots of stories
+- [ ] Wire it into CI
 
-## テーブル
+## Table
 
-| 層 | 役割 |
+| Layer | Role |
 |---|---|
-| memory | 長期メモリ |
-| view | 一時的な dashboard |
+| memory | Long-term memory |
+| view | Ephemeral dashboard |
 
-## 引用
+## Quote
 
-> これは引用ブロックのサンプルです。
+> This is a sample blockquote.
 
-## コードブロック
+## Code block
 
 \`\`\`ts
 export function add(a: number, b: number): number {
@@ -52,7 +52,7 @@ export const Rich: Story = {
 
 export const HeadingsAndText: Story = {
   args: {
-    body: "# タイトル\n\n## サブ見出し\n\n本文の段落。続けて2つ目の段落。\n",
+    body: "# Title\n\n## Subheading\n\nA body paragraph. Followed by a second paragraph.\n",
   },
 };
 
@@ -66,7 +66,7 @@ export const Mermaid: Story = {
   args: {
     body: `# Mermaid
 
-文中の \`\`\`mermaid フェンスは図として描画する。
+A \`\`\`mermaid fence in the text renders as a diagram.
 
 \`\`\`mermaid
 graph TD
@@ -75,7 +75,7 @@ graph TD
   C --> D[React render]
 \`\`\`
 
-シーケンス図も同じ。
+Sequence diagrams work the same way.
 
 \`\`\`mermaid
 sequenceDiagram

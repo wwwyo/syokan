@@ -18,11 +18,10 @@ export type CreateInput = {
   title?: string;
   root: Item;
   metadata?: SnapshotMetadata;
-  // 指定すると id/url とは別に key→id を登録し、以後の update の的にする。
-  // 既に登録済みの key を渡した場合は新規作成せず既存をそのまま返す (dedup) —
-  // CLI の PUT→404→POST フォールバックが並行実行されても、この dedup が
-  // read-modify-write を直列化する enqueue+withLock の中で効くので孤児
-  // snapshot が増えない。
+  // When set, registers key→id separately from id/url and makes it the target of later updates.
+  // Passing an already-registered key returns the existing one as-is instead of creating (dedup) —
+  // even if the CLI's PUT→404→POST fallback runs concurrently, this dedup takes effect inside the
+  // enqueue+withLock that serializes read-modify-write, so no orphan snapshots accumulate.
   idempotencyKey?: string;
 };
 
@@ -38,12 +37,12 @@ export type UpdateResult =
   | { ok: false; error: "not_found" };
 
 export type SnapshotStore = {
-  // 新規作成する。idempotencyKey が既に登録済みなら新規作成せず既存を返す (dedup)。
+  // Create anew. If idempotencyKey is already registered, return the existing one instead of creating (dedup).
   create: (input: CreateInput) => Promise<SnapshotEnvelope>;
-  // idempotencyKey で特定した既存 snapshot を置き換える (id/url/createdAt は保つ)。
-  // 一致が無ければ not_found (AIP-134 の Update の既定。allow_missing は持たない —
-  // 新規作成したいときは create を使う。狙い撃ちを外して黙って作ってしまう
-  // ことがないよう、update は常に「既にある前提」を崩さない)。
+  // Replace the existing snapshot identified by idempotencyKey (keeping id/url/createdAt).
+  // not_found if there's no match (AIP-134's Update default; there's no allow_missing —
+  // use create when you want to create anew. So that a missed target never silently creates,
+  // update never breaks its "must already exist" premise).
   update: (input: UpdateInput) => Promise<UpdateResult>;
   get: (id: string) => Promise<SnapshotEnvelope | undefined>;
   list: () => Promise<SnapshotSummary[]>;
@@ -55,8 +54,8 @@ const LOCK_TIMEOUT_MS = 5_000;
 export function createSnapshotStore(dataDir: string): SnapshotStore {
   const file = join(dataDir, "snapshots.json");
   const lockFile = `${file}.lock`;
-  // 書き込み (create/delete) を 1 プロセス内で直列化する (in-process mutex)。
-  // read-modify-write の interleave による idempotency 違反 / lost update を防ぐ。
+  // Serialize writes (create/delete) within one process (in-process mutex).
+  // Prevents idempotency violations / lost updates from interleaved read-modify-write.
   let writeChain: Promise<unknown> = Promise.resolve();
 
   function isProcessAlive(pid: number): boolean {
@@ -64,32 +63,32 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
       process.kill(pid, 0);
       return true;
     } catch (err) {
-      // EPERM = 存在するが権限なし → alive 扱い (奪わない)
+      // EPERM = exists but no permission → treat as alive (don't reclaim)
       return (err as NodeJS.ErrnoException).code === "EPERM";
     }
   }
 
-  // owner プロセスが死んでいる lock だけを reclaim する。返り値は「取得を
-  // 再試行してよいか」(消した / 既に消えていた = true、生存中 = false)。
+  // Reclaim only a lock whose owner process is dead. The return value is "may the acquisition
+  // be retried" (removed / already gone = true, still alive = false).
   async function reclaimIfDead(): Promise<boolean> {
     let raw: string;
     try {
       raw = await readFile(lockFile, "utf8");
     } catch {
-      return true; // 既に消えた → 取得を再試行
+      return true; // already gone → retry acquisition
     }
     const pid = Number.parseInt(raw.split(":")[0] ?? "", 10);
     if (Number.isFinite(pid) && pid > 0 && isProcessAlive(pid)) {
-      return false; // owner 生存 → 奪わず待つ
+      return false; // owner alive → don't reclaim, wait
     }
-    // crash した owner (or 不正な内容)。読んだ内容と一致するときだけ消す
-    // (その間に生きたプロセスが取り直していたら消さない)。
+    // Crashed owner (or malformed content). Remove only when it matches what we read
+    // (don't remove if a live process re-acquired it in the meantime).
     try {
       if ((await readFile(lockFile, "utf8")) === raw) {
         await rm(lockFile, { force: true });
       }
     } catch {
-      // 既に消えた
+      // already gone
     }
     return true;
   }
@@ -100,20 +99,19 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         await rm(lockFile, { force: true });
       }
     } catch {
-      // 既に無い / 読めない → 何もしない
+      // already gone / unreadable → do nothing
     }
   }
 
-  // クロスプロセス排他。lazy-spawn は同じ data dir を指す別 server プロセスを
-  // 起こしうるので、in-process mutex だけだと別プロセス間で lost update する。
-  // O_EXCL な lock file を mutex に使う。
+  // Cross-process exclusion. lazy-spawn can wake another server process pointing at the same
+  // data dir, so an in-process mutex alone lets a lost update slip through across processes.
+  // Use an O_EXCL lock file as the mutex.
   //
-  // staleness は「経過時間」ではなく「owner プロセスの生存」で判定する。
-  // 経過時間で奪うと、遅い writer (大きな書き込み / swap) のロックを critical
-  // section 中に奪ってしまい lost update が再発する。owner が生きている間は
-  // 絶対に奪わず、crash (pid が存在しない) のときだけ reclaim する。
-  // lock file には `pid:token` を書き、release / reclaim は内容一致時のみ rm
-  // して、他プロセスのロックを消さない。
+  // Staleness is judged by "the owner process being alive", not by "elapsed time".
+  // Reclaiming by elapsed time would seize a slow writer's lock (a large write / swap) mid-critical
+  // section and reintroduce lost updates. Never reclaim while the owner is alive; reclaim only on a
+  // crash (the pid no longer exists). Write `pid:token` to the lock file, and release / reclaim rm
+  // only on a content match, so another process's lock is never removed.
   async function withLock<T>(fn: () => Promise<T>): Promise<T> {
     await mkdir(dirname(file), { recursive: true });
     const content = `${process.pid}:${crypto.randomUUID()}`;
@@ -145,14 +143,13 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     }
   }
 
-  // 都度 disk から読む。in-memory cache を持たないので、別プロセス
-  // (lazy-spawn した server / 別の dev server) が書いた変更も常に反映される。
+  // Read from disk every time. With no in-memory cache, changes written by another process
+  // (a lazy-spawned server / a separate dev server) are always reflected.
   //
-  // map は null-prototype 化する。id は URL パス由来 (attacker-controlled) で、
-  // plain object だと `snapshots["constructor"]` 等が Object.prototype の
-  // 関数を返して `!env` ガードをすり抜け、`"toString" in snapshots` が true に
-  // なる。null-proto にすると lookup / `in` が own key のみを見るので、
-  // get / delete / idempotency の全 lookup がまとめて安全になる。
+  // Make the map null-prototype. ids come from URL paths (attacker-controlled), and with a
+  // plain object `snapshots["constructor"]` etc. would return Object.prototype functions,
+  // slipping past the `!env` guard and making `"toString" in snapshots` true. With null-proto,
+  // lookup / `in` see only own keys, so get / delete / idempotency lookups are all made safe at once.
   async function read(): Promise<StoreFile> {
     try {
       const text = await readFile(file, "utf8");
@@ -174,10 +171,10 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     return writeJsonAtomic(file, data);
   }
 
-  // 直前の書き込み完了を待ってから fn を実行する (in-process mutex)。
+  // Wait for the previous write to finish before running fn (in-process mutex).
   function enqueue<T>(fn: () => Promise<T>): Promise<T> {
     const run = writeChain.then(fn, fn);
-    // chain には成否を伝播させない (1 件の失敗で後続を止めない)
+    // Don't propagate success/failure to the chain (one failure doesn't halt what follows)
     writeChain = run.then(
       () => undefined,
       () => undefined,
@@ -185,9 +182,9 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     return run;
   }
 
-  // id/createdAt/title/metadata から envelope を組み立てる (create/update 共通)。
-  // title/metadata は base (create では undefined、update では既存の値) を
-  // fallback にすることで、update が省略されたフィールドを消さずに保つ。
+  // Build the envelope from id/createdAt/title/metadata (shared by create/update).
+  // Falling back title/metadata to base (undefined on create, the existing value on update)
+  // keeps update from clearing fields that were omitted.
   function buildEnvelope(
     id: string,
     createdAt: string,
@@ -239,8 +236,8 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         const existingId = data.idempotency[input.idempotencyKey];
         const existing = existingId ? data.snapshots[existingId] : undefined;
         if (!existing) return { ok: false, error: "not_found" };
-        // 同じ id/url/createdAt を保ったまま置き換える。title/metadata は
-        // 省略されたら既存の値を保つ (PUT で root だけ更新しても消えない)。
+        // Replace while keeping the same id/url/createdAt. If title/metadata are
+        // omitted, keep the existing values (updating only root via PUT doesn't clear them).
         const envelope = buildEnvelope(
           existing.id,
           existing.createdAt,
@@ -272,7 +269,7 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
       if (label) summary.source = { label };
       return summary;
     });
-    // newest first。同値は 0 を返す全順序比較 (localeCompare) で安定させる。
+    // Newest first. Stabilize ties with a total-order comparison (localeCompare) that returns 0 for equal values.
     items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return items;
   }

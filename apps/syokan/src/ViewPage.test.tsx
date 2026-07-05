@@ -51,7 +51,7 @@ describe("ViewPage", () => {
 
   test("shows the actions-menu trigger when onDelete is provided", () => {
     const html = renderWithDelete(envelope);
-    // 削除はメニュー内に隠れる。SSR では trigger だけが出る
+    // delete is hidden inside the menu; SSR emits only the trigger
     expect(html).toContain("view-menu-trigger");
   });
 

@@ -13,7 +13,7 @@ export type ComponentSpec<
 > = {
   type: TType;
   propsSchema: z.ZodType<TProps>;
-  // 指定すると children の type が allowed list 内に制限される。未指定なら制限なし
+  // when set, children types are restricted to the allowed list; unset means no restriction
   childrenTypes?: readonly string[];
 };
 

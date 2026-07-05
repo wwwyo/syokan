@@ -10,7 +10,7 @@ describe("isFont", () => {
   });
 
   test("rejects unknown or non-string values", () => {
-    expect(isFont("current")).toBe(false); // 旧 enum 値は廃止
+    expect(isFont("current")).toBe(false); // the old enum value is retired
     expect(isFont("geist mono")).toBe(false);
     expect(isFont("")).toBe(false);
     expect(isFont(null)).toBe(false);

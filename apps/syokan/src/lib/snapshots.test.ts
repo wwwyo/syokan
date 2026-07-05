@@ -28,7 +28,7 @@ describe("deleteSnapshot", () => {
     globalThis.fetch = realFetch;
   });
 
-  test("ok / 404 は成功 (冪等)、それ以外は失敗", async () => {
+  test("ok / 404 succeed (idempotent), everything else fails", async () => {
     globalThis.fetch = (async () => new Response(null, { status: 200 })) as unknown as typeof fetch;
     expect(await deleteSnapshot("a")).toBe(true);
     globalThis.fetch = (async () => new Response(null, { status: 404 })) as unknown as typeof fetch;
@@ -37,7 +37,7 @@ describe("deleteSnapshot", () => {
     expect(await deleteSnapshot("a")).toBe(false);
   });
 
-  test("network 断 (fetch reject) を握って false を返す", async () => {
+  test("swallows a network drop (fetch reject) and returns false", async () => {
     globalThis.fetch = (async () => {
       throw new TypeError("Failed to fetch");
     }) as unknown as typeof fetch;

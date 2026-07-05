@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FileDocBody } from ".";
 
-// FileDoc 本体は server からファイルを取得する container。Storybook には server が無いため、
-// 取得状態 (loading / 各エラー / markdown / text / code) を受ける presentational な
-// FileDocBody を直接描画して視覚レビューする。
+// FileDoc itself is a container that fetches a file from the server. Storybook has no server, so we
+// render the presentational FileDocBody — which takes a fetch state (loading / each error / markdown /
+// text / code) — directly for visual review.
 const meta = {
   title: "Catalog/FileDoc",
   component: FileDocBody,
@@ -23,7 +23,7 @@ export const Markdown: Story = {
     state: {
       kind: "ok",
       content:
-        "# 議事録\n\n- 決定事項 A\n- 決定事項 B\n\n```ts\nconst x = 1;\n```",
+        "# Meeting notes\n\n- Decision A\n- Decision B\n\n```ts\nconst x = 1;\n```",
     },
   },
 };

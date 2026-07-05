@@ -2,13 +2,13 @@ import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { writeJsonAtomic } from "@/lib/fsAtomic";
 
-// テンプレは「LLM が組んだ envelope を保存し、後で土台に使う」ための保管庫。
-// syokan は中身 (json) を解釈しない。snapshot (ephemeral) と違い残す前提。
+// A template is a vault for "saving an envelope the LLM assembled and reusing it as a base later".
+// syokan does not interpret the contents (json). Unlike a snapshot (ephemeral), it's meant to be kept.
 export type Template = {
   id: string;
   title: string;
   description?: string;
-  // 保存された任意の JSON (通常は snapshot envelope か root)。解釈しない。
+  // Arbitrary saved JSON (usually a snapshot envelope or root). Not interpreted.
   json: unknown;
   createdAt: string;
 };
@@ -19,7 +19,7 @@ export type TemplateInput = {
   json: unknown;
 };
 
-// json を落とした一覧用サマリ。CLI / sidebar が title・description だけ見たいとき用。
+// A list summary with json dropped. For when the CLI / sidebar only want title and description.
 export type TemplateSummary = Omit<Template, "json">;
 
 export type TemplateStore = {
@@ -29,8 +29,8 @@ export type TemplateStore = {
   remove: (id: string) => Promise<boolean>;
 };
 
-// ファイル名 = id。id を path に結合する前に UUID 形式だけに制限し、
-// `..` や `/` による traversal を構造的に排除する。
+// Filename = id. Restrict id to UUID form before joining it into a path,
+// structurally ruling out traversal via `..` or `/`.
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function createTemplateStore(dir: string): TemplateStore {
@@ -77,8 +77,8 @@ export function createTemplateStore(dir: string): TemplateStore {
       try {
         const text = await readFile(join(dir, name), "utf8");
         const parsed = JSON.parse(text) as Partial<Template>;
-        // 手置きの foreign file 等、shape が崩れたものは sort で落ちる前に除外する
-        // (壊れた JSON と同じ扱い)。id/title/createdAt が string でなければ skip。
+        // Exclude anything with a broken shape (e.g. a hand-placed foreign file) before it trips up
+        // the sort (treated like corrupt JSON). Skip if id/title/createdAt aren't strings.
         if (
           typeof parsed.id !== "string" ||
           typeof parsed.title !== "string" ||
@@ -89,10 +89,10 @@ export function createTemplateStore(dir: string): TemplateStore {
         const { json: _json, ...summary } = parsed as Template;
         summaries.push(summary);
       } catch {
-        // 壊れた / 書き込み途中の tmp は一覧から黙って除外する
+        // Silently exclude corrupt / mid-write tmp files from the list
       }
     }
-    // title 昇順で決定的に。同名は createdAt → id で全順序に固定する。
+    // Deterministic by ascending title. Fix ties to a total order by createdAt → id.
     summaries.sort(
       (a, b) =>
         a.title.localeCompare(b.title) ||

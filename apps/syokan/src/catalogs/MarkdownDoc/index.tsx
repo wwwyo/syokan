@@ -36,7 +36,7 @@ function extractCodeFromPre(
   const codeNode =
     pre?.children?.find((c) => c.tagName === "code") ?? pre?.children?.[0];
   if (!codeNode) return null;
-  // info string (例 "ts" / "hoge.json") は className "language-<info>" に載る
+  // the info string (e.g. "ts" / "foo.json") rides on className "language-<info>"
   let info: string | undefined;
   const classes = codeNode.properties?.className;
   if (Array.isArray(classes)) {
@@ -49,7 +49,7 @@ function extractCodeFromPre(
     .map((c) => (typeof c.value === "string" ? c.value : ""))
     .join("")
     .replace(/\n$/, "");
-  // info がファイル名 (例 hoge.json) なら拡張子から lang を推定しファイル名も返す
+  // if info is a filename (e.g. foo.json), infer lang from the extension and return the filename too
   return { code, ...resolveCodeInfo(info) };
 }
 
@@ -76,7 +76,7 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
           ),
           p: ({ children }) => <p className="my-3 leading-7">{children}</p>,
           ul: ({ className, children }) => {
-            // remark-gfm の task list は bullet を消す (checkbox を出すため)
+            // remark-gfm task lists drop the bullet (to show a checkbox instead)
             const isTaskList = className?.includes("contains-task-list");
             return (
               <ul
@@ -112,13 +112,13 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
           pre: ({ node, children }) => {
             const extracted = extractCodeFromPre(node);
             if (extracted?.lang?.toLowerCase() === "mermaid") {
-              // ```mermaid は図として描画する (ハイライトせず Mermaid に委譲)
+              // ```mermaid renders as a diagram (no highlighting; delegated to Mermaid)
               return <Mermaid chart={extracted.code} />;
             }
             if (extracted) {
-              // コードフェンスは catalog の Code に委譲し、単独 Code / Diff と同じ
-              // @pierre/diffs スタックで一貫させる。dev (StrictMode) では cold 初回に
-              // 潰れる既知の制約があるが詳細と理由は Code 側コメント参照。
+              // delegate code fences to the catalog Code, keeping them on the same
+              // @pierre/diffs stack as standalone Code / Diff. In dev (StrictMode) there is a
+              // known limitation where the cold first render collapses; see the Code comment for details and rationale.
               return (
                 <Code
                   code={extracted.code}
@@ -154,8 +154,8 @@ export function MarkdownDoc({ body }: MarkdownDocProps) {
           ),
           tbody: ({ children }) => <TableBody>{children}</TableBody>,
           tr: ({ children }) => <TableRow>{children}</TableRow>,
-          // 長文セルの markdown table は data table と違い折り返したい
-          // (shadcn 既定の whitespace-nowrap だと横スクロール送りになる)
+          // unlike a data table, long-text cells in a markdown table should wrap
+          // (shadcn's default whitespace-nowrap would push them into horizontal scroll)
           th: ({ children }) => (
             <TableHead className="whitespace-normal align-top">{children}</TableHead>
           ),

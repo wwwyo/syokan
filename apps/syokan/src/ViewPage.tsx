@@ -4,8 +4,8 @@ import { PageLayout } from "./components/PageLayout";
 import { ViewHeader } from "./components/ViewHeader";
 import { Render } from "./Render";
 
-// root が resizable Stack のときだけ幅制約を外して全画面に広げる。
-// 通常の縦積み (非 resizable / 記事一覧) は読みやすい max-w-4xl を維持する。
+// Only when root is a resizable Stack, drop the width constraint and spread full-screen.
+// Ordinary vertical stacks (non-resizable / article lists) keep the readable max-w-4xl.
 function isFullBleed(env: SnapshotEnvelope): boolean {
   const root = env.root;
   return (
@@ -38,7 +38,7 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
   );
 }
 
-// 取得中。route の pendingComponent。
+// While fetching. The route's pendingComponent.
 export function ViewPending() {
   return (
     <PageLayout header={<ViewHeader />}>
@@ -49,7 +49,7 @@ export function ViewPending() {
   );
 }
 
-// 存在しない id。route の notFoundComponent。home へは full reload で十分なので素の <a>。
+// A nonexistent id. The route's notFoundComponent. A full reload is enough for home, so a plain <a>.
 export function ViewNotFound({ id }: { id: string }) {
   return (
     <PageLayout header={<ViewHeader />}>
@@ -69,7 +69,7 @@ export function ViewNotFound({ id }: { id: string }) {
   );
 }
 
-// 取得失敗。route の errorComponent。
+// Fetch failure. The route's errorComponent.
 export function ViewError({ message }: { message: string }) {
   return (
     <PageLayout header={<ViewHeader />}>

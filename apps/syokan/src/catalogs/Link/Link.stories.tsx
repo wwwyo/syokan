@@ -11,6 +11,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const WithLabel: Story = {
-  args: { href: "https://example.com/", text: "Example へ" },
+  args: { href: "https://example.com/", text: "To Example" },
 };
 export const HrefAsLabel: Story = { args: { href: "https://example.com/" } };

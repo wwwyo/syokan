@@ -6,9 +6,9 @@ import { t } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
- * 表示フォントをプリセット表 (src/lib/fonts.ts) から検索して選ぶ。各候補はその
- * フォントスタックで描画してプレビューにする (未読込の Google フォントは選択時に
- * 動的読込されるまでフォールバック表示)。
+ * Search the preset table (src/lib/fonts.ts) to pick the display font. Each candidate is
+ * rendered in its own font stack as a preview (an unloaded Google font shows a fallback until
+ * it is dynamically loaded on selection).
  */
 export function FontSelect() {
   const { font, setFont } = useFont();

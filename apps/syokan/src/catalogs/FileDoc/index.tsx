@@ -12,14 +12,14 @@ import { t } from "@/lib/i18n";
 
 export const fileDocPropsSchema = z
   .object({
-    // CLI が絶対パスに解決して渡す。サーバはこの path をそのまま読み・監視する。
+    // The CLI resolves this to an absolute path before passing it. The server reads and watches this path as-is.
     path: z.string().min(1),
   })
   .strict();
 
 export type FileDocProps = z.infer<typeof fileDocPropsSchema>;
 
-// GET /api/files のエラー本文 (error フィールド) と一致させる。未知/ネットワーク断は generic。
+// Match the error body (error field) of GET /api/files. Unknown / network failure falls to generic.
 type FileErrorReason =
   | "not_found"
   | "not_regular_file"
@@ -37,7 +37,7 @@ export type FileDocState =
 
 const ERROR_MESSAGE: Record<FileErrorReason, string> = t.fileDoc.errors;
 
-/** 取得状態を受け取り表示する presentational 部。Storybook / test はここを直接描画する。 */
+/** The presentational part that takes a fetch state and displays it. Storybook / tests render this directly. */
 export function FileDocBody({
   path,
   state,
@@ -77,8 +77,8 @@ export function FileDocBody({
   return <PlainText body={state.content} />;
 }
 
-// body が読めなくても status だけで理由を引けるようにする (本文 parse 失敗で
-// 413/415 等の具体的理由が generic に落ちるのを防ぐ)。
+// Let the reason be derived from status alone even when the body can't be read (prevents a body
+// parse failure from dropping specific reasons like 413/415 to generic).
 const STATUS_REASON: Record<number, FileErrorReason> = {
   400: "missing_path",
   403: "permission_denied",
@@ -95,9 +95,10 @@ export function reasonFromStatus(status: number, body: unknown): FileErrorReason
 }
 
 /**
- * ファイルパスを受け取り、サーバ経由で内容を読み、拡張子推論で MarkdownDoc / PlainText /
- * Code に委譲する catalog component。SSE (`/api/files/watch`) を購読し、変更通知を受けて
- * 内容を取り直す (forward sync)。再接続 (サーバ再起動 / 通信断後) でも最新内容を復元する。
+ * A catalog component that takes a file path, reads the content via the server, and delegates to
+ * MarkdownDoc / PlainText / Code by extension inference. Subscribes to SSE (`/api/files/watch`) and
+ * re-fetches the content on a change notification (forward sync). Also restores the latest content
+ * on reconnect (after a server restart / connection loss).
  */
 export function FileDoc({ path }: FileDocProps) {
   const [state, setState] = useState<FileDocState>({ kind: "loading" });
@@ -139,9 +140,10 @@ export function FileDoc({ path }: FileDocProps) {
 
     void load();
 
-    // SSE 接続 = 購読。change で取り直す。さらに (再)接続のたびに取り直して、初回 fetch が
-    // 失敗 (server 一時ダウン) していても最初に接続できた時点で復帰させ、再接続時は切断中に
-    // 見落とした変更も回収する (サーバ再起動後の最新内容復元を含む)。重複 load は loadId で畳む。
+    // SSE connection = subscription. Re-fetch on change. Also re-fetch on every (re)connect, so
+    // that even if the initial fetch failed (server briefly down) it recovers once first connected,
+    // and on reconnect it picks up changes missed while disconnected (including restoring the latest
+    // content after a server restart). Duplicate loads are collapsed via loadId.
     const source = new EventSource(`/api/files/watch?${query}`);
     source.addEventListener("change", () => {
       void load();

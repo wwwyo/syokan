@@ -9,9 +9,9 @@ export const plainTextPropsSchema = z
 
 export type PlainTextProps = z.infer<typeof plainTextPropsSchema>;
 
-// plain text / log を整形せず等幅で見せる薄い wrapper。中身は Code
-// (lang 未指定 = text) に委譲する: markdown 解釈はせず空白・改行をそのまま保持し、
-// テーマ追従の枠で表示する。# や * を文字としてそのまま出すのが MarkdownDoc との違い。
+// thin wrapper that shows plain text / logs monospaced without formatting. It delegates to Code
+// (no lang specified = text): no markdown interpretation, whitespace and newlines preserved as-is,
+// shown in a theme-following frame. The difference from MarkdownDoc is that # and * come out as literal characters.
 export function PlainText({ body }: PlainTextProps) {
   return (
     <div data-slot="plain-text">

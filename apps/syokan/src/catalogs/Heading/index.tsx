@@ -6,7 +6,7 @@ export const headingPropsSchema = z
   .object({
     text: z.string().min(1),
     level: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
-    // href があれば見出しをリンク化する (記事タイトル等を 1 ノードで表現する)
+    // If href is present, make the heading a link (expresses an article title etc. in one node)
     href: httpUrl.optional(),
   })
   .strict();

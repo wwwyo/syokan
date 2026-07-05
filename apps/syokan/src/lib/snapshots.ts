@@ -1,8 +1,8 @@
 import type { SnapshotEnvelope, SnapshotSummary } from "@/schema";
 
 /**
- * 削除した snapshot の「次に開くべき」id を一覧 (newest first) から決める。
- * 削除位置の直後 → 無ければ直前 → どちらも無ければ null (= home に戻す)。
+ * Decide the "open next" id after deleting a snapshot from the list (newest first).
+ * The item right after the deleted position → else the one right before → else null (= back to home).
  */
 export function nextSnapshotId(
   items: readonly { id: string }[],
@@ -13,7 +13,7 @@ export function nextSnapshotId(
   return items[i + 1]?.id ?? items[i - 1]?.id ?? null;
 }
 
-/** 1 snapshot を取得する。404 は null、その他の失敗は throw (route loader が error 表示へ回す)。 */
+/** Fetch a single snapshot. 404 → null, other failures → throw (the route loader routes to error display). */
 export async function fetchSnapshotEnvelope(
   id: string,
 ): Promise<SnapshotEnvelope | null> {
@@ -23,7 +23,7 @@ export async function fetchSnapshotEnvelope(
   return (await res.json()) as SnapshotEnvelope;
 }
 
-/** snapshot 一覧を取得する。失敗は throw する (呼び出し側で握って error 状態にする)。 */
+/** Fetch the snapshot list. Failures throw (the caller swallows it into an error state). */
 export async function fetchSnapshotList(): Promise<SnapshotSummary[]> {
   const res = await fetch("/api/snapshots");
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -31,7 +31,7 @@ export async function fetchSnapshotList(): Promise<SnapshotSummary[]> {
   return data.items;
 }
 
-/** snapshot を削除する。既に無い (404) も成功扱い (冪等)。network 断は false を返す。 */
+/** Delete a snapshot. Already gone (404) also counts as success (idempotent). A network drop returns false. */
 export async function deleteSnapshot(id: string): Promise<boolean> {
   try {
     const res = await fetch(`/api/snapshots/${encodeURIComponent(id)}`, {
@@ -39,8 +39,8 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
     });
     return res.ok || res.status === 404;
   } catch {
-    // fetch reject (オフライン等) を握って false にし、呼び出し側の floating promise を
-    // unhandled rejection にしない (UI は「失敗」として扱える)。
+    // Swallow a fetch reject (offline, etc.) into false so the caller's floating promise
+    // does not become an unhandled rejection (the UI can treat it as "failed").
     return false;
   }
 }

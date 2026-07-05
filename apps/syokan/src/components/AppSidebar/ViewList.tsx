@@ -19,13 +19,13 @@ export type RenderLinkArgs = {
 
 export type ViewListProps = {
   items: SnapshotSummary[];
-  /** 現在表示中の snapshot id。一致する行を active 表示する */
+  /** The id of the snapshot currently on display. The matching row is shown as active */
   currentId: string | null;
-  /** 右クリックメニューの削除アクション。未指定ならメニューを出さない */
+  /** The delete action for the right-click menu. If unset, the menu is not shown */
   onDelete?: (id: string) => void;
   /**
-   * 行リンクの描画を差し替える。既定は素の <a> (Storybook / SSR test 用)。
-   * 実アプリでは AppSidebar が client routing する <Link> を注入する。
+   * Replace the rendering of the row link. The default is a bare <a> (for Storybook / SSR tests).
+   * In the real app, AppSidebar injects a client-routing <Link>.
    */
   renderLink?: (args: RenderLinkArgs) => ReactElement;
 };
@@ -63,7 +63,7 @@ export function ViewList({
     <ul data-slot="view-list" className="flex flex-col gap-0.5">
       {items.map((item) => {
         const active = item.id === currentId;
-        // 右クリックの対象は行リンク自身。render で trigger を合成し、左クリックの遷移は活かす。
+        // The right-click target is the row link itself. Compose the trigger at render, keeping the left-click navigation.
         const link = renderLink({
           id: item.id,
           active,

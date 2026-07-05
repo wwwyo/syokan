@@ -4,7 +4,7 @@ import { renderToString } from "react-dom/server";
 import { ViewList } from "./ViewList";
 
 const sample = [
-  { id: "abc", title: "今日のRSS", createdAt: "2026-05-21T03:04:00Z" },
+  { id: "abc", title: "Daily RSS", createdAt: "2026-05-21T03:04:00Z" },
   {
     id: "def",
     title: "PR review",
@@ -20,7 +20,7 @@ describe("ViewList", () => {
     );
     expect(html).toContain('href="/snapshots/abc"');
     expect(html).toContain('href="/snapshots/def"');
-    expect(html).toContain("今日のRSS");
+    expect(html).toContain("Daily RSS");
     expect(html).toContain("PR review");
   });
 

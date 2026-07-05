@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 
 /**
- * app の dark mode は class ベース (`@custom-variant dark (&:is(.dark *))`、`<html>.dark`)。
- * @pierre/diffs は shadow DOM 内で独自テーマを持ち app の CSS 変数が届かないため、
- * documentElement の `.dark` を監視して `themeType` に渡す値を返す。
- * pierre 既定の `themeType:'system'` は OS preference 追従で app/storybook の class トグルと
- * 噛み合わないため使わない。SSR / 初回は `light` で開始し、mount 後に同期する。
+ * The app's dark mode is class-based (`@custom-variant dark (&:is(.dark *))`, `<html>.dark`).
+ * @pierre/diffs has its own theme inside a shadow DOM where the app's CSS variables
+ * don't reach, so watch documentElement's `.dark` and return the value to pass to `themeType`.
+ * pierre's default `themeType:'system'` follows the OS preference and doesn't mesh with the
+ * app/storybook class toggle, so it isn't used. Start at `light` for SSR / first render and sync after mount.
  */
 export function useColorScheme(): "dark" | "light" {
-  // 初回 client render で実際の .dark を読み、light→dark の flash を防ぐ。
-  // server / document 不在では "light" にフォールバック (SSR 安全)。
+  // Read the actual .dark on the first client render to prevent a light→dark flash.
+  // Fall back to "light" where server / document is absent (SSR-safe).
   const [scheme, setScheme] = useState<"dark" | "light">(() =>
     typeof document !== "undefined" &&
     document.documentElement.classList.contains("dark")

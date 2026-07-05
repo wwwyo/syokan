@@ -200,11 +200,11 @@ describe("SnapshotStore", () => {
   });
 
   test("reclaims a lock held by a dead process (crash recovery)", async () => {
-    // 存在しない pid の lock file を残しておく (= crash した owner)
+    // Leave a lock file for a non-existent pid (= a crashed owner)
     const { writeFile } = await import("node:fs/promises");
     const { join } = await import("node:path");
     await writeFile(join(dir, "snapshots.json.lock"), "999999:stale", "utf8");
-    // owner が死んでいるので reclaim して create が成功するはず
+    // The owner is dead, so create should reclaim and succeed
     const env = await store.create({ root: sampleRoot });
     expect(env.id).toMatch(/[0-9a-f-]{36}/);
     expect((await store.get(env.id))?.id).toBe(env.id);

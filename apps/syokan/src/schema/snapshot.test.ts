@@ -107,7 +107,7 @@ describe("snapshot envelope", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      // loose なので strip されず保持される (silently 落とさない)
+      // loose, so it's preserved rather than stripped (not silently dropped)
       const source = result.data.metadata?.source as Record<string, unknown>;
       expect(source?.url).toBe("https://example.com/feed");
       expect(source?.fetchedAt).toBe("2026-05-10T11:00:00Z");

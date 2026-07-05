@@ -13,7 +13,7 @@ import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runtimeDir } from "@/lib/paths";
-// compile 時に JSON ごとバイナリへ埋め込まれる (= そのバイナリのバージョン)
+// At compile time the whole JSON is embedded into the binary (= that binary's version)
 import pkg from "../package.json";
 import { type Command, createRouter } from "./router";
 
@@ -23,24 +23,24 @@ export type StopResult = { stopped: boolean; pid?: number };
 export type CliDeps = {
   fetch: typeof fetch;
   readFile: (path: string) => Promise<string>;
-  // FileDoc に包むときの絶対パス解決 (canonical 化)。dedup 識別子に使う。
+  // Absolute-path resolution (canonicalization) when wrapping in a FileDoc. Used as the dedup identifier.
   resolvePath: (path: string) => string;
-  // ファイルサイズ (byte)。stat 不能 (未存在等) は -1。巨大ファイルを読まずに弾くのに使う。
+  // File size (bytes). -1 when stat fails (missing, etc.). Used to reject huge files without reading them.
   fileSize: (path: string) => number;
-  // 引数なし起動時の post 入力 (`... | syokan`)
+  // Post input on bare invocation (`... | syokan`)
   readStdin: () => Promise<string>;
-  // 引数なし起動で stdin が pipe / redirect か (端末でないか) の判定
+  // On bare invocation, whether stdin is a pipe / redirect (i.e. not a terminal)
   stdinIsPipe: () => boolean;
   stdout: (line: string) => void;
   stderr: (line: string) => void;
   baseUrl: string;
-  // lazy-spawn 用: server を detached で起動する
+  // For lazy-spawn: start the server detached
   spawnServer: () => SpawnResult;
-  // `syokan stop` 用: lazy-spawn した server を停止する
+  // For `syokan stop`: stop the lazy-spawned server
   stopServer: () => StopResult | Promise<StopResult>;
-  // readiness poll の待機 (test では即時 resolve を注入する)
+  // Wait for the readiness poll (tests inject an immediate resolve)
   sleep: (ms: number) => Promise<void>;
-  // 閲覧 URL を OS のデフォルトブラウザに渡す
+  // Hand the view URL to the OS's default browser
   openUrl: (url: string) => void;
 };
 
@@ -48,14 +48,14 @@ export type CliResult = { exitCode: number };
 
 type PostResult = { ok: boolean; status: number; data: unknown };
 
-// cold start は shiki / react-markdown の import + bind を含むため余裕を持たせる
-// (15s)。短すぎると ready 直前に server_unavailable を返して server を orphan 化する。
+// Cold start includes the import + bind of shiki / react-markdown, so leave headroom
+// (15s). Too short returns server_unavailable just before ready and orphans the server.
 const READY_RETRIES = 150;
 const READY_INTERVAL_MS = 100;
 
-// absent=居ない / compatible=この build と同系 / incompatible=旧 build が居る。
-// 旧 build は health に version を返さない。新 CLI がそれを黙って再利用すると
-// catalog/templates が 404 になり、stop も別 pidfile を見て止められないため区別する。
+// absent=none / compatible=same lineage as this build / incompatible=an old build is running.
+// An old build doesn't return a version in health. If a new CLI silently reuses it,
+// catalog/templates 404 and stop can't kill it (it looks at a different pidfile), so distinguish them.
 type ServerProbe = "absent" | "compatible" | "incompatible";
 
 async function probeServer(deps: CliDeps): Promise<ServerProbe> {
@@ -76,8 +76,8 @@ async function probeServer(deps: CliDeps): Promise<ServerProbe> {
   return typeof version === "string" ? "compatible" : "incompatible";
 }
 
-// lazy-spawn: server が既に居れば使い、居なければ起動して ready になるまで待つ。
-// 旧 build が同じ port に居る場合は黙って再利用せず、停止を促すエラーを返す。
+// lazy-spawn: use the server if it's already running; otherwise start it and wait until ready.
+// If an old build occupies the same port, don't silently reuse it — return an error prompting a stop.
 export async function ensureServerRunning(
   deps: CliDeps,
 ): Promise<{ ok: true; spawned: boolean } | { ok: false; error: string }> {
@@ -104,7 +104,7 @@ export async function ensureServerRunning(
   };
 }
 
-// API を叩いて本文を JSON として読む共通処理。本文が JSON でなければ data=null。
+// Shared helper: hit the API and read the body as JSON. data=null if the body isn't JSON.
 async function apiCall(
   deps: CliDeps,
   path: string,
@@ -140,8 +140,8 @@ function postSnapshot(
   });
 }
 
-// server の PUT は「既にある前提」(無ければ 404) なので、呼び出し側が
-// 初回か否かを判定しなくて済むよう、404 のときだけここで POST にフォールバックする。
+// The server's PUT assumes "already exists" (404 if not), so fall back to POST here only on 404,
+// sparing the caller from having to decide whether it's the first post.
 async function postItems(deps: CliDeps, payload: unknown): Promise<PostResult> {
   const body = JSON.stringify(payload);
   if (!hasIdempotencyKey(payload)) {
@@ -174,7 +174,7 @@ function reportFailure(deps: CliDeps, result: PostResult): CliResult {
   return { exitCode: 1 };
 }
 
-// post 系コマンド共通: server を ensure (lazy-spawn) してから payload を投げる
+// Shared across post commands: ensure the server (lazy-spawn), then send the payload
 async function postWithServer(
   deps: CliDeps,
   payload: unknown,
@@ -195,9 +195,9 @@ async function postWithServer(
     : reportFailure(deps, result);
 }
 
-// 入力は JSON envelope のみ。markdown / plain text を表示したい場合も MarkdownDoc /
-// PlainText catalog を使って envelope の中で表現する。source の label など metadata も
-// envelope に書く (CLI 側では一切付与しない)。
+// Input is JSON envelope only. To display markdown / plain text too, express it inside the envelope
+// via the MarkdownDoc / PlainText catalog. Metadata such as source.label also goes in the
+// envelope (the CLI never adds any).
 async function postText(text: string, deps: CliDeps): Promise<CliResult> {
   let payload: unknown;
   try {
@@ -211,9 +211,9 @@ async function postText(text: string, deps: CliDeps): Promise<CliResult> {
   return postWithServer(deps, payload);
 }
 
-// envelope か否かの軽量判定。catalog の full schema を import すると React component 群が
-// CLI バンドルに混入するため使わない。`root` が Item 形 (`{ type: string, ... }`) かだけを見る。
-// 壊れた envelope はここを通し、server の strict 検証に validation_failed を返させる。
+// Lightweight check for whether it's an envelope. Importing the catalog's full schema would pull the
+// React components into the CLI bundle, so don't; just check whether `root` is Item-shaped (`{ type: string, ... }`).
+// A broken envelope passes here and lets the server's strict validation return validation_failed.
 function looksLikeEnvelope(value: unknown): boolean {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -226,9 +226,9 @@ function looksLikeEnvelope(value: unknown): boolean {
   );
 }
 
-// ファイルを FileDoc 1 ノードの envelope に包む。title / source.label は basename、
-// 同じファイルを指す再 post が同じ id/url を指すよう、dedup 識別子 (idempotencyKey)
-// は絶対パスとする (FR-15〜17)。
+// Wrap a file into an envelope of a single FileDoc node. title / source.label are the basename;
+// so a re-post of the same file points at the same id/url, the dedup identifier (idempotencyKey)
+// is the absolute path (FR-15..17).
 function wrapFileDoc(absPath: string): unknown {
   const name = basename(absPath);
   return {
@@ -239,16 +239,16 @@ function wrapFileDoc(absPath: string): unknown {
   };
 }
 
-// FileDoc の表示上限と揃える。これを超えるファイルは envelope ではありえず、表示もできない
-// ので、CLI が内容を読まずに FileDoc へ包む (巨大 log を丸ごと読んで OOM するのを防ぐ。
-// server 側が too_large を表示する)。
+// Match FileDoc's display limit. A file over this can't be an envelope and can't be displayed
+// anyway, so the CLI wraps it as a FileDoc without reading its contents (avoids OOM from reading a
+// huge log whole; the server displays too_large).
 const SNIFF_SIZE_LIMIT = 2 * 1024 * 1024;
 
-// `syokan <path>`: 内容が envelope schema を満たすなら従来どおり post、満たさなければ
-// 絶対パスに解決して FileDoc に包んで post する (FR-13/14)。markdown/log/txt は JSON.parse
-// に失敗するので自動的に wrap 経路へ入る。
+// `syokan <path>`: if the contents satisfy the envelope schema, post as before; otherwise
+// resolve to the absolute path, wrap in a FileDoc, and post (FR-13/14). markdown/log/txt fail
+// JSON.parse and so automatically take the wrap path.
 export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
-  // 表示上限超のファイルは sniff せず即 wrap する (内容を読み込まない)。
+  // A file over the display limit is wrapped immediately without sniffing (its contents aren't read).
   if (deps.fileSize(file) > SNIFF_SIZE_LIMIT) {
     return postWithServer(deps, wrapFileDoc(deps.resolvePath(file)));
   }
@@ -272,8 +272,8 @@ export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
   return postWithServer(deps, wrapFileDoc(deps.resolvePath(file)));
 }
 
-// open に渡された引数を閲覧 URL に正規化する。post の出力 (フル URL / `/snapshots/:id`)
-// と bare id のどれを渡してもそのまま開けるようにする。
+// Normalize the arg passed to open into a view URL. Whether it's post's output (full URL /
+// `/snapshots/:id`) or a bare id, it should just open.
 export function resolveViewUrl(idOrUrl: string, baseUrl: string): string {
   if (/^https?:\/\//.test(idOrUrl)) return idOrUrl;
   const path = idOrUrl.startsWith("/")
@@ -282,8 +282,8 @@ export function resolveViewUrl(idOrUrl: string, baseUrl: string): string {
   return `${baseUrl}${path}`;
 }
 
-// ブラウザで開く。閲覧には server が必要なので post と同じく lazy-spawn する。
-// id 省略時は home (snapshot 一覧) を開く。
+// Open in the browser. Viewing needs the server, so lazy-spawn like post.
+// When id is omitted, open home (the snapshot list).
 export async function runOpen(
   idOrUrl: string | undefined,
   deps: CliDeps,
@@ -314,8 +314,8 @@ export async function runStop(deps: CliDeps): Promise<CliResult> {
   return { exitCode: 0 };
 }
 
-// catalog / templates は server を要する API なので post と同じく lazy-spawn する。
-// 起動できなければ server_unavailable を返し、ここで処理を打ち切る。
+// catalog / templates are APIs that need the server, so lazy-spawn like post.
+// If it can't start, return server_unavailable and abort here.
 async function ensureOrFail(deps: CliDeps): Promise<CliResult | null> {
   const ensured = await ensureServerRunning(deps);
   if (!ensured.ok) {
@@ -330,13 +330,13 @@ async function ensureOrFail(deps: CliDeps): Promise<CliResult | null> {
   return null;
 }
 
-// 引数欠落を統一フォーマットの error JSON で返す。
+// Return a missing argument as unified-format error JSON.
 function argError(deps: CliDeps, error: string, message: string): CliResult {
   deps.stderr(JSON.stringify({ error, message }));
   return { exitCode: 1 };
 }
 
-// GET 系 API を server ensure 後に叩き、本文 (JSON) を stdout に出す共通処理。
+// Shared helper: after ensuring the server, hit a GET API and print the body (JSON) to stdout.
 async function getJson(deps: CliDeps, path: string): Promise<CliResult> {
   const fail = await ensureOrFail(deps);
   if (fail) return fail;
@@ -346,7 +346,7 @@ async function getJson(deps: CliDeps, path: string): Promise<CliResult> {
   return { exitCode: 0 };
 }
 
-// catalog は src/catalogs が SSOT。LLM はこの出力を見て props を組む。
+// catalog's SSOT is src/catalogs. The LLM reads this output to assemble props.
 export async function runCatalog(deps: CliDeps): Promise<CliResult> {
   return getJson(deps, "/api/catalog");
 }
@@ -358,8 +358,8 @@ async function runTemplateAdd(
   let title: string | undefined;
   let description: string | undefined;
   let source: string | undefined;
-  // agent の誤入力 (option 値の欠落・未知 flag・source の重複) を正常入力として
-  // 飲み込まず、明示エラーにする。値が次の flag を巻き込むのを防ぐ。
+  // Don't swallow agent misinput (a missing option value, an unknown flag, a duplicate source)
+  // as valid input — make it an explicit error. Prevents a value from swallowing the next flag.
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === undefined) continue;
@@ -380,7 +380,7 @@ async function runTemplateAdd(
     }
   }
   if (!title) return argError(deps, "missing_title", "--title is required");
-  // 雛形 JSON は file か stdin。`-` / 省略は stdin (post と同じく流し込めるように)。
+  // The template JSON comes from a file or stdin. `-` / omitted means stdin (so it can be piped in like post).
   let text: string;
   if (source === undefined || source === "-") {
     text = await deps.readStdin();
@@ -433,7 +433,7 @@ async function runTemplateDelete(
   return { exitCode: 0 };
 }
 
-// templates: 一覧 (省略 / list)、add、get <id>、rm <id>。すべて API 経由。
+// templates: list (omitted / list), add, get <id>, rm <id>. All via the API.
 export async function runTemplates(
   args: readonly string[],
   deps: CliDeps,
@@ -455,14 +455,14 @@ export async function runTemplates(
   return { exitCode: 1 };
 }
 
-// GitHub OAuth App (device flow 用 public client)。OAuth App 作成後に実 client_id へ差し替える。
+// GitHub OAuth App (public client for the device flow). Swap in the real client_id after creating the OAuth App.
 const GITHUB_OAUTH_CLIENT_ID = "PLACEHOLDER_CLIENT_ID";
 const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const DEVICE_FLOW_DEFAULT_INTERVAL_S = 5;
 
-// GitHub の device flow endpoint を form-encoded で叩き JSON を返す。網羅的な型付けは
-// せず、呼び出し側が必要な field だけ見る。ネットワーク断 / 非 JSON は null。
+// Hit a GitHub device flow endpoint form-encoded and return JSON. No exhaustive typing;
+// the caller looks only at the fields it needs. null on network failure / non-JSON.
 async function githubPost(
   deps: CliDeps,
   url: string,
@@ -483,8 +483,8 @@ async function githubPost(
   }
 }
 
-// GitHub device flow → 得た access token を local server へ渡して Worker token に交換する。
-// scope は空 (public プロフィールの取得だけで足りる)。
+// GitHub device flow → hand the obtained access token to the local server to exchange for a Worker token.
+// Empty scope (fetching the public profile alone is enough).
 export async function runLogin(deps: CliDeps): Promise<CliResult> {
   const device = await githubPost(deps, GITHUB_DEVICE_CODE_URL, {
     client_id: GITHUB_OAUTH_CLIENT_ID,
@@ -527,8 +527,8 @@ export async function runLogin(deps: CliDeps): Promise<CliResult> {
       interval += 5;
       continue;
     }
-    // expired_token / access_denied / 未知エラー / ネットワーク断は打ち切る
-    // (継続しても成功しない or 無限ループになる)。
+    // Abort on expired_token / access_denied / unknown error / network failure
+    // (continuing won't succeed, or would loop forever).
     return argError(
       deps,
       "login_failed",
@@ -558,7 +558,7 @@ export async function runLogout(deps: CliDeps): Promise<CliResult> {
   return { exitCode: 0 };
 }
 
-// `--expires 30d` / `12h` を秒に変換する。不正は undefined (呼び出し側が arg error にする)。
+// Convert `--expires 30d` / `12h` to seconds. undefined if invalid (the caller turns it into an arg error).
 function parseExpires(value: string): number | undefined {
   const match = /^(\d+)([dh])$/.exec(value);
   if (!match) return undefined;
@@ -567,8 +567,8 @@ function parseExpires(value: string): number | undefined {
   return match[2] === "d" ? n * 86_400 : n * 3_600;
 }
 
-// share 系エラーの共通整形。エラー出力は他コマンドと同じく JSON 1 行の契約を保ちつつ、
-// message に案内を載せる。該当しない status は raw body をそのまま出す。
+// Shared formatting for share errors. Keeps the one-line-JSON contract like other commands while
+// putting guidance in message. For statuses that don't match, print the raw body as-is.
 function reportShareFailure(
   deps: CliDeps,
   result: PostResult,
@@ -692,10 +692,10 @@ export async function runUnpublish(
   return { exitCode: 0 };
 }
 
-// --help の単一ソース。text と --json はどちらもここから導出するので drift しない。
-// agent はこれを読めばコマンド・env・exit code・出力形式を把握でき、静的 doc に依存しない。
-// router 登録と help の出所を 1 箇所に集約する宣言 (help は下の helpManifest が
-// これを map して生成する)。help 用の usage/details も併せて持たせる。
+// The single source for --help. Both text and --json derive from here, so they don't drift.
+// An agent reading this learns the commands, env, exit codes, and output formats, with no dependence on static docs.
+// A declaration that consolidates router registration and the help source in one place (help is generated by
+// helpManifest below mapping over this). Carries the usage/details for help too.
 const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
   {
     name: "help",
@@ -783,8 +783,8 @@ const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
   },
 ];
 
-// help の静的メタ。コマンドでない既定の使い方 (file/stdin/bare) は commands と区別して
-// forms に分けて持つ。
+// Static meta for help. The default non-command usages (file/stdin/bare) are held separately in
+// forms, distinct from commands.
 export const helpManifest = {
   name: "syokan",
   version: pkg.version,
@@ -869,7 +869,7 @@ function renderHelpText(): string {
   return lines.join("\n");
 }
 
-// help は純粋にローカル出力。server を起こさず即返す。--json で manifest をそのまま出す。
+// help is purely local output. Return immediately without starting the server. --json prints the manifest as-is.
 export function runHelp(argv: readonly string[], deps: CliDeps): CliResult {
   const asJson = argv.includes("--json");
   deps.stdout(asJson ? JSON.stringify(helpManifest) : renderHelpText());
@@ -878,15 +878,15 @@ export function runHelp(argv: readonly string[], deps: CliDeps): CliResult {
 
 const cli = createRouter<CliDeps, CliResult | Promise<CliResult>>({
   commands: COMMANDS,
-  // 引数なし: stdin に中身が流れていれば post、無ければ home を開く
-  // (isTTY は pipe でも /dev/null でも falsy なので、空入力は home に倒す)。
+  // No args: post if content is streaming on stdin, otherwise open home
+  // (isTTY is falsy for both a pipe and /dev/null, so empty input falls to home).
   noArgs: async (deps) => {
     const piped = deps.stdinIsPipe() ? await deps.readStdin() : "";
     return piped.trim() ? postText(piped, deps) : runOpen(undefined, deps);
   },
-  // 予約語でも flag でもない第一引数はファイルパスとして post する。
+  // A first arg that's neither a reserved word nor a flag is posted as a file path.
   fallback: (first, _rest, deps) => runPost(first, deps),
-  // 未知の `-` 始まりはファイル扱い (ENOENT) を避け、他エラーと同じ JSON 契約で返す。
+  // An unknown `-`-prefixed token avoids being treated as a file (ENOENT) and returns the same JSON contract as other errors.
   onUnknownOption: (token, deps) => {
     deps.stderr(
       JSON.stringify({
@@ -920,8 +920,8 @@ function pidFilePath(port: number): string {
   return join(runtimeDir(), `server-${port}.json`);
 }
 
-// 単体バイナリでは process.execPath が自前バイナリ、dev は bun runtime を指す。
-// spawn 方法 (自分を再 exec か、bun でソースを起動か) の判定に使う。
+// In the single binary process.execPath points at our own binary; in dev it points at the bun runtime.
+// Used to decide how to spawn (re-exec ourselves, or start the source via bun).
 function isCompiledBinary(): boolean {
   return basename(process.execPath).replace(/\.exe$/i, "") !== "bun";
 }
@@ -931,14 +931,14 @@ function realSpawnServer(baseUrl: string): SpawnResult {
   const dir = runtimeDir();
   mkdirSync(dir, { recursive: true });
   const logFd = openSync(join(dir, `server-${port}.log`), "a");
-  // 単体バイナリは自分自身 (process.execPath) を server モードで再 exec、dev は bun で
-  // ソースを起動する。entry が SYOKAN_SERVE を見て分岐する。
+  // The single binary re-execs itself (process.execPath) in server mode; dev starts the source
+  // via bun. entry branches on SYOKAN_SERVE.
   const cmd = isCompiledBinary()
     ? [process.execPath]
     : ["bun", fileURLToPath(new URL("../server/index.ts", import.meta.url))];
   const proc = Bun.spawn(cmd, {
-    // 親 CLI 終了後も生かすため別 process group に切り離す (unref だけだと親の
-    // session 終了で SIGHUP を受けて落ちうる)。NODE_ENV 未設定なら prod 既定。
+    // Detach into a separate process group to survive the parent CLI's exit (unref alone can still
+    // take a SIGHUP and die when the parent's session ends). Default to prod if NODE_ENV is unset.
     detached: true,
     env: {
       ...process.env,
@@ -950,7 +950,7 @@ function realSpawnServer(baseUrl: string): SpawnResult {
     stderr: logFd,
     stdin: "ignore",
   });
-  // 親の event loop から参照を外し、CLI が即 exit できるようにする
+  // Drop the reference from the parent's event loop so the CLI can exit immediately
   proc.unref();
   writeFileSync(
     pidFilePath(port),
@@ -967,7 +967,7 @@ async function realStopServer(baseUrl: string): Promise<StopResult> {
   try {
     pid = (JSON.parse(readFileSync(file, "utf8")) as { pid?: number }).pid;
   } catch {
-    // 破損 / 中断書き込みで壊れた pidfile。掃除して nothing-to-stop 扱いにする
+    // A pidfile corrupted by a broken / interrupted write. Clean it up and treat as nothing-to-stop
     rmSync(file, { force: true });
     return { stopped: false };
   }
@@ -975,9 +975,9 @@ async function realStopServer(baseUrl: string): Promise<StopResult> {
     rmSync(file, { force: true });
     return { stopped: false };
   }
-  // PID 再利用で無関係なプロセスを kill しないよう、記録した baseUrl で
-  // syokan server が実際に応答しているときだけ kill する。落ちていれば
-  // pidfile を掃除するだけ (= nothing-to-stop) にして誤 kill を避ける。
+  // To avoid killing an unrelated process due to PID reuse, kill only when a syokan server
+  // actually responds at the recorded baseUrl. If it's down, just clean up the
+  // pidfile (= nothing-to-stop) to avoid a mistaken kill.
   let healthy = false;
   try {
     const res = await fetch(`${baseUrl}/api/health`);
@@ -992,21 +992,21 @@ async function realStopServer(baseUrl: string): Promise<StopResult> {
   try {
     process.kill(pid);
   } catch {
-    // 既に死んでいても pidfile は片付ける
+    // Clean up the pidfile even if it's already dead
   }
   rmSync(file, { force: true });
   return { stopped: true, pid };
 }
 
-// 実行時 deps を組んで CLI を回す。entry.ts (単体バイナリの dual-mode) と
-// 直接実行 (`bun cli/syokan.ts`) の両方から呼ぶ。
+// Assemble the runtime deps and run the CLI. Called from both entry.ts (the single binary's
+// dual-mode) and direct execution (`bun cli/syokan.ts`).
 export async function runCli(): Promise<void> {
   const baseUrl = process.env.SYOKAN_BASE_URL ?? "http://localhost:5173";
   const deps: CliDeps = {
     fetch: globalThis.fetch,
     readFile: (path) => readFile(path, "utf8"),
-    // canonical 化 (symlink/`..`/相対 を解決)。未存在 (realpath が ENOENT) は resolve に
-    // 落として post は通し、view 側で not_found を表示させる。
+    // Canonicalize (resolve symlink/`..`/relative). If missing (realpath ENOENT), fall back to
+    // resolve so the post still goes through and the view shows not_found.
     resolvePath: (path) => {
       try {
         return realpathSync(path);
@@ -1034,7 +1034,7 @@ export async function runCli(): Promise<void> {
     stopServer: () => realStopServer(baseUrl),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     openUrl: (url) => {
-      // OS ごとの opener でデフォルトブラウザに渡す。CLI が exit しても切られないよう unref。
+      // Hand to the default browser via the per-OS opener. unref so it isn't cut off when the CLI exits.
       const cmd =
         process.platform === "darwin"
           ? ["open", url]
@@ -1048,7 +1048,7 @@ export async function runCli(): Promise<void> {
       }).unref();
     },
   };
-  // 単体バイナリも argv は [exe, <embedded entry>, ...args] と dev と同形なので slice(2)。
+  // For the single binary too, argv is [exe, <embedded entry>, ...args] — same shape as dev — so slice(2).
   const { exitCode } = await main(process.argv.slice(2), deps);
   process.exit(exitCode);
 }

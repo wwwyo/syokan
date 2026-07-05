@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
-// frontend を埋め込んだ単体実行ファイルを compile する。
-//   引数なし  : host 向け 1 つ (dist/syokan) — ローカル利用・動作確認用
-//   --release : 配布用に各 OS/arch を cross-compile (dist/syokan-<os>-<arch>)
-//               名前は mise の github backend が GitHub Release から OS/arch を判別できる形にする
-// CLI の `bun build --compile` は plugin を渡せないため、Bun.build({compile}) で
-// tailwind plugin を明示配線する。
+// Compile the single executable with the frontend embedded.
+//   no args   : one host build (dist/syokan) — for local use / smoke testing
+//   --release : cross-compile each OS/arch for distribution (dist/syokan-<os>-<arch>)
+//               the names are shaped so mise's github backend can detect the OS/arch from the GitHub Release
+// The CLI `bun build --compile` cannot take plugins, so wire the tailwind plugin
+// explicitly via Bun.build({compile}).
 import { fileURLToPath } from "node:url";
 import type { Build } from "bun";
 import tailwind from "bun-plugin-tailwind";
@@ -27,8 +27,8 @@ async function compile(outfile: string, target?: Build.CompileTarget) {
     compile: target ? { target, outfile } : { outfile },
     plugins: [tailwind],
     minify: true,
-    // compile 時の ambient NODE_ENV が server の development 判定に焼き込まれるのを防ぎ、
-    // バイナリを常に production (HMR 無効・埋め込み frontend を配信) に固定する。
+    // Prevent the compile-time ambient NODE_ENV from being baked into the server's development check,
+    // pinning the binary to production always (HMR disabled, embedded frontend served).
     define: { "process.env.NODE_ENV": JSON.stringify("production") },
   });
   if (!result.success) {
@@ -39,15 +39,15 @@ async function compile(outfile: string, target?: Build.CompileTarget) {
   console.log(`syokan: compiled → ${outfile}`);
 }
 
-// Bun 1.3.12 の compile 出力は署名が欠落/破損することがあり、Apple Silicon では
-// 未署名バイナリが SIGKILL される。darwin 向け出力は ad-hoc 署名し直す
-// (--remove-signature を先に通すのは、部分的に壊れた署名があると --sign が
-// "invalid or unsupported format" で失敗するため)。
+// Bun 1.3.12's compile output can have a missing/corrupt signature, and on Apple Silicon
+// an unsigned binary gets SIGKILL'd. Re-sign darwin outputs ad-hoc
+// (run --remove-signature first because a partially broken signature makes --sign fail
+// with "invalid or unsupported format").
 async function adhocSign(outfile: string, target?: Build.CompileTarget) {
   const forDarwin = target ? target.includes("darwin") : process.platform === "darwin";
   if (!forDarwin) return;
-  // codesign は macOS でしか動かない。CI (ubuntu) で cross-compile した darwin 版は未署名で出る。
-  // 黙って skip すると気づけないので警告する (配布物の Gatekeeper 対応は notarization が別途必要)
+  // codesign only runs on macOS. A darwin build cross-compiled on CI (ubuntu) comes out unsigned.
+  // Skipping silently would go unnoticed, so warn (Gatekeeper handling for distributables needs separate notarization)
   if (process.platform !== "darwin") {
     console.warn(`syokan: ${outfile} left unsigned (cross-compiled on ${process.platform}; codesign needs macOS)`);
     return;

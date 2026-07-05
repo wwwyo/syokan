@@ -5,7 +5,7 @@ import {
 } from "@/components/PageLayout/sidebarContext";
 import { t } from "@/lib/i18n";
 
-// AppSidebar を開閉するハンバーガー。provider 外 (単体描画) では何も出さない。
+// The hamburger that toggles the AppSidebar. Renders nothing outside the provider (standalone render).
 export function SidebarToggle() {
   const sidebar = useSidebar();
   if (!sidebar) return null;

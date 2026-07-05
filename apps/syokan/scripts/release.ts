@@ -41,9 +41,9 @@ if (prompt(`\nv${pkg.version} → v${nextVersion} で bump して push? [y/N]:`)
   process.exit(0);
 }
 
-// package.json は git root ではなく apps/syokan にあるため、bun pm / npm version の
-// 組み込み git commit/tag は無言で no-op になる。bump は --no-git-tag-version で行い、
-// commit と tag は root から明示的に打つ。組み込みの dirty-tree ガードも失うので自前で確認する。
+// package.json lives in apps/syokan, not the git root, so bun pm / npm version's built-in
+// git commit/tag silently no-op. Do the bump with --no-git-tag-version and
+// make the commit and tag explicitly from the root. That also loses the built-in dirty-tree guard, so check it ourselves.
 const dirty = (await $`git status --porcelain`.text()).trim();
 if (dirty) {
   console.error("aborted: working tree が dirty です");

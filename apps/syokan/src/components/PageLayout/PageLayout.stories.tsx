@@ -10,40 +10,40 @@ const meta = {
   title: "Components/PageLayout",
   component: PageLayout,
   tags: ["autodocs"],
-  // PageLayout は本文カラム (max-w + 余白) を組む。canvas いっぱいに見せて確認する
+  // PageLayout composes the content column (max-w + padding). Show it filling the canvas to verify
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof PageLayout>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// root は常に PageLayout でラップ。中身は single root (Stack) で束ね、
-// 記事カードは Card + Heading + Text の合成で表現する (ArticleCard は廃止)。
+// The root is always wrapped in PageLayout. The contents are bundled under a single root (Stack),
+// and article cards are expressed by composing Card + Heading + Text (ArticleCard was removed).
 export const Dashboard: Story = {
   render: () => (
     <PageLayout>
       <Stack>
-        <Heading text="今日のRSS" level={2} />
+        <Heading text="Today's RSS" level={2} />
         <Stack>
           <Card>
             <Heading
-              text="Bun 1.3 がリリースされました"
+              text="Bun 1.3 has been released"
               level={3}
               href="https://bun.sh/blog/bun-v1.3"
             />
-            <Text body="HTML import の安定化と dev server の改善。" muted clamp />
+            <Text body="Stabilized HTML import and dev server improvements." muted clamp />
           </Card>
           <Card>
             <Heading
-              text="Tailwind CSS v4 の新しいエンジン"
+              text="Tailwind CSS v4's new engine"
               level={3}
               href="https://tailwindcss.com/blog/tailwindcss-v4"
             />
           </Card>
         </Stack>
-        <Heading text="議事録" level={2} />
+        <Heading text="Meeting notes" level={2} />
         <MarkdownDoc
-          body={"## 決定事項\n\n- catalog を合成可能なプリミティブに再構成\n"}
+          body={"## Decisions\n\n- Restructure the catalog into composable primitives\n"}
         />
       </Stack>
     </PageLayout>

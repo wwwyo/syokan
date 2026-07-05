@@ -44,12 +44,12 @@ const entryName = jsEntry.path.split("/").pop();
 let html = await Bun.file(`${outdir}/index.html`).text();
 const scriptSrc = html.match(/<script type="module"[^>]*\bsrc="([^"]+)"/)?.[1];
 if (scriptSrc === undefined) {
-  // HTML の script 形が変わり workaround の regex が外れた。白画面 deploy を防ぐため落とす
+  // The HTML's script shape changed and the workaround regex no longer matches. Bail to avoid deploying a blank page
   console.error("share viewer: could not locate the module <script src> to repoint");
   process.exit(1);
 }
 if (scriptSrc === `/${entryName}`) {
-  // 既に entry を指している = Bun bug が解消した。この workaround は撤去してよい
+  // Already points at the entry = the Bun bug is fixed. This workaround can be removed
   console.warn("share viewer: HTML already references the entry chunk; the splitting workaround may be obsolete");
 }
 html = html.replace(/(<script type="module"[^>]*\bsrc=")[^"]+(")/, `$1/${entryName}$2`);

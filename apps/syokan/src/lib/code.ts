@@ -1,6 +1,6 @@
-// @pierre/diffs (Shiki) に渡して安全にハイライトできる言語 / alias。
-// 未知の lang を File に渡すと例外も出さず空描画になる (silent) ため、
-// このリストに無いものは "text" にフォールバックして生テキストを必ず出す。
+// Languages / aliases that @pierre/diffs (Shiki) can safely highlight.
+// An unknown lang passed to File renders empty without throwing (silent), so
+// anything not in this list falls back to "text" to always show the raw text.
 const SUPPORTED_LANGS = new Set([
   "ts", "tsx", "typescript", "js", "jsx", "javascript", "mjs", "cjs",
   "json", "jsonc", "json5",
@@ -18,8 +18,8 @@ const SUPPORTED_LANGS = new Set([
 ]);
 
 /**
- * lang を @pierre/diffs (Shiki) が確実に扱える値に正規化する。
- * 未知の lang は "text" に落とす (素テキストとして表示し、空描画やエラーを防ぐ)。
+ * Normalize lang to a value @pierre/diffs (Shiki) can reliably handle.
+ * Unknown langs fall to "text" (shown as raw text, avoiding empty renders or errors).
  */
 export function toCodeLang(lang?: string): string {
   if (!lang) return "text";
@@ -27,11 +27,12 @@ export function toCodeLang(lang?: string): string {
 }
 
 /**
- * コードフェンスの info string を言語 ID とファイル名に解釈する。
- * `.` を含めばファイル名とみなし、拡張子をそのまま言語候補にする
- * (例: "hoge.json" → { lang: "json", filename: "hoge.json" })。py/yml/ts/rs/md/sh
- * 等の主要拡張子は Shiki が言語 alias として解決するので、専用の拡張子→言語マップは
- * 持たない。`.` が無ければ言語 ID 扱い (例: "ts" → { lang: "ts" })。
+ * Interpret a code fence's info string as a language ID and a filename.
+ * If it contains `.`, treat it as a filename and use the extension as-is as the
+ * language candidate (e.g. "hoge.json" → { lang: "json", filename: "hoge.json" }).
+ * Shiki resolves major extensions like py/yml/ts/rs/md/sh as language aliases, so
+ * there is no dedicated extension→language map. Without a `.` it is treated as a
+ * language ID (e.g. "ts" → { lang: "ts" }).
  */
 export function resolveCodeInfo(info?: string): {
   lang?: string;

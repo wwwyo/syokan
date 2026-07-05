@@ -2,27 +2,28 @@ import type { ReactNode } from "react";
 
 export type PageLayoutProps = {
   /**
-   * 本文の外側に置く viewer chrome (例: ViewHeader)。
-   * schema-driven の render tree には含めず、viewer 側から差し込む。
+   * Viewer chrome placed outside the body (e.g. ViewHeader).
+   * Not part of the schema-driven render tree; injected from the viewer side.
    */
   header?: ReactNode;
   /**
-   * 幅制約 (max-w-4xl) を外し viewport いっぱいに広げる。
-   * root が resizable Stack のように画面全体を使うレイアウトのとき viewer 側から true にする。
+   * Drop the width constraint (max-w-4xl) and expand to the full viewport.
+   * Set to true from the viewer side when the root uses the whole screen, like a resizable Stack.
    */
   fullBleed?: boolean;
   children?: ReactNode;
 };
 
 /**
- * snapshot / home の本文を包む per-route レイアウト。常駐 shell (AppShell) の本文カラム内に
- * 描画され、header と本文 main を組む。背景・sidebar・開閉状態は shell 側の責務。
- * 見出しは器に持たせない (root の markdown 等が自前で見出しを持つため二重見出しを避ける)。
+ * The per-route layout wrapping the body of snapshot / home. Rendered inside the content column
+ * of the resident shell (AppShell), it composes the header and the body main. Background,
+ * sidebar, and open/closed state are the shell's responsibility. The container carries no
+ * heading (the root markdown etc. brings its own, so a duplicate heading is avoided).
  *
- * 通常ページは document(window) スクロールに委ねる。header は sticky で上端へ貼り付け、
- * スクロール後も sidebar トグルへ届くようにする。
- * fullBleed (resizable Stack 等) は viewport 高に固定し、内側の panel に高さを渡して
- * document スクロールを殺す。
+ * Normal pages defer to document(window) scrolling. The header sticks to the top edge so the
+ * sidebar toggle stays reachable after scrolling.
+ * fullBleed (resizable Stack etc.) is pinned to the viewport height and passes the height down
+ * to the inner panel, killing document scrolling.
  */
 export function PageLayout({
   header,

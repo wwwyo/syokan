@@ -10,9 +10,9 @@ declare global {
   }
 }
 
-// RO callback を rAF に逃がして同一フレーム内の再入を切る。これで無害だが
-// Bun dev の error overlay を毎回出していた "ResizeObserver loop ..." 警告
-// 自体が発生しなくなる (1 フレーム遅延は体感なし)。HMR で二重 wrap しないよう印を付ける。
+// Defer the RO callback to rAF to break re-entry within the same frame. This stops the harmless
+// but always-fired "ResizeObserver loop ..." warning that popped Bun dev's error overlay every
+// time (the one-frame delay is imperceptible). Mark it so HMR doesn't double-wrap.
 if (typeof window !== "undefined" && window.ResizeObserver && !window.__roRafPatched) {
   window.__roRafPatched = true;
   const NativeResizeObserver = window.ResizeObserver;
@@ -25,7 +25,7 @@ if (typeof window !== "undefined" && window.ResizeObserver && !window.__roRafPat
   };
 }
 
-// html の静的 lang をブラウザ言語で解決した表示言語に揃える
+// align the html's static lang with the display language resolved from the browser language
 document.documentElement.lang = lang;
 
 const container = document.getElementById("root");

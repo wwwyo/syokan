@@ -4,16 +4,16 @@ import { cn } from "@/lib/utils";
 export const textPropsSchema = z
   .object({
     body: z.string().min(1),
-    // 補足テキスト向けの淡色表示
+    // dimmed display for supplementary text
     muted: z.boolean().optional(),
-    // 3 行で省略 (旧 ArticleCard summary の line-clamp 相当)
+    // clamp to 3 lines (equivalent to the old ArticleCard summary line-clamp)
     clamp: z.boolean().optional(),
   })
   .strict();
 
 export type TextProps = z.infer<typeof textPropsSchema>;
 
-/** 短文・補足テキスト。重い MarkdownDoc を使うまでもない素のテキスト用。 */
+/** Short or supplementary text. For plain text that doesn't warrant the heavier MarkdownDoc. */
 export function Text({ body, muted, clamp }: TextProps) {
   return (
     <p

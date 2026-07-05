@@ -15,8 +15,8 @@ const OPTIONS: ReadonlyArray<{
 ];
 
 /**
- * テーマ (system/light/dark) を切り替える segmented control。
- * 3 択は現在値が一目で分かる方が良いので dropdown ではなく横並びにする。
+ * A segmented control that switches the theme (system/light/dark).
+ * With 3 choices it is better to see the current value at a glance, so lay them side by side rather than in a dropdown.
  */
 export function ThemeSelect() {
   const { theme, setTheme } = useTheme();

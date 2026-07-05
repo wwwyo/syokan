@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_FONT, getFontPreset, googleFontHref, isFontValue } from "./fonts";
 import { fetchSetting, putSetting } from "./setting";
 
-// 保存するのはプリセットの value (識別子)。実フォントは fonts.ts のプリセット表が解決する。
+// What's stored is the preset's value (identifier). The actual font is resolved by the preset table in fonts.ts.
 export type Font = string;
 
-// index.html の inline script (FOUC 防止) と同じ key。両者は同じ規則で動く必要がある。
+// Same key as index.html's inline script (FOUC prevention). The two must follow the same rules.
 export const FONT_STORAGE_KEY = "syokan:font";
-// FOUC 用に解決済みスタック / href も保存する。inline script はプリセット表 (TS) を
-// import できないので、描画前にこのキャッシュを読んで CSS 変数設定 + link 注入する。
+// Also store the resolved stack / href for FOUC purposes. The inline script cannot
+// import the preset table (TS), so it reads this cache before render to set the CSS
+// variables and inject the link.
 const FONT_SANS_KEY = "syokan:font-sans";
 const FONT_MONO_KEY = "syokan:font-mono";
 const FONT_HREF_KEY = "syokan:font-href";
@@ -27,9 +28,10 @@ export function getStoredFont(): Font {
   }
 }
 
-// Google Fonts の <link> を href 単位で一度だけ注入する (切替を繰り返しても増えない)。
-// href を属性セレクタに埋めると family 名次第で壊れる (`"` 等) ので、走査して
-// getAttribute 比較で dedup する。inline script (index.html) が注入した分も拾える。
+// Inject the Google Fonts <link> once per href (it does not accumulate across repeated switches).
+// Embedding the href in an attribute selector breaks depending on the family name (`"` etc.),
+// so dedup by scanning and comparing via getAttribute. This also picks up what the inline
+// script (index.html) injected.
 function ensureFontLink(href: string): void {
   if (typeof document === "undefined") return;
   for (const l of document.querySelectorAll("link[data-syokan-font]")) {
@@ -53,11 +55,11 @@ function persistFont(font: Font): void {
     if (href) window.localStorage.setItem(FONT_HREF_KEY, href);
     else window.localStorage.removeItem(FONT_HREF_KEY);
   } catch {
-    // storage 不可環境では永続化を諦める (フォント自体は当 session で効く)
+    // where storage is unavailable, give up persisting (the font still applies for this session)
   }
 }
 
-/** プリセットを解決し、Google フォントを動的読込しつつ --app-font-{sans,mono} を設定する。 */
+/** Resolve the preset, dynamically load the Google font, and set --app-font-{sans,mono}. */
 export function applyFont(font: Font): void {
   if (typeof document === "undefined") return;
   const preset = getFontPreset(font);
@@ -69,8 +71,9 @@ export function applyFont(font: Font): void {
 }
 
 /**
- * フォント選択を localStorage に即時永続化しつつサーバー (正本) にも同期し、
- * --app-font-* に反映する。mount 時にサーバー値を取り直す。
+ * Persist the font selection to localStorage immediately while also syncing it to
+ * the server (source of truth), and apply it to --app-font-*. Re-fetches the server
+ * value on mount.
  */
 export function useFont(): { font: Font; setFont: (font: Font) => void } {
   const [font, setFontState] = useState<Font>(getStoredFont);
@@ -87,15 +90,16 @@ export function useFont(): { font: Font; setFont: (font: Font) => void } {
     };
   }, []);
 
-  // font が決まるたびに適用し、FOUC 用キャッシュも書き直す。mount 時にも走るので、
-  // プリセット定義 / Google URL を変えた新版でも次回 reload の inline script に反映される。
+  // Apply whenever the font settles and rewrite the FOUC cache too. This also runs on
+  // mount, so a new version that changed the preset definition / Google URL is reflected
+  // in the next reload's inline script.
   useEffect(() => {
     applyFont(font);
     persistFont(font);
   }, [font]);
 
   const setFont = useCallback((next: Font) => {
-    // 未知値でも state(highlight) と localStorage が食い違わないよう先に正規化する。
+    // Normalize first so that even an unknown value keeps state (highlight) and localStorage in sync.
     const value = isFont(next) ? next : DEFAULT_FONT;
     setFontState(value);
     void putSetting({ font: value });

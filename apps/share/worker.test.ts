@@ -139,7 +139,7 @@ async function publish(
 }
 
 describe("POST /api/v1/auth/token", () => {
-	test("GitHub 検証成功で hex token を発行し hash だけ KV に置く", async () => {
+	test("on successful GitHub verification, issues a hex token and stores only the hash in KV", async () => {
 		const { env, kv } = createEnv();
 		const { token, login: ghLogin } = await login(env);
 		expect(ghLogin).toBe("octocat");
@@ -158,7 +158,7 @@ describe("POST /api/v1/auth/token", () => {
 		}
 	});
 
-	test("GitHub 検証失敗は 401", async () => {
+	test("failed GitHub verification is 401", async () => {
 		const { env } = createEnv();
 		const res = await app.request(
 			"/api/v1/auth/token",
@@ -171,14 +171,14 @@ describe("POST /api/v1/auth/token", () => {
 		);
 	});
 
-	test("発行した token に TTL が付く", async () => {
+	test("the issued token gets a TTL", async () => {
 		const { env, kv } = createEnv();
 		await login(env);
 		const key = [...kv.store.keys()].find((k) => k.startsWith("token:"));
 		expect(kv.ttl.get(key as string)).toBe(SHARE_TOKEN_TTL_SECONDS);
 	});
 
-	test("DELETE /api/v1/auth/token で自 token を revoke する", async () => {
+	test("DELETE /api/v1/auth/token revokes your own token", async () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
 		const key = [...kv.store.keys()].find((k) => k.startsWith("token:"));
@@ -193,15 +193,15 @@ describe("POST /api/v1/auth/token", () => {
 	});
 });
 
-describe("Bearer 認証", () => {
-	test("token なしは 401", async () => {
+describe("Bearer auth", () => {
+	test("no token is 401", async () => {
 		const { env } = createEnv();
 		const res = await publish(env, "");
 		expect(res.status).toBe(401);
 		expect(((await res.json()) as { error: string }).error).toBe("unauthorized");
 	});
 
-	test("無効な token は 401", async () => {
+	test("an invalid token is 401", async () => {
 		const { env } = createEnv();
 		const res = await publish(env, "f".repeat(64));
 		expect(res.status).toBe(401);
@@ -209,7 +209,7 @@ describe("Bearer 認証", () => {
 });
 
 describe("POST /api/v1/shares", () => {
-	test("201 で url と expiresAt を返し KV に share と user index を置く", async () => {
+	test("returns 201 with url and expiresAt and stores the share and user index in KV", async () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
 		const before = Date.now();
@@ -239,7 +239,7 @@ describe("POST /api/v1/shares", () => {
 		expect(kv.store.has(`user:1:${body.id}`)).toBe(true);
 	});
 
-	test("expiresIn は SHARE_MAX_TTL_SECONDS に clamp される", async () => {
+	test("expiresIn is clamped to SHARE_MAX_TTL_SECONDS", async () => {
 		const { env } = createEnv();
 		const { token } = await login(env);
 		const before = Date.now();
@@ -256,7 +256,7 @@ describe("POST /api/v1/shares", () => {
 		);
 	});
 
-	test("expiresIn が 60 未満は 400", async () => {
+	test("expiresIn under 60 is 400", async () => {
 		const { env } = createEnv();
 		const { token } = await login(env);
 		const res = await publish(env, token, { expiresIn: 30 });
@@ -266,7 +266,7 @@ describe("POST /api/v1/shares", () => {
 		);
 	});
 
-	test("tree 内に FileDoc があれば 400", async () => {
+	test("a FileDoc anywhere in the tree is 400", async () => {
 		const { env } = createEnv();
 		const { token } = await login(env);
 		const res = await publish(env, token, {
@@ -284,7 +284,7 @@ describe("POST /api/v1/shares", () => {
 		);
 	});
 
-	test("envelope が SHARE_MAX_BYTES 超なら 413", async () => {
+	test("an envelope over SHARE_MAX_BYTES is 413", async () => {
 		const { env } = createEnv();
 		const { token } = await login(env);
 		const res = await publish(env, token, {
@@ -298,7 +298,7 @@ describe("POST /api/v1/shares", () => {
 		);
 	});
 
-	test("owner の share 数が quota に達していれば 429", async () => {
+	test("429 when the owner's share count has reached the quota", async () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
 		for (let i = 0; i < SHARE_QUOTA_PER_USER; i++) {
@@ -313,7 +313,7 @@ describe("POST /api/v1/shares", () => {
 });
 
 describe("GET /api/v1/shares/:id (public)", () => {
-	test("200 で envelope と publishedBy を返し sourceSnapshotId は含めない", async () => {
+	test("returns 200 with envelope and publishedBy but not sourceSnapshotId", async () => {
 		const { env } = createEnv();
 		const { token } = await login(env);
 		const created = (await (await publish(env, token)).json()) as {
@@ -331,7 +331,7 @@ describe("GET /api/v1/shares/:id (public)", () => {
 		expect(body).not.toContainKey("sourceSnapshotId");
 	});
 
-	test("miss は 404", async () => {
+	test("a miss is 404", async () => {
 		const { env } = createEnv();
 		const res = await app.request("/api/v1/shares/nope", {}, env);
 		expect(res.status).toBe(404);
@@ -340,7 +340,7 @@ describe("GET /api/v1/shares/:id (public)", () => {
 });
 
 describe("GET /api/v1/shares", () => {
-	test("own の一覧を返し ?snapshot= で filter できる", async () => {
+	test("returns your own list and can filter with ?snapshot=", async () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
 		const a = (await (
@@ -382,7 +382,7 @@ describe("GET /api/v1/shares", () => {
 });
 
 describe("DELETE /api/v1/shares/:id", () => {
-	test("own は削除できて KV の両エントリが消える", async () => {
+	test("your own can be deleted and both KV entries disappear", async () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
 		const { id } = (await (await publish(env, token)).json()) as {
@@ -403,7 +403,7 @@ describe("DELETE /api/v1/shares/:id", () => {
 		expect(getRes.status).toBe(404);
 	});
 
-	test("他人の share は 404 で消えない", async () => {
+	test("someone else's share is 404 and isn't deleted", async () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
 		const { id } = (await (await publish(env, token)).json()) as {
@@ -425,7 +425,7 @@ describe("DELETE /api/v1/shares/:id", () => {
 });
 
 describe("asset fallback", () => {
-	test("/shares/* は /index.html に rewrite され noindex と CSP が付く", async () => {
+	test("/shares/* is rewritten to /index.html with noindex and CSP", async () => {
 		const { env, assetUrls } = createEnv();
 		const res = await app.request("/shares/some-id", {}, env);
 		expect(res.status).toBe(200);
@@ -438,7 +438,7 @@ describe("asset fallback", () => {
 		expect(csp).toMatch(/script-src 'self' 'sha256-[A-Za-z0-9+/]+=*'/);
 	});
 
-	test("/ は rewrite されない", async () => {
+	test("/ is not rewritten", async () => {
 		const { env, assetUrls } = createEnv();
 		await app.request("/", {}, env);
 		expect(assetUrls).toEqual(["http://localhost/"]);

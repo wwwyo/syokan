@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Code } from ".";
 
-// Code は @pierre/diffs の File をラップした catalog component。
-// ハイライトはマウント後に shadow DOM 内で適用される。未知 lang は "text" にフォールバックする。
-// theme は documentElement の .dark を監視して切替わるので toolbar の light/dark で追従確認できる。
+// Code is a catalog component wrapping @pierre/diffs' File.
+// Highlighting is applied inside the shadow DOM after mount. An unknown lang falls back to "text".
+// The theme switches by watching documentElement's .dark, so the toolbar's light/dark toggle confirms it follows along.
 const meta = {
   title: "Catalog/Code",
   component: Code,
@@ -46,12 +46,12 @@ export const WithFilename: Story = {
   },
 };
 
-// lang 未指定は素のテキスト表示 (markdown 解釈なし)
+// An unspecified lang renders as plain text (no markdown interpretation)
 export const PlainTextLike: Story = {
   args: { code: "plain text without highlighting\n  indented line" },
 };
 
-// Shiki が知らない lang は落ちず "text" フォールバックで生テキストを出す
+// A lang Shiki doesn't know doesn't crash; it falls back to "text" and shows raw text
 export const UnsupportedLang: Story = {
   args: {
     lang: "made-up-lang",

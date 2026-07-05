@@ -10,7 +10,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// PlainText は markdown 解釈せず空白・改行をそのまま等幅で見せる (Code lang=text)
+// PlainText does not interpret markdown; it shows whitespace and newlines as-is, monospaced (Code lang=text)
 export const Log: Story = {
   args: {
     body: `[12:00:01] INFO  server started on :5173
@@ -20,10 +20,10 @@ export const Log: Story = {
   },
 };
 
-// # や * を markdown として解釈せず文字のまま出すのが MarkdownDoc との違い
+// the difference from MarkdownDoc: # and * come out as literal characters, not interpreted as markdown
 export const MarkdownCharsStayLiteral: Story = {
   args: {
-    body: "# これは見出しにならない\n- これも箇条書きにならない\n**bold にもならない**",
+    body: "# this does not become a heading\n- nor does this become a bullet\n**not bold either**",
   },
 };
 

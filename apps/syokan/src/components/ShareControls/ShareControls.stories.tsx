@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ShareControls } from ".";
 
-// Storybook には local server が無いため、公開中一覧や publish 結果は
-// initialShares / initialDialog で注入して視覚レビューする。
+// Storybook has no local server, so the active-shares list and publish result are injected via
+// initialShares / initialDialog for visual review.
 const meta = {
   title: "Components/ShareControls",
   component: ShareControls,

@@ -26,14 +26,14 @@ type Harness = {
 function makeDeps(opts: {
   files?: Record<string, string>;
   respond: (captured: Captured) => Response;
-  // /api/health の応答を制御する。未指定なら常に healthy (= server 起動済み扱い)
+  // Controls the /api/health response. Always healthy if unset (= treated as server already up)
   health?: () => boolean;
-  // true で health から version を落とし、旧 build の server を模す (= incompatible)
+  // true drops version from health, mimicking an old-build server (= incompatible)
   legacyServer?: boolean;
   stopped?: boolean;
-  // stdin の中身。指定すると pipe 扱い (stdinIsPipe=true) になる
+  // stdin contents. Setting it marks it as a pipe (stdinIsPipe=true)
   stdin?: string;
-  // path ごとの stat サイズ (byte)。未指定は 0。
+  // stat size (bytes) per path. 0 if unset.
   fileSizes?: Record<string, number>;
 }): Harness {
   const out: string[] = [];
@@ -69,7 +69,7 @@ function makeDeps(opts: {
       }
       return content;
     },
-    // 実 realpath は使わず、決定的に `/abs/<path>` へ解決する (assertion 用)。
+    // Don't use real realpath; resolve deterministically to `/abs/<path>` (for assertions).
     resolvePath: (path) => `/abs/${path}`,
     fileSize: (path) => opts.fileSizes?.[path] ?? 0,
     readStdin: async () => opts.stdin ?? "",
@@ -78,7 +78,7 @@ function makeDeps(opts: {
       const url = String(input);
       if (url.endsWith("/api/health")) {
         if (!healthFn()) return new Response(null, { status: 503 });
-        // 旧 build は version を返さない。新 build は version 付きで compatible 扱い。
+        // An old build returns no version. A new build carries a version and is treated as compatible.
         return opts.legacyServer
           ? Response.json({ ok: true })
           : Response.json({ ok: true, version: "test" });
@@ -86,7 +86,7 @@ function makeDeps(opts: {
       const captured: Captured = {
         url,
         method: init?.method ?? "GET",
-        // JSON でない body (device flow の form-encoded) は raw 文字列のまま持つ
+        // A non-JSON body (the device flow's form-encoded) is kept as a raw string
         body: init?.body ? parseBodyLoose(init.body as string) : undefined,
       };
       calls.push(captured);
@@ -204,7 +204,7 @@ describe("cli main: post (default action)", () => {
 
   test("non-JSON file is wrapped as a live FileDoc (title/label/key = basename/abs path)", async () => {
     const { deps, out, calls } = makeDeps({
-      files: { "notes.md": "# 議事録\n\n- 決定事項" },
+      files: { "notes.md": "# Meeting notes\n\n- Decisions" },
       respond: () => okResponse("md-1"),
     });
     const result = await main(["notes.md"], deps);
@@ -221,7 +221,7 @@ describe("cli main: post (default action)", () => {
     expect(body.title).toBe("notes.md");
     expect(body.metadata.source.label).toBe("notes.md");
     expect(body.idempotencyKey).toBe("filedoc:/abs/notes.md");
-    // idempotencyKey を持つ payload は PUT (update) を先に試す。
+    // A payload with an idempotencyKey tries PUT (update) first.
     expect(calls[0]?.method).toBe("PUT");
   });
 
@@ -282,7 +282,7 @@ describe("cli main: post (default action)", () => {
       fileSizes: { "huge.log": 5 * 1024 * 1024 },
       respond: () => okResponse(),
     });
-    // readFile が呼ばれたら記録 (巨大ファイルでは読まれないことを確認)。
+    // Record if readFile is called (confirming a huge file isn't read).
     const orig = deps.readFile;
     deps.readFile = async (p) => {
       read = true;
@@ -359,7 +359,7 @@ describe("cli main: bare invocation", () => {
     expect(result.exitCode).toBe(0);
     expect(h.opened).toEqual(["http://localhost:5173"]);
     expect(h.out[0]).toBe("http://localhost:5173");
-    // home を開くだけで /api/snapshots への POST は走らない
+    // Just opens home; no POST to /api/snapshots runs
     expect(h.calls.length).toBe(0);
   });
 
@@ -463,7 +463,7 @@ describe("ensureServerRunning (lazy-spawn)", () => {
     let checks = 0;
     const h = makeDeps({
       respond: () => okResponse(),
-      // 最初の health (spawn 前) と直後 2 回は落ちていて、その後 ready になる
+      // The first health (before spawn) and the next 2 are down, then it becomes ready
       health: () => {
         checks += 1;
         return checks > 3;
@@ -501,7 +501,7 @@ describe("cli main: lazy-spawn integration", () => {
       respond: () => okResponse("spawned-1"),
       health: () => {
         checks += 1;
-        return checks > 1; // 初回 (起動前) だけ落ちている
+        return checks > 1; // down only on the first (before startup)
       },
     });
     const result = await main(["items.json"], h.deps);
@@ -509,7 +509,7 @@ describe("cli main: lazy-spawn integration", () => {
     expect(h.spawnCount()).toBe(1);
     expect(h.out).toEqual(["http://localhost:5173/snapshots/spawned-1"]);
     expect(h.err.some((l) => l.includes("started server"))).toBe(true);
-    // health は calls に積まれず、POST だけが記録される
+    // health isn't pushed into calls; only the POST is recorded
     expect(h.calls.length).toBe(1);
     expect(h.calls[0]?.url).toBe("http://localhost:5173/api/snapshots");
   });
@@ -806,7 +806,7 @@ describe("cli main: share commands (login / logout / publish / shares / unpublis
       "Open https://github.com/login/device and enter code: ABCD-1234",
     );
     expect(out[1]).toBe("Logged in as octocat");
-    // device flow で得た GitHub token は local server へ渡す (CLI は保存しない)
+    // The GitHub token obtained via the device flow is handed to the local server (the CLI doesn't store it)
     const exchange = calls.find((c) => c.url.endsWith("/api/auth/login"));
     expect(exchange?.method).toBe("POST");
     expect(exchange?.body).toEqual({ githubAccessToken: "gh-tok" });

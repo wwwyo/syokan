@@ -7,16 +7,16 @@ describe("detectLang", () => {
     expect(detectLang(["ja-JP"])).toBe("ja");
   });
 
-  test("優先順位の先頭にある対応言語を選ぶ (含まれるかどうかでは判定しない)", () => {
+  test("picks the first supported language by priority (not by mere presence)", () => {
     expect(detectLang(["en-US", "ja-JP", "en"])).toBe("en");
     expect(detectLang(["fr", "ja-JP"])).toBe("ja");
   });
 
-  test("大文字小文字を無視する", () => {
+  test("is case-insensitive", () => {
     expect(detectLang(["JA-JP"])).toBe("ja");
   });
 
-  test("ja 以外 / 空 → en", () => {
+  test("non-ja / empty → en", () => {
     expect(detectLang(["en-US", "fr"])).toBe("en");
     expect(detectLang([])).toBe("en");
   });

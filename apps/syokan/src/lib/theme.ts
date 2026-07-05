@@ -4,7 +4,7 @@ import { fetchSetting, putSetting } from "./setting";
 
 export type Theme = Setting["theme"];
 
-// index.html の inline script (FOUC 防止) と同じ key。両者は同じ規則で動く必要がある。
+// Same key as index.html's inline script (FOUC prevention). The two must follow the same rules.
 export const THEME_STORAGE_KEY = "syokan:theme";
 
 const THEMES: readonly Theme[] = THEME_VALUES;
@@ -15,7 +15,7 @@ export function isTheme(value: unknown): value is Theme {
   );
 }
 
-/** stored theme を実際の表示色に解決する。system は OS preference に従う。純関数。 */
+/** Resolve the stored theme to the actual display color. system follows the OS preference. Pure function. */
 export function resolveScheme(
   theme: Theme,
   systemPrefersDark: boolean,
@@ -44,11 +44,11 @@ function persistTheme(theme: Theme): void {
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   } catch {
-    // storage 不可環境では永続化を諦める (テーマ自体は当 session で効く)
+    // where storage is unavailable, give up persisting (the theme still applies for this session)
   }
 }
 
-/** <html> の .dark を解決済み scheme に合わせる。inline script と同じ規則。 */
+/** Match <html>'s .dark to the resolved scheme. Same rules as the inline script. */
 export function applyTheme(theme: Theme): void {
   if (typeof document === "undefined") return;
   const dark = resolveScheme(theme, systemPrefersDark()) === "dark";
@@ -56,9 +56,10 @@ export function applyTheme(theme: Theme): void {
 }
 
 /**
- * テーマ選択 (system/light/dark) を localStorage に即時永続化しつつサーバー (正本) にも
- * 同期し、<html>.dark に反映する。mount 時にサーバー値を取り直すので、別ブラウザでの
- * 変更が反映される。system のときだけ OS preference の変化を購読して追従する。
+ * Persist the theme selection (system/light/dark) to localStorage immediately while
+ * also syncing it to the server (source of truth), and apply it to <html>.dark. It
+ * re-fetches the server value on mount, so a change made in another browser is
+ * reflected. Only when system, it subscribes to OS preference changes and follows them.
  */
 export function useTheme(): { theme: Theme; setTheme: (theme: Theme) => void } {
   const [theme, setThemeState] = useState<Theme>(getStoredTheme);

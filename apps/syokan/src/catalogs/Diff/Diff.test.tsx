@@ -151,9 +151,9 @@ describe("commentsForFile", () => {
 });
 
 describe("Diff", () => {
-  // 実際の diff 描画は client 側 (useEffect + shadow DOM) で行われるため SSR では
-  // host 要素のみ出る。ここでは「落ちずに pierre の container を出す」ことだけ確認し、
-  // 視覚的な検証は Storybook に委ねる。
+  // The actual diff render happens on the client side (useEffect + shadow DOM), so SSR emits
+  // only the host element. Here we just confirm it "emits pierre's container without crashing",
+  // leaving visual verification to Storybook.
   test("renders the pierre diffs container host without throwing", () => {
     const html = renderToString(createElement(Diff, { patch: PATCH }));
     expect(html).toContain('data-slot="diff"');
@@ -171,7 +171,7 @@ describe("Diff", () => {
     const html = renderToString(
       createElement(Diff, {
         patch: MULTI_FILE_PATCH,
-        // 複数ファイルで file 未指定 → どのファイルにも割り当たらない
+        // Multiple files with no file specified → assigned to no file
         comments: [{ side: "new", line: 1, body: "orphan" }],
       }),
     );

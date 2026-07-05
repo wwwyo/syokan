@@ -35,17 +35,17 @@ function waitFor(
   });
 }
 
-// rename(inode 差し替え) 後の再 arm は macOS の fs.watch 挙動前提 (AGENTS.md 落とし穴#7)。
-// Linux(inotify) はファイル自身の watch が inode 差し替えで発火しないため成立しない。
-// 検証対象の macOS でのみ実行する (in-place 変更の watcher テストは全 OS で回す)。
+// Re-arming after a rename (inode swap) assumes macOS fs.watch behavior (AGENTS.md pitfall #7).
+// On Linux (inotify) watching the file itself doesn't fire on an inode swap, so it doesn't hold.
+// Run only on the target macOS (the in-place-change watcher tests run on all OSes).
 const rearmOnRename = process.platform === "darwin";
 
 describe("readTextFile", () => {
   test("reads a UTF-8 file", async () => {
     const p = join(dir, "a.md");
-    await writeFile(p, "# 見出し\n本文");
+    await writeFile(p, "# Heading\nBody");
     const r = await readTextFile(p);
-    expect(r).toEqual({ ok: true, content: "# 見出し\n本文" });
+    expect(r).toEqual({ ok: true, content: "# Heading\nBody" });
   });
 
   test("missing file → not_found", async () => {
@@ -112,7 +112,7 @@ describe("createFileWatcher", () => {
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
     });
-    // エディタ風: 別ファイルに書いて rename で差し替える (inode 差し替え)。
+    // Editor-style: write a separate file and swap it in via rename (inode swap).
     const tmp = join(dir, "doc.md.tmp");
     await writeFile(tmp, "v2");
     await rename(tmp, p);
@@ -129,16 +129,16 @@ describe("createFileWatcher", () => {
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
     });
-    // watch が確立するのを待つ。
+    // Wait for the watch to be established.
     await new Promise((r) => setTimeout(r, 60));
-    // unlink → 少し置いて作り直す保存を模す。delete の rename で re-arm され、
-    // 置換先が現れたら張り直す。
+    // Mimic a save that unlinks → recreates after a short pause. The delete's rename re-arms,
+    // and the replacement appearing re-attaches the watch.
     await rm(p);
     await new Promise((r) => setTimeout(r, 8));
     await writeFile(p, "v2");
-    // re-arm が新 inode に張り直すのを待つ。
+    // Wait for the re-arm to re-attach on the new inode.
     await new Promise((r) => setTimeout(r, 80));
-    // 張り直し後の in-place 書き込みを拾えることが re-arm 成功の証拠。
+    // Picking up an in-place write after re-attach is proof the re-arm succeeded.
     const before = hits;
     await writeFile(p, "v3");
     await waitFor(() => hits > before);
@@ -154,10 +154,10 @@ describe("createFileWatcher", () => {
     const unsubB = watcher.subscribe(p, () => {});
     expect(watcher.activeCount()).toBe(1);
     unsubA();
-    // 1 件残っている間は解放しない。
+    // Don't release while one remains.
     expect(watcher.activeCount()).toBe(1);
     unsubB();
-    // refcount 0 → release timeout 後に解放。
+    // refcount 0 → released after the release timeout.
     await waitFor(() => watcher.activeCount() === 0);
     watcher.closeAll();
   });
@@ -168,7 +168,7 @@ describe("createFileWatcher", () => {
     const watcher = createFileWatcher({ releaseDelayMs: 100, notifyDebounceMs: 5 });
     const unsub = watcher.subscribe(p, () => {});
     unsub();
-    // release timeout 前に再購読すると watcher を作り直さない。
+    // Re-subscribing before the release timeout doesn't rebuild the watcher.
     const unsub2 = watcher.subscribe(p, () => {});
     await new Promise((r) => setTimeout(r, 150));
     expect(watcher.activeCount()).toBe(1);

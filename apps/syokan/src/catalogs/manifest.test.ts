@@ -23,7 +23,7 @@ describe("catalogManifest", () => {
     expect(props.type).toBe("object");
     expect(props.properties?.text).toBeDefined();
     expect(props.required).toContain("text");
-    // strict() は additionalProperties:false になる (未定義 props を弾く契約)。
+    // strict() becomes additionalProperties:false (the contract that rejects undefined props).
     expect(props.additionalProperties).toBe(false);
   });
 

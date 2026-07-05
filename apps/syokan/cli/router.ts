@@ -1,31 +1,31 @@
-// 宣言的な極小 CLI ルータ。getopt は使わず、第一引数 (argv[0]) を「コマンド名 or
-// その別名」で引いて分岐するだけ。短縮形 (`-v` 等) やフラグ形 (`--version`) は alias
-// として宣言する。Ctx (依存) / Res (戻り値) は呼び出し側で決める汎用。
-// 非自明な点: 既知コマンドに一致しない `-` 始まりは fallback(=ファイル) でなく
-// onUnknownOption へ回す (未知フラグを誤ってファイル名として読まないため)。
+// A declarative, minimal CLI router. No getopt; it just looks up the first arg (argv[0])
+// as a "command name or its alias" and branches. Shorthands (e.g. `-v`) and flag forms
+// (`--version`) are declared as aliases. Ctx (deps) / Res (return value) are generic, decided by the caller.
+// Non-obvious point: a `-`-prefixed token that matches no known command is routed to
+// onUnknownOption, not fallback (=file), so an unknown flag isn't mistakenly read as a filename.
 
 export type Command<Ctx, Res> = {
-  /** 正準名 (コマンド本体・help 表示用) */
+  /** Canonical name (the command itself; also used in help) */
   name: string;
-  /** 別名。短縮形やフラグ形 (例: `["--version", "-v"]`) */
+  /** Aliases. Shorthands and flag forms (e.g. `["--version", "-v"]`) */
   aliases?: readonly string[];
-  /** help 用の一行説明 (任意) */
+  /** One-line description for help (optional) */
   summary?: string;
-  /** help 用の usage 文字列 (任意。未指定なら name + aliases から導出する) */
+  /** Usage string for help (optional; derived from name + aliases when unset) */
   usage?: string;
-  /** help 用の subcommand 一覧 (任意。machine-readable に保つため構造化して持つ) */
+  /** Subcommand list for help (optional; kept structured to stay machine-readable) */
   subcommands?: readonly { usage: string; summary: string }[];
-  /** command トークンより後ろの引数を受け取る */
+  /** Receives the args after the command token */
   run: (rest: readonly string[], ctx: Ctx) => Res;
 };
 
 export type RouterConfig<Ctx, Res> = {
   commands: readonly Command<Ctx, Res>[];
-  /** argv が空 (`syokan` を裸で実行) のとき */
+  /** When argv is empty (`syokan` run bare) */
   noArgs: (ctx: Ctx) => Res;
-  /** 予約語にも flag にも一致しない第一引数 (positional)。first はその引数自身 */
+  /** First arg matching neither a reserved word nor a flag (positional). `first` is that arg itself */
   fallback: (first: string, rest: readonly string[], ctx: Ctx) => Res;
-  /** `-` 始まりだが未知のトークン */
+  /** A `-`-prefixed but unknown token */
   onUnknownOption: (token: string, ctx: Ctx) => Res;
 };
 

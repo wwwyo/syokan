@@ -1,11 +1,12 @@
-// 閲覧者のローカル TZ で "YYYY-MM-DD HH:mm" に整形する。
-// 機械可読な UTC は呼び出し側の <time dateTime> に残す前提。
+// Format to "YYYY-MM-DD HH:mm" in the viewer's local TZ.
+// The machine-readable UTC is assumed to stay in the caller's <time dateTime>.
 //
-// 区切り・桁・時刻系を locale 非依存に固定したいので Intl.formatToParts で
-// 組み立てる (手書きの getHours()+padStart より TZ/DST 変換を Intl に委ねられる)。
-// en-CA は year/month/day を 2-digit で素直に出し、hourCycle "h23" で 00–23 に
-// 固定する (midnight が "24:xx" になる locale 差を避ける)。formatter は生成コスト
-// があるので module スコープで 1 度だけ作る。
+// Build via Intl.formatToParts to pin separators, digits, and the time system
+// locale-independently (delegating TZ/DST conversion to Intl rather than
+// hand-rolled getHours()+padStart). en-CA emits year/month/day as 2-digit
+// cleanly, and hourCycle "h23" pins to 00–23 (avoiding locales where midnight
+// becomes "24:xx"). The formatter has a creation cost, so it is built once at
+// module scope.
 const dateTimeFormat = new Intl.DateTimeFormat("en-CA", {
   year: "numeric",
   month: "2-digit",

@@ -670,11 +670,11 @@ describe("file routes", () => {
     );
     expect(res.headers.get("content-type")).toBe("text/event-stream");
     const reader = res.body!.getReader();
-    // 接続直後のコメント行を受け取る。
+    // Receive the comment line sent right after connecting.
     const first = await reader.read();
     expect(new TextDecoder().decode(first.value)).toContain(": connected");
     expect(watcher.activeCount()).toBe(1);
-    // client 切断 = stream cancel → 購読解除。
+    // Client disconnect = stream cancel → unsubscribe.
     await reader.cancel();
     await new Promise((r) => setTimeout(r, 40));
     expect(watcher.activeCount()).toBe(0);

@@ -12,9 +12,9 @@ export const timePropsSchema = z
 export type TimeProps = z.infer<typeof timePropsSchema>;
 
 /**
- * ISO datetime を受け取り、閲覧者のローカル TZ で整形して <time> 表示する。
- * 表示フォーマットを renderer 側 (formatDateTime) に集約し、LLM には機械可読な
- * ISO を渡させる。LLM が整形済み文字列を渡すと表記が view ごとにブレるため。
+ * Takes an ISO datetime and displays it as a <time>, formatted in the viewer's local TZ.
+ * The display format is consolidated on the renderer side (formatDateTime) and the LLM is made to
+ * pass machine-readable ISO, because a pre-formatted string from the LLM would drift in notation from view to view.
  */
 export function Time({ datetime, muted }: TimeProps) {
   return (

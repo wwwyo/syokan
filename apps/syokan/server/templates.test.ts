@@ -45,7 +45,7 @@ describe("TemplateStore", () => {
 
   test("list skips valid-JSON files with a malformed shape (no throw)", async () => {
     const good = await store.add({ title: "Good", json: {} });
-    // 手置きされた foreign file。valid JSON だが Template の shape ではない。
+    // A hand-placed foreign file. Valid JSON, but not the Template shape.
     await writeFile(join(dir, "notes.json"), JSON.stringify({ foo: 1 }), "utf8");
     const items = await store.list();
     expect(items.map((i) => i.id)).toEqual([good.id]);
@@ -53,7 +53,7 @@ describe("TemplateStore", () => {
 
   test("get returns undefined for unknown or malformed id", async () => {
     expect(await store.get("00000000-0000-0000-0000-000000000000")).toBeUndefined();
-    // path traversal / 非 UUID は join 前に弾く
+    // Reject path traversal / non-UUID before the join
     expect(await store.get("../etc/passwd")).toBeUndefined();
     expect(await store.get("not-a-uuid")).toBeUndefined();
   });

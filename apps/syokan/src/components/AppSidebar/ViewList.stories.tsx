@@ -5,7 +5,7 @@ const meta = {
   title: "Components/AppSidebar/ViewList",
   component: ViewList,
   tags: ["autodocs"],
-  // 実際の sidebar panel (w-64 + border) を模した枠で見え方を確認する
+  // Verify the appearance inside a frame that mimics the actual sidebar panel (w-64 + border)
   decorators: [
     (Story) => (
       <div className="w-64 border-r border-border bg-background p-2">
@@ -19,7 +19,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const items = [
-  { id: "a", title: "今日のRSS", createdAt: "2026-06-16T00:22:00Z" },
+  { id: "a", title: "Today's RSS", createdAt: "2026-06-16T00:22:00Z" },
   {
     id: "b",
     title: "PR review: view-layer",
@@ -28,7 +28,7 @@ const items = [
   },
   {
     id: "c",
-    title: "Daily Feed — 長いタイトルは 1 行で省略される例",
+    title: "Daily Feed — an example of a long title truncated to a single line",
     createdAt: "2026-06-14T23:49:00Z",
     source: { label: "rss-daily" },
   },
@@ -39,7 +39,7 @@ export const Default: Story = {
   args: { items, currentId: null },
 };
 
-// 現在表示中の snapshot を active 表示する
+// Show the snapshot currently on display as active
 export const WithActiveItem: Story = {
   args: { items, currentId: "b" },
 };

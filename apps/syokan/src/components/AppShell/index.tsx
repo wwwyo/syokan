@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { SidebarProvider } from "@/components/PageLayout/sidebarContext";
 
-// client 遷移中はメモリ (常駐 shell) で開閉を保つ。hard reload をまたぐぶんだけ
-// localStorage に逃がす (storage 無効環境では throw しうるので握る)。
+// During client transitions the open/closed state lives in memory (the resident shell);
+// only what needs to survive a hard reload is spilled to localStorage (guarded, since
+// storage-disabled environments can throw).
 const SIDEBAR_STORAGE_KEY = "syokan:sidebar-open";
 
-// 未設定 (初回訪問) は開いた状態を既定にする。明示的に閉じた選択だけ "0" として記憶する。
+// Unset (first visit) defaults to open. Only an explicit close choice is remembered as "0".
 function readPersistedOpen(): boolean {
   if (typeof window === "undefined") return true;
   try {
@@ -18,12 +19,13 @@ function readPersistedOpen(): boolean {
 }
 
 /**
- * client routing 全体の常駐 shell。sidebar と本文カラムを 1 度だけ mount し、route 遷移
- * では <Outlet /> の中身だけ差し替える。これで sidebar の開閉・スクロール・取得済み一覧が
- * 遷移をまたいでメモリに残る。
+ * The resident shell for all client routing. The sidebar and content column mount exactly
+ * once, and route transitions swap only the contents of <Outlet />. This keeps the sidebar's
+ * open/closed state, scroll position, and already-fetched list alive across transitions.
  *
- * 本文は document(window) スクロールに委ね、sidebar は sticky で viewport に固定する。
- * 本文の読書位置復元は router の scrollRestoration が担う (自前の補助コードは持たない)。
+ * The body defers to document(window) scrolling; the sidebar is pinned to the viewport via
+ * sticky. Restoring the reading position in the body is the router's scrollRestoration job
+ * (there is no bespoke helper code of our own).
  */
 export function AppShell() {
   const router = useRouter();
@@ -34,13 +36,14 @@ export function AppShell() {
     try {
       window.localStorage.setItem(SIDEBAR_STORAGE_KEY, open ? "1" : "0");
     } catch {
-      // storage 不可環境では永続化を諦める (機能本体には影響しない)
+      // In storage-unavailable environments, give up on persistence (does not affect the feature itself)
     }
   }, [open]);
 
-  // snapshot 作成は外 (CLI/LLM) で起きるため in-app の契機が無い。tab に戻った / 可視化した
-  // タイミングで shell loader だけ再取得し、開いたままのアプリにも新しい一覧を反映する。
-  // background revalidation なので stale-while-revalidate で一覧のちらつきは出ない。
+  // Snapshot creation happens outside the app (CLI/LLM), so there is no in-app trigger. On
+  // tab return / becoming visible, re-fetch only the shell loader so an app left open also
+  // picks up the new list. Being a background revalidation, stale-while-revalidate means the
+  // list never flickers.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onActive = () => {

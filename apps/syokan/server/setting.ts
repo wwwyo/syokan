@@ -12,15 +12,15 @@ export type SettingStore = {
   update: (patch: SettingPatch) => Promise<Setting>;
 };
 
-// 設定は単一 entity (singleton)。snapshot (ephemeral) と違い残す前提で、テーマ /
-// フォントなど「人間の表示の好み」を保持する。永続先は単一 JSON file (paths.settingFile())。
-// file を closure に閉じ、get/update を束ねた store を返す (class 不使用)。
+// The setting is a single entity (singleton). Unlike a snapshot (ephemeral), it's meant to be kept,
+// holding "human display preferences" like theme / font. It persists to a single JSON file (paths.settingFile()).
+// Close file over a closure and return a store bundling get/update (no class).
 export function createSettingStore(file: string): SettingStore {
-  // update は read-modify-write。並行 PUT (例: 別タブの theme 変更と font 変更) の
-  // interleave による lost update を防ぐため、1 プロセス内で直列化する。
+  // update is read-modify-write. Serialize within one process to prevent a lost update from the
+  // interleave of concurrent PUTs (e.g. a theme change and a font change from different tabs).
   let writeChain: Promise<unknown> = Promise.resolve();
 
-  // 欠損 / 壊れた file は default で補い、常に完全な Setting を返す。未知キーは黙って捨てる。
+  // Fill a missing / corrupt file with defaults and always return a complete Setting. Unknown keys are silently dropped.
   async function get(): Promise<Setting> {
     let text: string;
     try {
@@ -42,14 +42,14 @@ export function createSettingStore(file: string): SettingStore {
     return { ...DEFAULT_SETTING, ...parsed.data };
   }
 
-  // 部分更新。現在値に patch を被せて全体を書き直し、確定した完全な Setting を返す。
+  // Partial update. Overlay patch onto the current value, rewrite the whole thing, and return the finalized complete Setting.
   async function update(patch: SettingPatch): Promise<Setting> {
     const run = writeChain.then(async () => {
       const next: Setting = { ...(await get()), ...patch };
       await writeJsonAtomic(file, next);
       return next;
     });
-    // 1 つの失敗で以降を止めないよう chain 側は握る (呼び出し元へは run で伝播)。
+    // Swallow on the chain side so one failure doesn't halt the rest (propagated to the caller via run).
     writeChain = run.catch(() => {});
     return run;
   }

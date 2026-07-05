@@ -3,14 +3,14 @@ import { specs } from "./index";
 
 export type CatalogEntry = {
   type: string;
-  // props を JSON Schema 化したもの。LLM はこれを SSOT として props を組む。
+  // props turned into JSON Schema. The LLM builds props using this as the SSOT.
   props: Record<string, unknown>;
-  // null=子の制限なし (container)、[]=子不可 (leaf)、[..]=許可 type 限定。
+  // null=no restriction on children (container), []=no children (leaf), [..]=limited to allowed types.
   childrenTypes: readonly string[] | null;
 };
 
-// catalog (src/catalogs) を machine-readable な定義に変換する。SSOT は specs で、
-// ここは導出のみ。md に転記すると drift するため API/CLI 経由で常にここから引く。
+// converts the catalog (src/catalogs) into a machine-readable definition. The SSOT is specs;
+// this is derivation only. Transcribing into md drifts, so always pull from here via the API/CLI.
 export function catalogManifest(): CatalogEntry[] {
   return [...specs.values()].map((spec) => ({
     type: spec.type,

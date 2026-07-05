@@ -15,10 +15,12 @@ import { ViewError, ViewNotFound, ViewPage, ViewPending } from "./ViewPage";
 
 const rootRoute = createRootRoute();
 
-// 常駐 shell (sidebar + 本文) を担う pathless layout。sidebar の一覧取得を loader に集約し、
-// 配下の全 route で共有する (child 遷移では再実行されず、focus 時のみ invalidate で更新)。
-// 取得失敗は shell 全体を errorComponent に落とす — 一覧が引けない状態は操作の起点を失う
-// ので本文だけ残さず、まとめてエラーにする (許容した trade-off)。
+// The pathless layout hosting the resident shell (sidebar + body). The sidebar's list fetch is
+// concentrated in the loader and shared across all routes underneath (not re-run on child
+// transitions; refreshed via invalidate only on focus).
+// A fetch failure drops the whole shell to errorComponent — a state where the list can't be
+// pulled loses the starting point for actions, so rather than leaving only the body, we error
+// out together (an accepted trade-off).
 const shellRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "_shell",
@@ -36,13 +38,13 @@ const shellRoute = createRoute({
       </div>
     </PageLayout>
   ),
-  // viewRoute 配下等で throw された notFound の受け皿 (shell 内に出す)。未マッチ URL は
-  // 下の splatRoute が拾う (pathless layout は子がマッチしないと自身もマッチしないため)。
+  // Catches notFound thrown under viewRoute etc. (rendered inside the shell). Unmatched URLs are
+  // picked up by splatRoute below (a pathless layout unmatches itself when no child matches).
   notFoundComponent: RouteNotFound,
 });
 
-// どの child にも一致しないパス (URL の打ち間違い等) を shell 内で受ける。home へは full
-// reload で十分なので素の <a>。
+// Handles paths matching no child (a mistyped URL etc.) inside the shell. A full reload is
+// enough for home, so a plain <a>.
 function RouteNotFound() {
   return (
     <PageLayout>
@@ -70,8 +72,8 @@ const homeRoute = createRoute({
   component: Home,
 });
 
-// 人間が見るページ URL は /snapshots/:id (API の /api/snapshots と揃える)。取得は
-// loader が担い、pending / not-found / error の出し分けは route の各 component に委ねる。
+// The human-facing page URL is /snapshots/:id (aligned with the API's /api/snapshots). Fetching is
+// handled by the loader; pending / not-found / error branching is delegated to the route's components.
 const viewRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "/snapshots/$id",
@@ -108,9 +110,9 @@ const routeTree = rootRoute.addChildren([
 
 export const router = createRouter({
   routeTree,
-  // 本文の読書位置を履歴 entry 単位で復元する (自前の scroll 補助コードを置き換える)。
+  // restores the body's reading position per history entry (replacing the bespoke scroll helper code).
   scrollRestoration: true,
-  // hover / touch で loader を先読みし、クリック時の遷移を即時に近づける。
+  // prefetch the loader on hover / touch to make click transitions feel near-instant.
   defaultPreload: "intent",
 });
 

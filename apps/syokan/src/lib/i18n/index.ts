@@ -1,13 +1,13 @@
 import { en, type Messages } from "./en";
 import { ja } from "./ja";
 
-// 依存を増やさない最小の typed i18n。表示言語は起動時に 1 度だけ解決し、
-// 以後は変えない (切替 UI は持たず、ブラウザ言語に従う)。
+// A minimal typed i18n with no added dependencies. The display language is resolved
+// once at startup and never changed afterward (no switch UI; it follows the browser language).
 export type Lang = "en" | "ja";
 
-// 優先順位を無視して "含まれるか" だけで判定すると、英語を第一希望にした
-// ユーザーが日本語 UI にされてしまう。先頭から見て最初に対応言語と一致した
-// ものを採用する (未対応タグはスキップ)。
+// Judging by mere "is it present" while ignoring priority would give a user who
+// prefers English a Japanese UI. Scan from the front and adopt the first tag that
+// matches a supported language (skip unsupported tags).
 export function detectLang(languages: readonly string[]): Lang {
   for (const tag of languages) {
     const lower = tag.toLowerCase();
@@ -17,7 +17,7 @@ export function detectLang(languages: readonly string[]): Lang {
   return "en";
 }
 
-// 非ブラウザ (test / SSR) では navigator が無い・不完全なので空にして en へ落とす
+// In non-browser (test / SSR) navigator is absent or incomplete, so return empty and fall to en
 function browserLanguages(): readonly string[] {
   if (typeof navigator === "undefined") return [];
   if (navigator.languages && navigator.languages.length > 0) {
@@ -26,12 +26,12 @@ function browserLanguages(): readonly string[] {
   return navigator.language ? [navigator.language] : [];
 }
 
-/** 起動時に 1 度だけ解決した表示言語。 */
+/** The display language, resolved once at startup. */
 export const lang: Lang = detectLang(browserLanguages());
 
-// dynamic import は見送り: ThemeSelect などが t.* をモジュール評価時点
-// (トップレベル) で読んでおり、非同期解決だと未解決の t を参照してクラッシュする
-// (実機確認済み)。static import で両言語ともバンドルに含める。
+// Dynamic import is avoided: components like ThemeSelect read t.* at module
+// evaluation time (top level), and async resolution would reference an unresolved t
+// and crash (verified on a real machine). Use static imports to bundle both languages.
 export const t: Messages = lang === "ja" ? ja : en;
 
 export type { Messages };

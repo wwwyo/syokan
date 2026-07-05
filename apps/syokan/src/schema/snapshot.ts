@@ -3,17 +3,17 @@ import type { Item } from "./catalog";
 
 export const CURRENT_SCHEMA_VERSION = 1 as const;
 
-// metadata 本体は strict (top-level に予約外 field を生やさない PRD 方針)。
-// 一方 source の内側は loose にして label 以外 (url / fetchedAt 等) の後付けを
-// migration なしで受け入れる。PRD #3 を一段緩めた判断 (C3=2)。
+// metadata itself is strict (the PRD policy: no unreserved fields at the top level).
+// The inside of source, on the other hand, is loose so it accepts later additions beyond
+// label (url / fetchedAt etc.) without migration. A one-notch relaxation of PRD #3 (C3=2).
 export const snapshotMetadataSchema = z
   .object({
     source: z
       .object({
         label: z.string().min(1),
       })
-      // .loose() で label 以外 (url / fetchedAt 等) の後付け field を strip せず保持する。
-      // plain object だと unknown key は silently strip され、保存内容が欠落する。
+      // .loose() keeps later fields beyond label (url / fetchedAt etc.) instead of stripping them.
+      // With a plain object, unknown keys are silently stripped and the stored content is lost.
       .loose()
       .optional(),
   })
@@ -30,8 +30,8 @@ export type SnapshotEnvelope = {
   metadata?: SnapshotMetadata;
 };
 
-// 一覧 (GET /api/snapshots) の 1 行。envelope から root を落とした軽量サマリ。
-// server (store) と client (sidebar) の契約を 1 箇所に置き drift を防ぐ。
+// A single row of the list (GET /api/snapshots): a lightweight summary with root dropped from the envelope.
+// Placing the server (store) / client (sidebar) contract in one spot prevents drift.
 export type SnapshotSummary = {
   id: string;
   title?: string;

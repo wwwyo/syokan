@@ -11,13 +11,14 @@ import { cn } from "@/lib/utils";
 import { ViewList } from "./ViewList";
 
 /**
- * 非モーダルの push 型 sidebar。開くと flex の兄弟として幅を持ち main を押し出すので、
- * 開いたまま main を操作できる。閉じているときは幅 0 + inert にして tab フォーカスが
- * 内部リンクに入らないようにする。
+ * A non-modal, push-style sidebar. When open it takes width as a flex sibling and pushes main
+ * aside, so main stays operable while it is open. When closed it is width 0 + inert, so tab
+ * focus never enters the inner links.
  *
- * 常駐 shell (AppShell) の直下にあり遷移で再 mount されない。一覧は shell layout の
- * loader から受け取り、開閉やスクロール位置は再構築されずに残る (自前の scroll 復元は
- * 持たない)。取得中/失敗は route の pending/error に委ねるので、ここでは常に items が揃う。
+ * It sits directly under the resident shell (AppShell) and is not re-mounted on transitions.
+ * The list comes from the shell layout's loader, and the open/closed state and scroll position
+ * survive without being reconstructed (there is no bespoke scroll restoration). Loading/failure
+ * is deferred to the route's pending/error, so items are always present here.
  */
 export function AppSidebar() {
   const sidebar = useSidebar();
@@ -46,7 +47,7 @@ export function AppSidebar() {
           >
             syokan
           </Link>
-          {/* ViewHeader が無い状態 (not-found / pending / error) でも閉じられるよう sidebar 内にも閉じる操作を置く */}
+          {/* Place a close control inside the sidebar too, so it can be closed even without a ViewHeader (not-found / pending / error) */}
           {sidebar ? (
             <button
               type="button"

@@ -6,13 +6,14 @@ type MermaidProps = {
 };
 
 /**
- * ```mermaid フェンスを図として描画する MarkdownDoc 内部部品。
+ * MarkdownDoc-internal part that renders a ```mermaid fence as a diagram.
  *
- * mermaid (~数MB) は dynamic import し、図を含む doc を描画するまでモジュール評価を遅延する
- * (起動時に mermaid の重い初期化を走らせない)。ただし単体バイナリ配布では Bun が同一 chunk に
- * インライン化するため bytes 自体は初回 bundle に含まれる (chunk 分割配信はしない)。
- * 描画は document 依存の client 専用なので、SSR / mount 前は生のコードを <pre> で見せる
- * (図が出るまで内容が消えない / 解析失敗時もここに留まる)。dark/light は useColorScheme に追従する。
+ * mermaid (~several MB) is dynamically imported to defer module evaluation until a doc containing a
+ * diagram is rendered (so the heavy mermaid init does not run at startup). Note that in single-binary
+ * distribution Bun inlines it into the same chunk, so the bytes still land in the initial bundle
+ * (there is no split-chunk delivery). Rendering is document-dependent and client-only, so before
+ * SSR / mount the raw code is shown in a <pre> (content never disappears before the diagram appears,
+ * and it stays here on parse failure too). dark/light follows useColorScheme.
  */
 export function Mermaid({ chart }: MermaidProps) {
   const scheme = useColorScheme();
@@ -22,8 +23,8 @@ export function Mermaid({ chart }: MermaidProps) {
 
   useEffect(() => {
     let cancelled = false;
-    // svg は再描画完了まで前回値を残す。最頻の再描画はテーマ切替で、ここで svg を
-    // クリアすると一旦 <pre> fallback に落ちてチラつくため、旧図のまま差し替える。
+    // keep the previous svg until the re-render completes. The most frequent re-render is a theme
+    // switch; clearing svg here would briefly drop to the <pre> fallback and flicker, so swap the diagram in place.
     setFailed(false);
     (async () => {
       try {
@@ -31,11 +32,11 @@ export function Mermaid({ chart }: MermaidProps) {
         mermaid.initialize({
           startOnLoad: false,
           theme: scheme === "dark" ? "dark" : "default",
-          // chart は外部 / LLM 由来。ラベル内 HTML を sanitize する (既定だが明示する)
+          // chart is external / LLM-sourced. Sanitize HTML inside labels (the default, made explicit)
           securityLevel: "strict",
-          // 解析失敗時に mermaid が error 図を document.body へ注入するのを抑止し、
-          // 一時要素も除去して throw させる。失敗は下の catch で <pre> fallback に寄せる。
-          // (container 引数で囲う手もあるが、複数図の同時 render を壊すため使わない)
+          // suppress mermaid from injecting an error diagram into document.body on parse failure,
+          // and have it remove the temp element and throw. Failures are funneled to the <pre> fallback in the catch below.
+          // (wrapping via the container arg is an option, but it breaks rendering multiple diagrams at once, so it is not used)
           suppressErrorRendering: true,
         });
         const { svg } = await mermaid.render(`mermaid-${id}`, chart);
@@ -69,7 +70,7 @@ export function Mermaid({ chart }: MermaidProps) {
       data-slot="mermaid"
       data-state="ready"
       className="my-4 flex justify-center overflow-x-auto [&_svg]:max-w-full [&_svg]:h-auto"
-      // mermaid が生成する SVG をそのまま埋める (securityLevel 既定 'strict' でラベルは sanitize 済み)
+      // embed the SVG mermaid generates as-is (labels are already sanitized by the default securityLevel 'strict')
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

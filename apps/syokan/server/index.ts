@@ -9,7 +9,7 @@ import {
   templatesDir,
 } from "@/lib/paths";
 import index from "../index.html";
-// version は CLI が「旧 build の server を黙って再利用しない」ための互換マーカー。
+// version is a compatibility marker so the CLI doesn't silently reuse a server from an old build.
 import pkg from "../package.json";
 import { createFileWatcher } from "./fileSource";
 import {
@@ -31,11 +31,11 @@ function resolvePort(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_PORT;
 }
 
-// frontend は index.html の import で供給する。dev は on-the-fly bundle + HMR、
-// compile 時は Bun が frontend を bundle して同じバイナリへ埋め込む (同一の静的
-// import で両立する)。entry.ts (単体バイナリ) と直接起動の両方から呼ばれる。
-// 旧レイアウトの templates を新 data home へ 1 回だけ引き継ぐ。移設先が既にあれば
-// 移行済み or 現行運用中なので触らない。best-effort (失敗しても起動は続行する)。
+// The frontend is supplied via the index.html import. Dev gets an on-the-fly bundle + HMR;
+// at compile time Bun bundles the frontend and embeds it in the same binary (the same static
+// import serves both). Called from both entry.ts (the single binary) and direct startup.
+// Migrate templates from the old layout to the new data home exactly once. If the destination
+// already exists, it's already migrated or in active use, so leave it alone. Best-effort (startup continues even on failure).
 function migrateLegacyTemplates(): void {
   const legacy = legacyTemplatesDir();
   const dest = templatesDir();
@@ -44,7 +44,7 @@ function migrateLegacyTemplates(): void {
     mkdirSync(dirname(dest), { recursive: true });
     renameSync(legacy, dest);
   } catch {
-    // 移行に失敗しても新規運用は成立するので握る
+    // Swallowed: fresh operation still works even if the migration fails
   }
 }
 
@@ -55,7 +55,7 @@ export function startServer() {
   const api = createApiHandlers(store);
   const templates = createTemplateHandlers(createTemplateStore(templatesDir()));
   const setting = createSettingHandlers(createSettingStore(settingFile()));
-  // file 監視は永続化しない接続スコープの runtime state。server 寿命と同じ生存。
+  // File watching is connection-scoped runtime state, never persisted. It lives as long as the server.
   const file = createFileHandlers(createFileWatcher());
   const share = createShareHandlers({
     store,
@@ -66,7 +66,7 @@ export function startServer() {
   const server = serve({
     routes: {
       "/api/health": () => Response.json({ ok: true, version: pkg.version }),
-      // catalog は src/catalogs が SSOT。LLM は props 定義をここから引く。
+      // The catalog's SSOT is src/catalogs. The LLM pulls the props definitions from here.
       "/api/catalog": getCatalog,
       "/api/snapshots": {
         POST: api.createSnapshot,
@@ -77,8 +77,8 @@ export function startServer() {
         GET: api.getSnapshot,
         DELETE: api.deleteSnapshot,
       },
-      // public share: publish は store の snapshot を凍結して Worker へ、auth は
-      // Worker token の交換・保持、shares は Worker への認証つき proxy。
+      // public share: publish freezes a store snapshot and sends it to the Worker; auth
+      // exchanges and holds the Worker token; shares is an authenticated proxy to the Worker.
       "/api/snapshots/:id/publish": { POST: share.publishSnapshot },
       "/api/auth/login": {
         GET: share.loginStatus,
@@ -99,18 +99,18 @@ export function startServer() {
         GET: setting.getSetting,
         PUT: setting.updateSetting,
       },
-      // ファイル参照ノードの本文読み出し (GET) と変更監視 (SSE)。
+      // File-reference node body read (GET) and change watching (SSE).
       "/api/files": { GET: file.readFile },
       "/api/files/watch": { GET: file.watchFile },
-      // static > param > wildcard 順で評価されるので上の API が優先される。
+      // Evaluated in static > param > wildcard order, so the APIs above take precedence.
       "/api/*": () => Response.json({ error: "not_found" }, { status: 404 }),
-      // SPA fallback: API 以外は frontend を返し、client router が描画を分岐する。
+      // SPA fallback: non-API requests return the frontend, and the client router branches rendering.
       "/*": index,
     },
     development: process.env.NODE_ENV !== "production",
     port: resolvePort(),
-    // localhost のみに bind する。任意ファイルを読む /api/files を LAN に晒さないため
-    // (PRD の信頼境界 = localhost bind ＋ ユーザー権限)。
+    // Bind to localhost only, so /api/files (which reads arbitrary files) isn't exposed to the LAN
+    // (PRD's trust boundary = localhost bind + user permissions).
     hostname: "127.0.0.1",
   });
   console.log(`syokan listening on ${server.url}`);

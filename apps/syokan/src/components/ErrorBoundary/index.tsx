@@ -11,7 +11,7 @@ type ErrorBoundaryState = {
 };
 
 /**
- * 子の render 例外をこの境界内に閉じ込め、ツリー全体のクラッシュを防ぐ。
+ * Confines a child's render exception within this boundary, preventing a crash of the whole tree.
  */
 export class ErrorBoundary extends Component<
   ErrorBoundaryProps,

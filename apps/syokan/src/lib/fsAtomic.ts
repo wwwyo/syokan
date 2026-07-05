@@ -1,8 +1,8 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
-// tmp に書いてから rename して置換する。rename は同一 fs 内で atomic なので、
-// 書き込み途中の中身を reader に見せない。
+// Write to a tmp file, then rename to replace. rename is atomic within the same fs,
+// so readers never see a mid-write state.
 export async function writeJsonAtomic(
   path: string,
   data: unknown,

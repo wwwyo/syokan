@@ -3,14 +3,14 @@ import { z } from "zod";
 
 export const cardPropsSchema = z.object({}).strict();
 
-// 空スキーマの z.infer は children と交差すると never に潰れるため children だけを型にする。
+// z.infer of the empty schema collapses to never when intersected with children, so type only children.
 export type CardProps = {
   children?: ReactNode;
 };
 
 /**
- * children を囲む汎用カード。article 等のドメインに依存せず、
- * 中身は Heading / Text / Link / Stack 等の組み合わせで表現する。
+ * A generic card that wraps children. Domain-agnostic (not tied to articles etc.);
+ * the contents are expressed by composing Heading / Text / Link / Stack and the like.
  */
 export function Card({ children }: CardProps) {
   return (

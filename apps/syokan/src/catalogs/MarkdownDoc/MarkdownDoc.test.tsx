@@ -34,8 +34,8 @@ describe("MarkdownDoc", () => {
   test("renders fenced code via Code (pierre File host; highlights client-side)", () => {
     const body = "```ts\nconst x = 1;\n```";
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    // コードフェンスは Code catalog (= @pierre/diffs File) に委譲。コード本体は client 描画なので
-    // SSR では host のみ出る。
+    // code fences delegate to the Code catalog (= @pierre/diffs File). The code body renders
+    // client-side, so SSR emits only the host.
     expect(html).toContain('data-slot="code"');
     expect(html).toContain("<diffs-container");
   });
@@ -56,10 +56,10 @@ describe("MarkdownDoc", () => {
   test("renders ```mermaid fences via Mermaid (raw chart in SSR fallback, not Code)", () => {
     const body = "```mermaid\ngraph TD\n  A --> B\n```";
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    // mermaid は client 描画。SSR/mount 前は生のコードを <pre data-slot="mermaid"> で出す
+    // mermaid renders client-side. Before SSR/mount, the raw code is emitted as <pre data-slot="mermaid">
     expect(html).toContain('data-slot="mermaid"');
     expect(html).toContain("graph TD");
-    // Code (pierre File) には委譲しない
+    // does not delegate to Code (pierre File)
     expect(html).not.toContain("<diffs-container");
   });
 
@@ -86,7 +86,7 @@ describe("MarkdownDoc", () => {
       "| Bob | 20 |",
     ].join("\n");
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    // shadcn Table component で描画する
+    // renders via the shadcn Table component
     expect(html).toContain("data-slot=\"table\"");
     expect(html).toContain("data-slot=\"table-header\"");
     expect(html).toContain("data-slot=\"table-head\"");
@@ -106,12 +106,12 @@ describe("MarkdownDoc", () => {
   test("renders GFM task lists as shadcn Checkbox (read-only, state-mapped)", () => {
     const body = ["- [x] done", "- [ ] todo"].join("\n");
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    // ネイティブ input ではなく shadcn (base-ui) Checkbox で描画する
+    // renders via the shadcn (base-ui) Checkbox, not a native input
     expect(html).toContain("data-slot=\"checkbox\"");
     expect(html).toContain("role=\"checkbox\"");
-    // 編集不可の表示専用
+    // display-only, not editable
     expect(html).toContain("aria-readonly=\"true\"");
-    // [x] / [ ] が checked / unchecked に対応する
+    // [x] / [ ] map to checked / unchecked
     expect(html).toContain("data-checked");
     expect(html).toContain("data-unchecked");
     expect(html).toContain("done");
@@ -121,9 +121,9 @@ describe("MarkdownDoc", () => {
   test("task-list <ul> drops the disc bullet (list-none, no list-disc)", () => {
     const body = ["- [x] done", "- [ ] todo"].join("\n");
     const html = renderToString(createElement(MarkdownDoc, { body }));
-    // checkbox 付き項目に丸ポチが二重に付かないこと
+    // a checkbox item must not also carry a disc bullet
     expect(html).toContain("list-none");
-    // 通常リストは従来どおり list-disc
+    // a normal list keeps list-disc as before
     const plain = renderToString(
       createElement(MarkdownDoc, { body: "- a\n- b" }),
     );

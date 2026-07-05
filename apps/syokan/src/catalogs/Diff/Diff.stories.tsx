@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Diff } from ".";
 
-// Diff は patch を parsePatchFiles で 1..N ファイルに分解し、ファイルごとに
-// @pierre/diffs の FileDiff を積む catalog component。
-// Shiki ハイライトはマウント後に非同期で適用される (shadow DOM 内)。
-// theme は documentElement の .dark を監視して切り替わるので、toolbar の
-// light/dark トグルで追従を確認できる。
+// Diff is a catalog component that splits a patch into 1..N files via parsePatchFiles and
+// stacks a @pierre/diffs FileDiff per file.
+// Shiki highlighting is applied asynchronously after mount (inside the shadow DOM).
+// The theme switches by watching documentElement's .dark, so the toolbar's
+// light/dark toggle confirms it follows along.
 const meta = {
   title: "Catalog/Diff",
   component: Diff,
@@ -78,13 +78,13 @@ diff --git a/server/index.ts b/server/index.ts
  };
 `;
 
-// gh pr diff のような複数ファイル patch を 1 ノードで渡すと、ファイルごとに
-// filename ヘッダ付きの FileDiff が縦に並ぶ。
+// Passing a multi-file patch (like gh pr diff) as a single node lays out
+// FileDiffs with filename headers vertically, one per file.
 export const MultipleFiles: Story = {
   args: { patch: MULTI_FILE_PATCH, diffStyle: "unified" },
 };
 
-// 複数ファイルでは comment.file で対象ファイルを指定する (新名 or rename 元名)。
+// With multiple files, comment.file specifies the target file (new name or rename source name).
 export const MultipleFilesWithComments: Story = {
   args: {
     patch: MULTI_FILE_PATCH,
@@ -94,21 +94,21 @@ export const MultipleFilesWithComments: Story = {
         file: "src/lib/date.ts",
         side: "new",
         line: 2,
-        body: "型ガードで Date を受けられるようになった。",
+        body: "The type guard lets it accept a Date now.",
         author: "wwwyo",
       },
       {
         file: "server/index.ts",
         side: "new",
         line: 11,
-        body: "CORS を挟む位置はここで良い？",
+        body: "Is this the right place to apply CORS?",
       },
     ],
   },
 };
 
-// 行コメント (lineAnnotations) を対象行にインライン表示する。
-// side: "new" は追加側 (additions)、"old" は削除側 (deletions) の行番号を指す。
+// Show line comments (lineAnnotations) inline at the target line.
+// side: "new" refers to the added side (additions), "old" to the removed side (deletions) line number.
 export const WithComments: Story = {
   args: {
     patch: TS_PATCH,
@@ -117,13 +117,13 @@ export const WithComments: Story = {
       {
         side: "new",
         line: 2,
-        body: "string 以外も来るので型ガードを追加。良い修正。",
+        body: "Non-string inputs can arrive too, so adding a type guard. Nice fix.",
         author: "wwwyo",
       },
       {
         side: "new",
         line: 3,
-        body: "Invalid Date のハンドリングが入ったのが嬉しい。",
+        body: "Glad the Invalid Date handling made it in.",
       },
     ],
   },

@@ -19,9 +19,9 @@ export type CodeProps = z.infer<typeof codePropsSchema>;
 const COPY_REVEAL =
   "opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100";
 
-// pierre File の host (diffs-container) はテーマ背景 (github の編集面) を自分で持つ。
-// host に直接 padding / 行間を渡すことで、別サーフェスを重ねず単一面に余白付きで描画する。
-// (旧実装は bg-muted の枠に白いコード面が重なり濁っていた)
+// The pierre File host (diffs-container) carries its own theme background (github's editing surface).
+// Passing padding / line-height directly to the host renders on a single surface with margin, without stacking another surface.
+// (the old implementation muddied things by overlaying a white code surface on a bg-muted frame)
 const FILE_STYLE = {
   display: "block",
   padding: "0.875rem 1rem",
@@ -30,7 +30,7 @@ const FILE_STYLE = {
 } as CSSProperties;
 
 const FILE_OPTIONS = {
-  // app 全体のコード表示で揃える github テーマ。dark/light は themeType で切替
+  // The github theme, kept consistent across all code display in the app. dark/light switches via themeType
   theme: { dark: "github-dark", light: "github-light" },
   disableFileHeader: true,
   disableLineNumbers: true,
@@ -38,16 +38,17 @@ const FILE_OPTIONS = {
 } as const;
 
 /**
- * コード断片を等幅 + シンタックスハイライトで表示する catalog component。
- * ハイライトは @pierre/diffs の File に委譲し Diff と同じ Shiki スタックに統一する。
- * コード面は File 自身のテーマ背景を唯一のサーフェスとし、filename / CopyButton は
- * その上に重ねる chrome として持つ。lang 未指定/未知は "text" として素のテキストで見せる。
+ * A catalog component that displays a code fragment in monospace + syntax highlighting.
+ * Highlighting is delegated to @pierre/diffs' File, unifying on the same Shiki stack as Diff.
+ * The code surface uses File's own theme background as the sole surface; filename / CopyButton
+ * ride on top of it as chrome. An unspecified/unknown lang shows plain text as "text".
  *
- * 既知の制約 (dev のみ): grammar が cold の初回描画では File が空プレースホルダ (高さ0) を
- * 出し、非同期ハイライト完了時の再描画 callback で本文に差し替える。React StrictMode は
- * mount→unmount→remount するため、その callback が unmount で cleanUp 済み (enabled=false) の
- * 旧インスタンスに届き no-op になり、高さ0 のまま潰れる (tab 内は決定的、ViewPage は時々)。
- * warm (grammar キャッシュ済) や本番 (StrictMode 無効) では同期描画され問題ない。
+ * Known limitation (dev only): on a cold-grammar first render, File emits an empty placeholder
+ * (height 0) and swaps in the body via a re-render callback when async highlighting completes.
+ * Under React StrictMode's mount→unmount→remount, that callback lands on the old instance,
+ * already cleanUp'd (enabled=false) at unmount, so it becomes a no-op and stays collapsed at
+ * height 0 (deterministic inside tabs, intermittent on ViewPage).
+ * Warm (grammar cached) and production (StrictMode disabled) render synchronously and are fine.
  */
 export function Code({ code, lang, filename }: CodeProps) {
   const themeType = useColorScheme();

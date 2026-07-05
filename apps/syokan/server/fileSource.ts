@@ -1,19 +1,19 @@
 import { type FSWatcher, watch } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 
-// markdown / log 閲覧に十分で、巨大ファイルでブラウザを固めない上限。超過は本文を返さない。
+// Enough for viewing markdown / logs, but caps out so a huge file can't freeze the browser. Over the limit, the body is not returned.
 export const FILE_SIZE_LIMIT = 2 * 1024 * 1024;
 
-// view を閉じてから watcher を解放するまでの猶予。reload は SSE を一旦切ってすぐ張り直す
-// ため、即解放だと watcher を毎回壊して作り直す。猶予で reload を吸収する (US-002)。
+// Grace period between a view closing and the watcher being released. A reload drops the SSE and
+// re-opens it right away, so releasing immediately would tear down and rebuild the watcher every time. The grace period absorbs reloads (US-002).
 const RELEASE_DELAY_MS = 10_000;
-// rename + change 等の連続イベントを 1 回に束ねる (client の連続 refetch を抑える)。
+// Coalesce a burst of events (rename + change, etc.) into one (curbs the client's repeated refetches).
 const NOTIFY_DEBOUNCE_MS = 50;
-// rename (inode 差し替え) 後、新 inode に張り直すまでの待ち。rename の隙間で path が
-// 一瞬消えるため少し待ってから再 watch する。
+// After a rename (inode swap), the wait before re-arming on the new inode. The path vanishes for a
+// moment during the rename, so we wait a bit before re-watching.
 const REARM_DELAY_MS = 10;
-// 張り直し時に path がまだ無い (rename 進行中等) ら数回リトライする。editor の atomic save は
-// 直後に置換先が現れるので数回で張り直せる。回数上限で「削除のみ」の無限リトライを防ぐ。
+// When re-arming, if the path isn't there yet (rename in progress, etc.), retry a few times. An editor's atomic save
+// makes the replacement appear right after, so a few tries re-arm it. The cap prevents infinite retries on a delete-only case.
 const REARM_MAX_ATTEMPTS = 5;
 
 export type ReadFileFailure =
@@ -32,9 +32,9 @@ function errno(err: unknown): string | undefined {
 }
 
 /**
- * path を UTF-8 テキストとして読む。通常ファイルでない・欠落・権限不足・サイズ超過・
- * バイナリ/非 UTF-8 は読めない内容を返さず分類された失敗にする (FR-9〜12)。
- * symlink は stat が辿るので、リンク先が通常ファイルなら読める。
+ * Read path as UTF-8 text. Non-regular file / missing / permission denied / over size /
+ * binary or non-UTF-8 don't return unreadable content — they become classified failures (FR-9~12).
+ * stat follows symlinks, so a symlink is readable when its target is a regular file.
  */
 export async function readTextFile(path: string): Promise<ReadFileResult> {
   let st: Awaited<ReturnType<typeof stat>>;
@@ -50,7 +50,7 @@ export async function readTextFile(path: string): Promise<ReadFileResult> {
     }
     throw err;
   }
-  // ディレクトリ / FIFO / socket / device は通常ファイルでない (FR-9)。
+  // Directory / FIFO / socket / device are not regular files (FR-9).
   if (!st.isFile()) return { ok: false, reason: "not_regular_file" };
   if (st.size > FILE_SIZE_LIMIT) return { ok: false, reason: "too_large" };
 
@@ -66,7 +66,7 @@ export async function readTextFile(path: string): Promise<ReadFileResult> {
     if (code === "EISDIR") return { ok: false, reason: "not_regular_file" };
     throw err;
   }
-  // NUL を含む or UTF-8 デコード不能 → 読めない内容を出さない (FR-12)。
+  // Contains NUL or can't be UTF-8 decoded → don't emit unreadable content (FR-12).
   if (buf.includes(0)) return { ok: false, reason: "not_text" };
   try {
     const content = new TextDecoder("utf-8", { fatal: true }).decode(buf);
@@ -77,11 +77,11 @@ export async function readTextFile(path: string): Promise<ReadFileResult> {
 }
 
 export type FileWatcher = {
-  /** path の変更を購読する。返り値で解除。SSE 接続 1 本 = 購読 1 件。 */
+  /** Subscribe to changes on path. The return value unsubscribes. One SSE connection = one subscription. */
   subscribe: (path: string, onChange: () => void) => () => void;
-  /** test 用: 現在 fs.watch を保持している path 数。 */
+  /** For tests: the number of paths currently holding an fs.watch. */
   activeCount: () => number;
-  /** test 用: release timeout を待たず全 watcher を即時破棄する。 */
+  /** For tests: destroy all watchers immediately without waiting for the release timeout. */
   closeAll: () => void;
 };
 
@@ -94,13 +94,13 @@ type WatchEntry = {
 };
 
 /**
- * path ごとにファイルを fs.watch し、購読者へ変更を通知する。watcher は in-memory の
- * runtime state で永続化しない。
+ * fs.watch each file per path and notify subscribers of changes. Watchers are in-memory
+ * runtime state — never persisted.
  *
- * 「temp 書き込み → rename」保存 (FR-5) はファイルの inode を差し替えるため、素朴に
- * watch したままだと差し替え後の変更を見失う。macOS では親ディレクトリ watch が中の
- * ファイル変更で発火しないため、ファイル自身を watch し、`rename` イベント (inode 差し替え
- * /削除のシグナル) を受けたら同じ path に watch を張り直す (re-arm) ことで追従する。
+ * A "temp write → rename" save (FR-5) swaps the file's inode, so watching naively loses track of
+ * changes after the swap. On macOS, watching the parent directory doesn't fire on content changes
+ * inside it, so we watch the file itself and, on a `rename` event (the signal for inode swap
+ * /deletion), re-arm the watch on the same path to keep following it.
  */
 export function createFileWatcher(opts?: {
   releaseDelayMs?: number;
@@ -126,15 +126,15 @@ export function createFileWatcher(opts?: {
     try {
       const w = watch(path, (event) => {
         notify(path);
-        // rename = inode 差し替え/削除。同じ path に張り直して新 inode を追う。
+        // rename = inode swap/deletion. Re-arm on the same path to follow the new inode.
         if (event === "rename") rearm(path);
       });
-      // 監視中に削除された等の error も rename と同様に再 arm を試みる。
+      // An error (e.g. deleted while watching) also attempts a re-arm, same as rename.
       w.on("error", () => rearm(path));
       w.unref?.();
       return w;
     } catch {
-      // path が無い等で watch を張れない。購読は受けるが live 更新はしない。
+      // Can't arm the watch (path missing, etc.). Subscriptions are accepted but there are no live updates.
       return null;
     }
   }
@@ -145,7 +145,7 @@ export function createFileWatcher(opts?: {
     try {
       entry.watcher?.close();
     } catch {
-      // 既に閉じている
+      // already closed
     }
     entry.watcher = null;
     entry.rearmTimer = setTimeout(() => {
@@ -153,8 +153,8 @@ export function createFileWatcher(opts?: {
       const cur = entries.get(path);
       if (!cur || cur.subs.size === 0) return;
       cur.watcher = armWatch(path);
-      // まだ張れない (置換先が未出現) なら上限まで再試行する。張れたら変更を取りこぼした
-      // 可能性があるので一度通知して client に取り直させる。
+      // If still un-armable (replacement not yet present), retry up to the cap. Once armed, a change
+      // may have been missed, so notify once to make the client re-fetch.
       if (!cur.watcher) {
         if (attempt + 1 < REARM_MAX_ATTEMPTS) rearm(path, attempt + 1);
       } else if (attempt > 0) {

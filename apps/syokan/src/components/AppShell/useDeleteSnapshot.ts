@@ -6,20 +6,22 @@ import type { SnapshotSummary } from "@/schema";
 import { shellRouteApi } from "./shellRouteApi";
 
 export type DeleteOptions = {
-  // 削除対象が表示中の snapshot か。true なら削除後に隣 (次→前) or home へ遷移する。
+  // Whether the deletion target is the snapshot currently on display. If true, navigate to a
+  // neighbor (next → previous) or home after deletion.
   isCurrent: boolean;
 };
 
-// invalidate 後の最新一覧を imperative に読む (useLoaderData は hook で callback から呼べない)。
-// _shell は全 route の祖先なので常に matches に居る。
+// Imperatively read the latest list after invalidate (useLoaderData is a hook and can't be
+// called from a callback). _shell is the ancestor of every route, so it is always in matches.
 function shellItems(router: ReturnType<typeof useRouter>): SnapshotSummary[] {
   const match = router.state.matches.find((m) => m.routeId === "/_shell");
   return (match?.loaderData ?? []) as SnapshotSummary[];
 }
 
 /**
- * snapshot 削除の単一フロー。ViewHeader (表示中) と sidebar (任意行) の両方から使う。
- * 削除→shell loader を invalidate (sidebar 最新化)→(表示中なら) 遷移、までを一貫して扱う。
+ * The single flow for deleting a snapshot. Used from both ViewHeader (the one on display) and
+ * the sidebar (any row). Handles delete → invalidate the shell loader (refresh the sidebar) →
+ * (if on display) navigate, as one coherent sequence.
  */
 export function useDeleteSnapshot() {
   const router = useRouter();
@@ -27,18 +29,19 @@ export function useDeleteSnapshot() {
 
   return useCallback(
     async (id: string, { isCurrent }: DeleteOptions) => {
-      // 遷移先は削除前の並びから決める (削除後は隣接位置が失われるため)。
+      // Decide the navigation target from the pre-deletion ordering (the adjacent position is lost after deletion).
       const next = nextSnapshotId(before, id);
       if (!(await deleteSnapshot(id))) {
         if (typeof window !== "undefined") window.alert(t.view.deleteFailed);
         return;
       }
-      // shell loader だけ再実行して sidebar を最新化する。表示中の envelope は再取得しない
-      // (削除対象を見ている場合に not-found へ一瞬落ちるのを避ける)。消えた snapshot への
-      // リンクは一覧から消え、戻る操作は staleTime=0 で loader を再実行し 404 を出す。
+      // Re-run only the shell loader to refresh the sidebar. Do not re-fetch the envelope on
+      // display (avoids momentarily falling to not-found when viewing the deleted target). The
+      // link to the gone snapshot disappears from the list, and a back navigation re-runs the
+      // loader with staleTime=0 and surfaces a 404.
       await router.invalidate({ filter: (m) => m.routeId === "/_shell" });
       if (isCurrent) {
-        // 算出した遷移先が削除後の一覧にまだ在るときだけ開く。無ければ home へ。
+        // Open the computed target only if it still exists in the post-deletion list. Otherwise go home.
         const after = shellItems(router);
         const target = next && after.some((i) => i.id === next) ? next : null;
         await router.navigate(

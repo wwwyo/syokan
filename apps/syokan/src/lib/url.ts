@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 /**
- * http(s) のみ許可する URL schema。
- * API / ファイル / LLM 由来の tree を描画するため、href に javascript:/data:/file:
- * 等の危険な protocol が混入すると XSS になりうる。protocol を明示的に絞る。
+ * A URL schema that allows only http(s).
+ * Because trees from the API / files / LLMs are rendered, a dangerous protocol like
+ * javascript:/data:/file: slipping into href could become XSS. Restrict the protocol explicitly.
  */
 export const httpUrl = z.url().refine(
   (value) => {

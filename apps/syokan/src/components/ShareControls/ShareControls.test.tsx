@@ -69,7 +69,7 @@ describe("publishSnapshot", () => {
     }
   });
 
-  test("network 断 (fetch reject) → error (throw しない)", async () => {
+  test("network down (fetch reject) → error (does not throw)", async () => {
     globalThis.fetch = (async () => {
       throw new TypeError("Failed to fetch");
     }) as unknown as typeof fetch;
@@ -87,7 +87,7 @@ describe("fetchShares", () => {
     expect(await fetchShares("k3f9q2")).toEqual([share]);
   });
 
-  test("失敗 (500 / network 断) は [] に静かに劣化", async () => {
+  test("failure (500 / network down) degrades quietly to []", async () => {
     stubFetch(() => new Response(null, { status: 500 }));
     expect(await fetchShares("a")).toEqual([]);
     globalThis.fetch = (async () => {
@@ -98,7 +98,7 @@ describe("fetchShares", () => {
 });
 
 describe("unpublishShare", () => {
-  test("200 → true / 500 → false / network 断 → false", async () => {
+  test("200 → true / 500 → false / network down → false", async () => {
     stubFetch((url, init) => {
       expect(url).toBe("/api/shares/abc-123");
       expect(init?.method).toBe("DELETE");
@@ -115,7 +115,7 @@ describe("unpublishShare", () => {
 });
 
 describe("shareDialogTitle", () => {
-  test("kind ごとに title を切り替える", () => {
+  test("switches the title per kind", () => {
     expect(shareDialogTitle({ kind: "success", share })).toBe(
       "Public link created",
     );
@@ -182,8 +182,8 @@ describe("ShareControls", () => {
   });
 
   test("shows the Shared chip only when shares exist", () => {
-    // open → unpublish の動作は fetch 経由の unpublishShare でテスト済み。
-    // ここでは chip の出し分け (公開中の導出表示) だけを SSR で確認する。
+    // The open → unpublish behavior is already tested via unpublishShare through fetch.
+    // Here we only confirm the chip's conditional rendering (the derived "shared" display) via SSR.
     const withShares = renderToString(
       createElement(ShareControls, {
         snapshotId: "k3f9q2",

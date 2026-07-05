@@ -22,8 +22,8 @@ describe("codePropsSchema", () => {
 });
 
 describe("Code", () => {
-  // コード本体は @pierre/diffs の File が client 側 (shadow DOM) で描画するため、
-  // SSR では host 要素のみ出る。視覚は Storybook で担保する。
+  // The code body is rendered by @pierre/diffs' File on the client side (shadow DOM),
+  // so SSR emits only the host element. The visuals are covered by Storybook.
   test("renders the pierre File host with a copy button", () => {
     const html = renderToString(createElement(Code, { code: "const x = 1;" }));
     expect(html).toContain('data-slot="code"');

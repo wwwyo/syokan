@@ -21,8 +21,8 @@ describe("ViewHeader", () => {
     const withDelete = renderToString(
       createElement(ViewHeader, { onDelete: () => {} }),
     );
-    // 削除はメニュー (Portal, 既定で閉) の中なので SSR には trigger だけが出る。
-    // open → Delete クリックの動作はブラウザ確認で担保する。
+    // Delete lives inside the menu (Portal, closed by default), so only the trigger appears in SSR.
+    // The open → Delete click behavior is covered by browser verification.
     expect(withDelete).toContain("data-slot=\"view-menu-trigger\"");
     expect(withDelete).toContain("aria-haspopup=\"menu\"");
 

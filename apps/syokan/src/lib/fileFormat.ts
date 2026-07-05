@@ -1,17 +1,18 @@
-// ファイルパスから描画形式を推論する。CLI(将来 dedup key に使う場合)と client render の
-// 双方がこの 1 規則を引くことで推論の drift を防ぐ (FR-2/3)。client bundle に node:path を
-// 持ち込まないため path util も純粋な文字列処理で持つ。
+// Infer the render format from a file path. Both the CLI (should it use this as a
+// dedup key in the future) and client render draw on this single rule to prevent
+// inference drift (FR-2/3). To avoid pulling node:path into the client bundle, the
+// path util is kept as pure string processing.
 
 export type FileFormat = "markdown" | "text" | "code";
 
-/** path の basename を返す (`/` と `\` の両方を区切りに扱い、末尾区切りは除く)。 */
+/** Return the path's basename (treating both `/` and `\` as separators, trailing separators stripped). */
 export function fileBasename(path: string): string {
   const trimmed = path.replace(/[/\\]+$/, "");
   const i = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
   return i >= 0 ? trimmed.slice(i + 1) : trimmed;
 }
 
-// 先頭の `.` のみのファイル (dotfile) は拡張子なし扱い。`a.md` は md。
+// Files with only a leading `.` (dotfiles) are treated as having no extension. `a.md` is md.
 function extOf(path: string): string {
   const base = fileBasename(path);
   const dot = base.lastIndexOf(".");
@@ -19,8 +20,8 @@ function extOf(path: string): string {
 }
 
 /**
- * 拡張子から描画形式を推論する。`.md`/`.markdown`→markdown、`.json`→code、
- * それ以外 (`.txt`/`.log`/未知/拡張子なし) は text。
+ * Infer the render format from the extension. `.md`/`.markdown`→markdown, `.json`→code,
+ * everything else (`.txt`/`.log`/unknown/no extension) → text.
  */
 export function inferFileFormat(path: string): FileFormat {
   const ext = extOf(path);
@@ -29,7 +30,7 @@ export function inferFileFormat(path: string): FileFormat {
   return "text";
 }
 
-/** code 形式で Code に渡す lang。拡張子をそのまま言語候補にする (Shiki が alias 解決する)。 */
+/** The lang passed to Code in code format. Uses the extension as-is as the language candidate (Shiki resolves the alias). */
 export function codeLangForPath(path: string): string {
   return extOf(path) || "text";
 }

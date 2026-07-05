@@ -1,11 +1,12 @@
 import type { Setting, SettingPatch } from "@/schema";
 
-// useFont と useTheme が同時 mount して各々取得すると同一 GET が二重に飛ぶ。in-flight の
-// promise を共有して重複を 1 本に畳む (解決後に捨てるので、再訪時の取り直しは従来どおり走る)。
+// If useFont and useTheme mount at the same time and each fetch, the same GET fires
+// twice. Share the in-flight promise to collapse the duplicate into one (it is discarded
+// after resolving, so re-fetching on revisit still runs as before).
 let inflight: Promise<Setting | null> | null = null;
 
-// サーバー (正本) に永続化された設定を取得する。失敗 (storybook 等 API 不在含む) は
-// null を返して呼び出し側の localStorage 既定に委ねる。
+// Fetch the settings persisted on the server (source of truth). On failure (including
+// no API, e.g. storybook), return null and defer to the caller's localStorage default.
 export function fetchSetting(): Promise<Setting | null> {
   if (inflight) return inflight;
   inflight = (async () => {
@@ -22,8 +23,8 @@ export function fetchSetting(): Promise<Setting | null> {
   return inflight;
 }
 
-// 設定の部分更新をサーバーへ送る。localStorage が当 session の即時反映を担保するので、
-// 送信失敗は握る (次回起動時の同期で回復する)。
+// Send a partial settings update to the server. localStorage guarantees the immediate
+// effect for this session, so swallow send failures (recovered by the sync on next startup).
 export async function putSetting(patch: SettingPatch): Promise<void> {
   try {
     await fetch("/api/settings", {
@@ -32,6 +33,6 @@ export async function putSetting(patch: SettingPatch): Promise<void> {
       body: JSON.stringify(patch),
     });
   } catch {
-    // 握る (上記コメントの理由)
+    // swallow (per the comment above)
   }
 }

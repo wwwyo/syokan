@@ -13,16 +13,16 @@ import { cn } from "@/lib/utils";
 export type ViewHeaderProps = {
   sourceLabel?: string;
   onDelete?: () => void;
-  /** 指定すると公開 (Share) 操作を出す */
+  /** When provided, shows the publish (Share) action */
   snapshotId?: string;
-  /** 本文が fullBleed のとき帯の内側も幅制約を外して揃える */
+  /** When the body is fullBleed, drop the width constraint inside the bar too so they align */
   fullBleed?: boolean;
 };
 
-// snapshot のメタ情報 (source / 公開 / 削除操作) を出す viewer 用ヘッダ。
-// catalog 描画 (env.root) の外側のクロムで、schema-driven の render tree には含まれない。
-// 削除は誤操作を避けるため直置きせず ellipsis メニューの中に隠す。
-// 公開 (Share) は発見されるよう flat に置く。
+// The viewer header that surfaces a snapshot's meta info (source / publish / delete action).
+// It is chrome outside the catalog render (env.root) and is not part of the schema-driven render tree.
+// Delete is hidden inside the ellipsis menu rather than placed directly, to avoid accidental clicks.
+// Publish (Share) is placed flat so it is discoverable.
 export function ViewHeader({
   sourceLabel,
   onDelete,

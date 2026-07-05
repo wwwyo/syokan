@@ -31,7 +31,7 @@ const postInputSchema = z
   })
   .strict();
 
-// PUT は idempotencyKey だけ必須にする以外 POST と同形。
+// PUT is identical to POST except it requires idempotencyKey.
 const putInputSchema = postInputSchema.extend({
   idempotencyKey: z.string().min(1),
 });
@@ -60,7 +60,7 @@ async function readJsonBody(req: Request): Promise<
   }
 }
 
-// POST/PUT 共通: body を読んで snapshot schema で検証する。
+// Shared by POST/PUT: read the body and validate it against the snapshot schema.
 async function parseSnapshotBody<T>(
   req: Request,
   schema: z.ZodType<T>,
@@ -108,7 +108,7 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       return snapshotResponse(envelope, 201);
     },
 
-    // 一致が無ければ 404 (AIP-134 の Update の既定。作りたいときは POST を使う)。
+    // 404 if there's no match (AIP-134's Update default; use POST when you want to create).
     async updateSnapshot(req) {
       const body = await parseSnapshotBody(req, putInputSchema);
       if (!body.ok) return body.response;
@@ -153,7 +153,7 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
   };
 }
 
-// catalog は src/catalogs が SSOT。定義済みの type 一覧を毎回そこから導出して返す。
+// The catalog's SSOT is src/catalogs. Derive and return the list of defined types from there every time.
 export function getCatalog(): Response {
   return Response.json({ items: catalogManifest() });
 }
@@ -162,7 +162,7 @@ const templateInputSchema = z
   .object({
     title: z.string().min(1),
     description: z.string().min(1).optional(),
-    // 中身は解釈しない保管庫だが、null/undefined は雛形として無意味なので弾く。
+    // It's a vault that doesn't interpret the contents, but null/undefined is meaningless as a template, so reject it.
     json: z
       .unknown()
       .refine((v) => v !== undefined && v !== null, "json is required"),
@@ -226,7 +226,7 @@ export function createTemplateHandlers(
   };
 }
 
-// 失敗理由を HTTP ステータスに対応づける。client はステータスで状態を分岐する (FR-9〜12)。
+// Map failure reasons to HTTP status codes. The client branches on status (FR-9~12).
 const FILE_FAILURE_STATUS: Record<ReadFileFailure, number> = {
   not_found: 404,
   not_regular_file: 422,
@@ -240,11 +240,11 @@ export type FileApiHandlers = {
   watchFile: (req: Request) => Response;
 };
 
-// ファイル参照ノード (FileDoc) の読み出し + 変更監視。読み出しは GET で本文/エラーを返し、
-// 監視は SSE で「変わった」だけ通知する (内容は client が GET で取り直す)。watcher は
-// server プロセス寿命の runtime state で永続化しない。
-// path query param を取り出して検証する。相対パスは server CWD 依存になり意図しない
-// ファイルを指すため、絶対パスのみ受け付ける (CLI は常に絶対パスを渡す)。
+// File-reference node (FileDoc) read + change watching. The read returns the body/error via GET,
+// and watching notifies only "it changed" over SSE (the client re-fetches the content via GET). Watchers are
+// runtime state scoped to the server process's lifetime — not persisted.
+// Extract and validate the path query param. Relative paths depend on the server CWD and could point
+// at an unintended file, so only absolute paths are accepted (the CLI always passes an absolute path).
 function readPathParam(
   req: Request,
 ): { ok: true; path: string } | { ok: false; response: Response } {
@@ -297,11 +297,11 @@ export function createFileHandlers(watcher: FileWatcher): FileApiHandlers {
             try {
               controller.enqueue(encoder.encode("event: change\ndata: {}\n\n"));
             } catch {
-              // client が既に切断 (enqueue 不可)。cancel が解除を担う。
+              // Client already disconnected (can't enqueue). cancel handles the teardown.
             }
           });
         },
-        // client 切断時に Bun が cancel を呼ぶ → 購読解除 (= watcher の refcount--)。
+        // On client disconnect Bun calls cancel → unsubscribe (= watcher refcount--).
         cancel() {
           unsubscribe?.();
         },
@@ -338,8 +338,8 @@ export function createSettingHandlers(store: SettingStore): SettingApiHandlers {
           issues: formatValidationError(parsed.error),
         });
       }
-      // schema は font を識別子の形だけで通すので、preset 表 (SSOT) の存在確認は
-      // ここで行う。theme(enum) と対称に、未知 font は永続させず 400 を返す。
+      // The schema only checks that font has an identifier shape, so the existence check against
+      // the preset table (SSOT) happens here. Symmetric with theme (enum): an unknown font is not persisted and returns 400.
       if (parsed.data.font !== undefined && !isFontValue(parsed.data.font)) {
         return jsonError(400, {
           error: "validation_failed",

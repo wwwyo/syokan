@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createRouter } from "./router";
 
-// Ctx / Res は汎用なので、テストでは文字列を返す素の router で挙動だけを見る。
+// Ctx / Res are generic, so the test uses a bare router that returns strings and just checks behavior.
 function makeRoute() {
   return createRouter<{ tag: string }, string>({
     commands: [
@@ -47,7 +47,7 @@ describe("createRouter", () => {
   });
 
   test("a command token wins over positional even if a same-named file exists", () => {
-    // `open` は予約語なので fallback ではなく command に行く
+    // `open` is a reserved word, so it goes to the command, not fallback
     expect(makeRoute()(["open"], ctx)).toBe("open(t):");
   });
 

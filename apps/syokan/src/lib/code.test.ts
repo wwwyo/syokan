@@ -32,12 +32,12 @@ describe("resolveCodeInfo", () => {
       lang: "json",
       filename: "hoge.json",
     });
-    // 拡張子をそのまま渡す。py は Shiki の python alias として解決される
+    // pass the extension as-is; py resolves as Shiki's python alias
     expect(resolveCodeInfo("app.py")).toEqual({
       lang: "py",
       filename: "app.py",
     });
-    // 複数ドットは最後の拡張子で解決する
+    // multiple dots resolve on the last extension
     expect(resolveCodeInfo("foo.test.ts")).toEqual({
       lang: "ts",
       filename: "foo.test.ts",

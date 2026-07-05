@@ -19,10 +19,10 @@ export type StackProps = z.infer<typeof stackPropsSchema> & {
 };
 
 /**
- * 子要素を縦 (既定) または横に並べる汎用レイアウト catalog。
- * snapshot は single root のため、複数要素を束ねる root として使うことを想定する。
- * 既定は素の flex stack。resizable=true で境界をドラッグできる ResizablePanelGroup になり、
- * ハンドルは hover 時のみ表示される。
+ * General-purpose layout catalog that arranges children vertically (default) or horizontally.
+ * Since a snapshot has a single root, this is meant to be used as the root that bundles multiple elements.
+ * The default is a plain flex stack. With resizable=true it becomes a ResizablePanelGroup whose
+ * boundaries can be dragged, and the handle appears only on hover.
  */
 export function Stack({
   direction = "vertical",
@@ -34,12 +34,12 @@ export function Stack({
     return (
       <ResizablePanelGroup
         orientation={direction}
-        // 縦分割は panel group に高さが無いと潰れる。横は中身追従で足りるため縦のみ最小高さを与える。
+        // vertical splits collapse if the panel group has no height. Horizontal follows its content, so give a min height only to vertical.
         className={cn(direction === "vertical" && "min-h-[16rem]")}
       >
         {panels.map((panel, index) => (
           <Fragment key={isValidElement(panel) ? (panel.key ?? index) : index}>
-            {/* 線 (bg-border) は常時表示。グリップは境界付近を hover した時だけ出る (ui/resizable.tsx) */}
+            {/* the line (bg-border) is always shown. The grip appears only when hovering near the boundary (ui/resizable.tsx) */}
             {index > 0 ? <ResizableHandle withHandle /> : null}
             <ResizablePanel className="p-4">{panel}</ResizablePanel>
           </Fragment>

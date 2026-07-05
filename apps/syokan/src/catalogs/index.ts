@@ -23,7 +23,7 @@ type ViewComponentEntry<
   TProps extends Record<string, unknown> = Record<string, unknown>,
 > = {
   spec: ComponentSpec<TType, TProps>;
-  // 内部 Map 格納用に widening 済み。TProps の精度は spec 側で保つ
+  // widened for internal Map storage. TProps precision is kept on the spec side
   component: ItemComponent;
 };
 
@@ -46,13 +46,13 @@ function defineViewComponent<
   };
 }
 
-// 各 component を 1 度だけ列挙する。この配列が「LLM が投げられる type」の
-// 唯一の公開マニフェストで、itemSchema / specs / components はここから導出する。
+// enumerate each component exactly once. This array is the single public manifest of "types the LLM
+// can post", and itemSchema / specs / components are derived from it.
 const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Stack", stackPropsSchema, Stack),
   defineViewComponent("Card", cardPropsSchema, Card),
-  // leaf component は children を持たない。childrenTypes: [] で children 混入を
-  // ingest 時に弾く (未指定だと children が黙って捨てられる)。
+  // leaf components have no children. childrenTypes: [] rejects stray children at
+  // ingest time (when unspecified, children are silently dropped).
   defineViewComponent("Heading", headingPropsSchema, Heading, {
     childrenTypes: [],
   }),
@@ -75,7 +75,7 @@ const entries: readonly ViewComponentEntry[] = [
 
 const catalog = createCatalog(entries.map((e) => e.spec));
 
-// itemSchema: validation / specs: type→spec registry (createCatalog が構築済み)
+// itemSchema: validation / specs: type→spec registry (built by createCatalog)
 export const { itemSchema, registry: specs } = catalog;
 
 export const components: ReadonlyMap<string, ItemComponent> = new Map(

@@ -8,13 +8,13 @@ import { t } from "@/lib/i18n";
 import { useColorScheme } from "@/lib/useColorScheme";
 
 const diffCommentSchema = z.object({
-  // 複数ファイル patch で対象ファイルを指定する。新ファイル名 (例 "src/a.ts")、
-  // rename なら旧名でも可。単一ファイルなら省略でき、その唯一のファイルに付く。
-  // 空文字は「指定あり」だが何にもマッチしないため弾く (省略したいなら未指定にする)。
+  // Specifies the target file in a multi-file patch. The new filename (e.g. "src/a.ts"),
+  // or the old name for a rename. Omittable for a single file, where it attaches to that sole file.
+  // An empty string is "specified" but matches nothing, so it's rejected (leave it unspecified to omit).
   file: z.string().min(1).optional(),
-  // 旧ファイル側 (deletions) か新ファイル側 (additions) か。LLM には old/new の方が直感的。
+  // The old-file side (deletions) or the new-file side (additions). old/new is more intuitive for the LLM.
   side: z.enum(["old", "new"]),
-  // 対象 side の行番号 (diff の gutter に出る番号)。patch に含まれる行のみ指定可。
+  // The line number on the target side (the number in the diff's gutter). Only lines present in the patch are valid.
   line: z.number().int().positive(),
   body: z.string(),
   author: z.string().optional(),
@@ -34,8 +34,8 @@ type DiffCommentInput = z.infer<typeof diffCommentSchema>;
 type CommentMeta = { body: string; author?: string };
 
 /**
- * 指定ファイルに属する comment を抽出する。file 指定があれば新名/旧名で照合し、
- * 未指定の comment は単一ファイル時のみ (唯一のファイルに) 適用する。
+ * Extracts the comments belonging to the given file. If file is specified, match against the
+ * new/old name; a comment without file applies only when there is a single file (to that sole file).
  */
 export function commentsForFile(
   comments: readonly DiffCommentInput[] | undefined,
@@ -50,8 +50,8 @@ export function commentsForFile(
 }
 
 /**
- * catalog の comment (old/new 表記) を pierre の DiffLineAnnotation に変換する。
- * old=deletions(旧ファイル側) / new=additions(新ファイル側) のマッピングはここに集約する。
+ * Converts catalog comments (old/new notation) into pierre's DiffLineAnnotation.
+ * The mapping old=deletions (old-file side) / new=additions (new-file side) is consolidated here.
  */
 export function toLineAnnotations(
   comments: readonly DiffCommentInput[] | undefined,
@@ -64,9 +64,9 @@ export function toLineAnnotations(
 }
 
 /**
- * 行コメント1件の表示。annotation は light DOM に slot されるので Tailwind がそのまま効く。
- * diff の行 (全幅・github テーマ色) と区別するため、インセットしたカード + アイコンで
- * 「コード行ではない挿入物」と分かる見た目にする。
+ * Renders a single line comment. The annotation is slotted into the light DOM, so Tailwind applies directly.
+ * To distinguish it from diff lines (full-width, github theme colors), an inset card + icon makes it
+ * read as "an insertion that is not a code line".
  */
 function DiffComment({ body, author }: CommentMeta) {
   return (
@@ -80,21 +80,21 @@ function DiffComment({ body, author }: CommentMeta) {
   );
 }
 
-// props 非依存なので毎レンダリングの再生成を避けてトップレベルに巻き上げる
+// props-independent, so hoisted to the top level to avoid recreating it on every render
 const renderDiffAnnotation = (a: DiffLineAnnotation<CommentMeta>) => (
   <DiffComment {...a.metadata} />
 );
 
 /**
- * patch 文字列 (gh / git 由来) を描画する。`parsePatchFiles` で 1..N ファイルに分解し、
- * ファイルごとに pierre の FileDiff (filename ヘッダ付き) を縦に積む。filename / rename は
- * patch から自動抽出される。comments は対象ファイル・対象行にインライン表示する
- * (patch に含まれる行のみ対象)。
+ * Renders a patch string (from gh / git). Splits it into 1..N files via `parsePatchFiles` and
+ * stacks a pierre FileDiff (with a filename header) vertically per file. filename / rename are
+ * auto-extracted from the patch. Comments are shown inline at the target file and target line
+ * (only lines present in the patch are eligible).
  */
 export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
   const themeType = useColorScheme();
-  // patch のフルパースは重いので patch 変化時のみ実行する。複数 commit を含む patch は
-  // 各 commit の files を平坦化する (commit 境界は持たないので同名ファイルは複数回出る)。
+  // Fully parsing the patch is expensive, so run it only when patch changes. For a patch spanning
+  // multiple commits, flatten each commit's files (commit boundaries aren't kept, so a same-named file appears multiple times).
   const parsedFiles = useMemo(
     () => parsePatchFiles(patch).flatMap((p) => p.files),
     [patch],
@@ -107,14 +107,14 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
       for (const c of fileComments) assigned.add(c);
       return { file, annotations: toLineAnnotations(fileComments) };
     });
-    // どのファイルにも割り当たらなかった comment。黙って消すと producer が
-    // 表示されたと誤認するため、件数を可視化する。
+    // Comments assigned to no file. Dropping them silently would make the producer think
+    // they were shown, so surface the count.
     const unassigned = (comments ?? []).filter((c) => !assigned.has(c));
     return { files, unassigned };
   }, [parsedFiles, comments]);
   const options = useMemo(
     () => ({
-      // app の Code (github-light/dark) と syntax color を揃える
+      // Match syntax colors with the app's Code (github-light/dark)
       theme: { dark: "github-dark", light: "github-light" },
       themeType,
       diffStyle,
@@ -137,12 +137,12 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
     <div data-slot="diff" className="my-4 space-y-4">
       {files.map(({ file, annotations }, i) => (
         <div
-          // name は重複しうる (rename 等) ため index も混ぜて安定させる
+          // name can collide (renames etc.), so mix in index to keep it stable
           key={`${file.name}-${i}`}
           className="overflow-hidden rounded-lg border border-border"
         >
-          {/* FileDiff は壊れた metadata で render 中に throw しうる。1 ファイルの
-              失敗が全体を巻き込まないようファイル単位で境界に包む。 */}
+          {/* FileDiff can throw mid-render on broken metadata. Wrap each file in a boundary
+              so one file's failure doesn't take down the whole thing. */}
           <ErrorBoundary
             fallback={
               <div className="px-4 py-3 text-sm text-muted-foreground">

@@ -16,7 +16,7 @@ describe("Time", () => {
     const html = renderToString(
       createElement(Time, { datetime: "2026-05-21T03:04:00Z" }),
     );
-    // formatDateTime は "YYYY-MM-DD HH:mm" (T/Z を含まない)。TZ 依存を避け形式のみ検証
+    // formatDateTime is "YYYY-MM-DD HH:mm" (no T/Z). Verify only the format, avoiding TZ dependence
     expect(html).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
     expect(html).not.toContain("T03:04:00Z<");
   });

@@ -12,16 +12,16 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// 旧 ArticleCard 相当を Card + Heading(href) + Text(muted) の合成で表現する。
+// Express the old ArticleCard equivalent by composing Card + Heading(href) + Text(muted).
 export const ArticleLike: Story = {
   render: () => (
     <Card>
       <Heading
-        text="Bun 1.3 がリリースされました"
+        text="Bun 1.3 has been released"
         level={3}
         href="https://bun.sh/blog/bun-v1.3"
       />
-      <Text body="HTML import の安定化と dev server の改善。" muted />
+      <Text body="Stabilized HTML import and dev server improvements." muted />
     </Card>
   ),
 };

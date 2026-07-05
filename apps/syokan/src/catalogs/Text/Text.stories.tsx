@@ -10,11 +10,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Plain: Story = { args: { body: "通常の短文テキスト。" } };
-export const Muted: Story = { args: { body: "淡色の補足テキスト。", muted: true } };
+export const Plain: Story = { args: { body: "A regular short line of text." } };
+export const Muted: Story = {
+  args: { body: "Dimmed supplementary text.", muted: true },
+};
 export const Clamped: Story = {
   args: {
-    body: "とても長いテキストをここに置くと 3 行で省略される。".repeat(8),
+    body: "Placing a very long piece of text here gets clamped to 3 lines. ".repeat(8),
     clamp: true,
   },
 };

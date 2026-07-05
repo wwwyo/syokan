@@ -13,22 +13,22 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// Fragment で束ねると Children.toArray が子 1 個と数え panel が潰れる。
-// 実アプリの Render は children を配列で渡すため、story も個別 child で再現する。
+// bundling with a Fragment makes Children.toArray count a single child and collapse the panels.
+// The real app's Render passes children as an array, so the story reproduces that with separate children.
 const paneA = (
   <Card>
-    <Heading text="左 / 上" level={3} />
-    <Text body="段落 A の本文。" muted />
+    <Heading text="Left / Top" level={3} />
+    <Text body="Body of paragraph A." muted />
   </Card>
 );
 const paneB = (
   <Card>
-    <Heading text="右 / 下" level={3} />
-    <Text body="段落 B の本文。" muted />
+    <Heading text="Right / Bottom" level={3} />
+    <Text body="Body of paragraph B." muted />
   </Card>
 );
 
-// 既定: 素の flex stack (resizable なし)
+// default: a plain flex stack (not resizable)
 export const Default: Story = {
   args: { direction: "vertical" },
   render: (args) => (
@@ -39,7 +39,7 @@ export const Default: Story = {
   ),
 };
 
-// 横並び (resizable)。ハンドルは境界付近を hover した時のみ表示される
+// horizontal (resizable). The handle appears only when hovering near the boundary
 export const ResizableHorizontal: Story = {
   args: { direction: "horizontal", resizable: true },
   render: (args) => (
@@ -50,7 +50,7 @@ export const ResizableHorizontal: Story = {
   ),
 };
 
-// 縦並び (resizable)
+// vertical (resizable)
 export const ResizableVertical: Story = {
   args: { direction: "vertical", resizable: true },
   render: (args) => (

@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ThemeSelect } from ".";
 
-// ThemeSelect は localStorage("syokan:theme") を読み書きし <html>.dark を直接トグルする。
-// story 上で押すと実際に doc のテーマが切り替わる (Storybook の theme toolbar と同じ面を触る)。
+// ThemeSelect reads/writes localStorage("syokan:theme") and toggles <html>.dark directly.
+// Pressing it in a story actually switches the document's theme (touching the same surface as Storybook's theme toolbar).
 const meta = {
   title: "Components/ThemeSelect",
   component: ThemeSelect,

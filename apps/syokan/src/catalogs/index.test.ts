@@ -13,8 +13,8 @@ import { Stack } from "./Stack";
 import { Text } from "./Text";
 import { Time } from "./Time";
 
-// Map に格納された component は ItemComponent に widening 済み。
-// テスト側では識別性 (=== 比較) のみ意味があるので同型へ寄せる。
+// components stored in the Map are widened to ItemComponent.
+// On the test side only identity (=== comparison) matters, so coerce to the same type.
 const asItem = (c: unknown) => c as ItemComponent;
 
 describe("catalog", () => {

@@ -9,16 +9,16 @@ export type CopyButtonProps = {
 };
 
 /**
- * modern clipboard API でコピーし、拒否された場合は legacy execCommand に fallback する。
- * storybook の nested iframe (permissions policy / フォーカス) や非 HTTPS など、
- * clipboard API が reject する文脈でもコピーを成立させ、true を返す。
+ * Copy via the modern clipboard API, falling back to the legacy execCommand if rejected.
+ * Even in contexts where the clipboard API rejects — Storybook's nested iframe (permissions
+ * policy / focus), non-HTTPS, etc. — this still gets the copy done and returns true.
  */
 async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    // modern API が使えない/拒否された → legacy にフォールバック
+    // modern API unavailable/rejected → fall back to legacy
   }
   try {
     const ta = document.createElement("textarea");
@@ -35,9 +35,9 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-// 生の code をコピーし、成功したら 1.5s だけチェックマークに切り替える。
-// 出現 (hover/focus) と配置 (absolute / flex 行内) は呼び出し側が className で決める。
-// Code 専用の内部サブパーツ。
+// Copies the raw code and, on success, switches to a checkmark for just 1.5s.
+// Reveal (hover/focus) and placement (absolute / inside a flex row) are decided by the caller via className.
+// An internal subpart specific to Code.
 export function CopyButton({ code, className }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
