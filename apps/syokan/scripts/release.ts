@@ -31,12 +31,12 @@ for (const [i, c] of choices.entries()) {
 
 const choice = choices[Number(prompt("\nselect bump [1-3]:")) - 1];
 if (!choice) {
-  console.error("aborted: 無効な選択");
+  console.error("aborted: invalid selection");
   process.exit(1);
 }
 
 const nextVersion = bumped(pkg.version, choice.key);
-if (prompt(`\nv${pkg.version} → v${nextVersion} で bump して push? [y/N]:`)?.trim().toLowerCase() !== "y") {
+if (prompt(`\nbump v${pkg.version} → v${nextVersion} and push? [y/N]:`)?.trim().toLowerCase() !== "y") {
   console.log("aborted");
   process.exit(0);
 }
@@ -46,7 +46,7 @@ if (prompt(`\nv${pkg.version} → v${nextVersion} で bump して push? [y/N]:`)
 // make the commit and tag explicitly from the root. That also loses the built-in dirty-tree guard, so check it ourselves.
 const dirty = (await $`git status --porcelain`.text()).trim();
 if (dirty) {
-  console.error("aborted: working tree が dirty です");
+  console.error("aborted: working tree is dirty");
   process.exit(1);
 }
 const tag = `v${nextVersion}`;
@@ -54,4 +54,4 @@ await $`bun pm version --no-git-tag-version ${choice.key}`;
 await $`git commit -am ${tag}`;
 await $`git tag ${tag}`;
 await $`git push --follow-tags`;
-console.log(`\n✓ ${tag} を push。CI が release を publish します。`);
+console.log(`\n✓ pushed ${tag}. CI will publish the release.`);

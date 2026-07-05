@@ -14,5 +14,5 @@ export const httpUrl = z.url().refine(
       return false;
     }
   },
-  { message: "http(s) の URL のみ許可されます" },
+  { message: "Only http(s) URLs are allowed" },
 );
