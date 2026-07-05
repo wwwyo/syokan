@@ -188,14 +188,17 @@ describe("share routes", () => {
   });
 
   describe("POST /api/snapshots/:id/publish", () => {
-    test("materializes FileDoc, posts the frozen envelope with a bearer token, and relays the 201", async () => {
-      const filePath = join(dir, "notes.md");
-      await writeFile(filePath, "# frozen");
+    test("materializes TreeDoc, posts the frozen envelope with a bearer token, and relays the 201", async () => {
+      const filePath = join(dir, "tree.json");
+      await writeFile(
+        filePath,
+        JSON.stringify({ type: "Text", props: { body: "frozen" } }),
+      );
       const env = await store.create({
         root: {
           type: "Stack",
           props: {},
-          children: [{ type: "FileDoc", props: { path: filePath } }],
+          children: [{ type: "TreeDoc", props: { path: filePath } }],
         },
       });
       await loginDirectly("tok-1");
@@ -230,10 +233,10 @@ describe("share routes", () => {
       expect(body.sourceSnapshotId).toBe(env.id);
       expect(body.expiresIn).toBe(3600);
       expect(body.envelope.id).toBe(env.id);
-      // The FileDoc is frozen into a concrete node with its content at publish time
+      // The TreeDoc is frozen into its referenced subtree at publish time
       expect(body.envelope.root.children[0]).toEqual({
-        type: "MarkdownDoc",
-        props: { body: "# frozen" },
+        type: "Text",
+        props: { body: "frozen" },
       });
     });
 
@@ -267,10 +270,10 @@ describe("share routes", () => {
       expect(((await res.json()) as { error: string }).error).toBe("not_found");
     });
 
-    test("unreadable FileDoc -> 422 materialize_failed with path + reason; worker is not called", async () => {
-      const missing = join(dir, "gone.md");
+    test("unreadable TreeDoc -> 422 materialize_failed with path + reason; worker is not called", async () => {
+      const missing = join(dir, "gone.json");
       const env = await store.create({
-        root: { type: "FileDoc", props: { path: missing } },
+        root: { type: "TreeDoc", props: { path: missing } },
       });
       await loginDirectly();
       const { stub, calls } = makeWorkerFetch(() => Response.json({}));

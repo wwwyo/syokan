@@ -4,14 +4,14 @@ import { Badge } from "./Badge";
 import { Card } from "./Card";
 import { Code } from "./Code";
 import { Diff } from "./Diff";
-import { FileDoc } from "./FileDoc";
 import { Heading } from "./Heading";
 import { Link } from "./Link";
-import { MarkdownDoc } from "./MarkdownDoc";
+import { Mermaid } from "./Mermaid";
 import { PlainText } from "./PlainText";
 import { Stack } from "./Stack";
 import { Text } from "./Text";
 import { Time } from "./Time";
+import { TreeDoc } from "./TreeDoc";
 
 // components stored in the Map are widened to ItemComponent.
 // On the test side only identity (=== comparison) matters, so coerce to the same type.
@@ -25,11 +25,12 @@ describe("catalog", () => {
     expect(specs.get("Link")?.type).toBe("Link");
     expect(specs.get("Text")?.type).toBe("Text");
     expect(specs.get("Time")?.type).toBe("Time");
-    expect(specs.get("MarkdownDoc")?.type).toBe("MarkdownDoc");
     expect(specs.get("PlainText")?.type).toBe("PlainText");
     expect(specs.get("Diff")?.type).toBe("Diff");
     expect(specs.get("Code")?.type).toBe("Code");
     expect(specs.get("Badge")?.type).toBe("Badge");
+    expect(specs.get("Mermaid")?.type).toBe("Mermaid");
+    expect(specs.get("TreeDoc")?.type).toBe("TreeDoc");
   });
 
   test("itemSchema parses a Card containing Heading/Text children", () => {
@@ -60,13 +61,14 @@ describe("catalog", () => {
     expect(components.get("Link")).toBe(asItem(Link));
     expect(components.get("Text")).toBe(asItem(Text));
     expect(components.get("Time")).toBe(asItem(Time));
-    expect(components.get("MarkdownDoc")).toBe(asItem(MarkdownDoc));
     expect(components.get("PlainText")).toBe(asItem(PlainText));
     expect(components.get("Diff")).toBe(asItem(Diff));
     expect(components.get("Code")).toBe(asItem(Code));
     expect(components.get("Badge")).toBe(asItem(Badge));
-    expect(components.get("FileDoc")).toBe(asItem(FileDoc));
-    expect(components.get("Missing")).toBeUndefined();
+    expect(components.get("Mermaid")).toBe(asItem(Mermaid));
+    expect(components.get("TreeDoc")).toBe(asItem(TreeDoc));
+    expect(components.get("MarkdownDoc")).toBeUndefined();
+    expect(components.get("FileDoc")).toBeUndefined();
     expect(components.size).toBe(12);
   });
 
@@ -144,14 +146,43 @@ describe("catalog", () => {
     expect(result.success).toBe(false);
   });
 
-  test("MarkdownDoc requires a body string", () => {
-    const ok = itemSchema.safeParse({
-      type: "MarkdownDoc",
-      props: { body: "# title" },
-    });
-    expect(ok.success).toBe(true);
-    const missing = itemSchema.safeParse({ type: "MarkdownDoc", props: {} });
-    expect(missing.success).toBe(false);
+  test("MarkdownDoc / FileDoc are no longer accepted (removed types)", () => {
+    expect(
+      itemSchema.safeParse({ type: "MarkdownDoc", props: { body: "# title" } })
+        .success,
+    ).toBe(false);
+    expect(
+      itemSchema.safeParse({ type: "FileDoc", props: { path: "/a/notes.md" } })
+        .success,
+    ).toBe(false);
+  });
+
+  test("Mermaid requires a code string and is strict", () => {
+    expect(
+      itemSchema.safeParse({ type: "Mermaid", props: { code: "graph TD; A-->B" } })
+        .success,
+    ).toBe(true);
+    expect(itemSchema.safeParse({ type: "Mermaid", props: {} }).success).toBe(
+      false,
+    );
+    expect(
+      itemSchema.safeParse({ type: "Mermaid", props: { code: "x", theme: "d" } })
+        .success,
+    ).toBe(false);
+  });
+
+  test("TreeDoc requires an absolute path and is strict", () => {
+    expect(
+      itemSchema.safeParse({ type: "TreeDoc", props: { path: "/a/tree.json" } })
+        .success,
+    ).toBe(true);
+    expect(
+      itemSchema.safeParse({ type: "TreeDoc", props: { path: "tree.json" } })
+        .success,
+    ).toBe(false);
+    expect(itemSchema.safeParse({ type: "TreeDoc", props: {} }).success).toBe(
+      false,
+    );
   });
 
   test("PlainText requires a body string and is strict", () => {
@@ -220,11 +251,12 @@ describe("catalog", () => {
     expect(withChild("Text", { body: "x" })).toBe(false);
     expect(withChild("Time", { datetime: "2026-05-21T03:04:00Z" })).toBe(false);
     expect(withChild("Link", { href: "https://example.com/" })).toBe(false);
-    expect(withChild("MarkdownDoc", { body: "x" })).toBe(false);
     expect(withChild("PlainText", { body: "x" })).toBe(false);
     expect(withChild("Diff", { patch: "diff" })).toBe(false);
     expect(withChild("Code", { code: "x" })).toBe(false);
     expect(withChild("Badge", { text: "x" })).toBe(false);
+    expect(withChild("Mermaid", { code: "graph TD; A-->B" })).toBe(false);
+    expect(withChild("TreeDoc", { path: "/a/tree.json" })).toBe(false);
   });
 
   test("Badge requires text, is strict, and constrains variant", () => {

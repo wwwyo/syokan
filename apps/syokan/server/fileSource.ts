@@ -1,7 +1,7 @@
 import { type FSWatcher, watch } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 
-// Enough for viewing markdown / logs, but caps out so a huge file can't freeze the browser. Over the limit, the body is not returned.
+// Enough for a catalog tree JSON, but caps out so a huge file can't freeze the browser. Over the limit, the body is not returned.
 export const FILE_SIZE_LIMIT = 2 * 1024 * 1024;
 
 // Grace period between a view closing and the watcher being released. A reload drops the SSE and

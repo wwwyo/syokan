@@ -1,6 +1,6 @@
 # syokan
 
-**syokan (召喚, "summon") is a verb.** An LLM speaks a JSON incantation, and a rich, living interface appears — no JSX written, no build step. Typing `syokan notes.md` reads literally as "syokan notes.md": the command itself is the incantation. Views are ephemeral — summoned when needed, they fade; nothing is hoarded. Under the hood this is a schema-driven renderer: data pulled from multiple repositories, external APIs, and the filesystem is rendered for humans through predefined React components. LLMs (Claude Code / scheduled agents / CLI) **post a JSON tree only** — no per-view JSX is ever generated.
+**syokan (召喚, "summon") is a verb.** An LLM speaks a JSON incantation, and a rich, living interface appears — no JSX written, no build step. Typing `syokan dashboard.json` reads literally as "syokan dashboard.json": the command itself is the incantation. Views are ephemeral — summoned when needed, they fade; nothing is hoarded. Under the hood this is a schema-driven renderer: data pulled from multiple repositories, external APIs, and the filesystem is rendered for humans through predefined React components. LLMs (Claude Code / scheduled agents / CLI) **post a JSON tree only** — no per-view JSX is ever generated.
 
 > **Setup and usage (the `POST /api/snapshots` envelope schema / source.label spec / catalog type list) live in [README.md](./README.md); CLI commands live in `syokan --help` (machine-readable via `--help --json`) — those are the SSOT.** This AGENTS.md covers design judgments (why) and development conventions (how to change things).
 
@@ -12,7 +12,7 @@ The data I want to look at is scattered around me:
 
 - Today's RSS feed (a daily input markdown)
 - An in-progress code review (diff fetched via `gh` + my own comments)
-- Meeting-notes markdown shared at work (I just want to open and read it on the spot)
+- Meeting-notes markdown shared at work (an LLM structures it into a catalog tree on the spot)
 - Today's Calendar / TODO
 - Re-reading an article I saved somewhere
 
@@ -99,13 +99,13 @@ The input path is not fixed to any one of MCP / CLI / HTTP / paste. Everything i
 
 ### File-backed view (file-reference node)
 
-Display a local file (markdown / log / json ...) by "just handing it over", with the view following edits to the source file. The file reference is confined to **a single catalog node (`FileDoc`)**, not the envelope or store level. This way the snapshot envelope carries only a catalog tree as before, and the store gives no special treatment to "snapshots that reference files". "When to re-read" becomes the `FileDoc` component's responsibility, and it can coexist in a snapshot with ordinary catalog nodes.
+Live-sync a catalog tree JSON file by "just handing over the path", with the view following edits to the source file (an LLM rewrites the file; the view keeps up without re-posting). The file reference is confined to **a single catalog node (`TreeDoc`)**, not the envelope or store level. This way the snapshot envelope carries only a catalog tree as before, and the store gives no special treatment to "snapshots that reference files". "When to re-read" becomes the `TreeDoc` component's responsibility, and it can coexist in a snapshot with ordinary catalog nodes. Input is catalog trees only: **markdown is deliberately not rendered** — a second expression path would let LLMs bypass structuring and mask catalog gaps (history: `.agent/prd/json-only-view/`; the removed predecessor node `FileDoc` rendered md/text/code by extension, `.agent/prd/file-source-sync/`).
 
-- **Rendering**: `FileDoc` reads the path (absolute) in its props via the server, infers the format from the extension, and delegates to the existing MarkdownDoc / PlainText / Code (the first catalog component that fetches data). The inference rules have `src/lib/fileFormat.ts` as SSOT (`.md`/`.markdown`→markdown, `.json`→code, everything else→text).
+- **Rendering**: `TreeDoc` reads the path (absolute, no URLs) in its props via the server, then the client parses + validates it as a catalog tree and renders it as a subtree. Interpretation rules (parse / schema validation / the nested-TreeDoc ban) have `src/lib/treeSource.ts` as SSOT, shared with publish-time freezing (`server/materialize.ts`). Nesting a `TreeDoc` inside a synced tree is rejected outright — banning nesting removes cycles and unbounded expansion by construction. A mid-write invalid save keeps the last valid render with an unobtrusive error (the view never blanks while an LLM is writing).
 - **Forward sync**: the server watches the file and, on change, notifies only "it changed" via SSE (`/api/files/watch`). The client re-fetches the content with `GET /api/files`. Errors for missing / oversized / binary / non-regular files ride plainly on HTTP status codes (404/413/415/422/403); content is not pushed over SSE so that initial mount and updates share a single read path.
 - **watcher = f(subscription)**: watching is connection-scoped runtime state, never persisted. Opening/closing the SSE connection is the subscription; watchers are armed/released via a per-path refcount. After a server restart, watchers are re-armed by client reconnection (independent of the store).
-- **CLI auto-wrap**: `syokan <path>` posts as-is if the file is envelope JSON; otherwise it auto-wraps it in a `FileDoc` (the sole exception to the previous rule "the CLI does not wrap text"). The dedup identifier is the absolute path, riding the existing idempotency mechanism (no store changes).
-- **Ephemeral principle**: file contents are never brought into the envelope/store. A file-backed snapshot differs in lifecycle from conventional snapshots in that its reproducibility depends on the source file, but this difference is accepted to preserve the principle. The trust boundary is the localhost bind + user permissions; no allowlist is imposed on file reads. Judgment and history: `.agent/prd/file-source-sync/` (prd.md / decision.log).
+- **CLI auto-wrap**: `syokan <path>` posts as-is if the file is envelope JSON; a bare catalog tree is auto-wrapped in a `TreeDoc`; anything else (non-JSON included) is rejected with `unsupported_input`. The dedup identifier is the absolute path, riding the existing idempotency mechanism (no store changes).
+- **Ephemeral principle**: file contents are never brought into the envelope/store. A file-backed snapshot differs in lifecycle from conventional snapshots in that its reproducibility depends on the source file, but this difference is accepted to preserve the principle. The trust boundary is the localhost bind + user permissions; no allowlist is imposed on file reads. Judgment and history: `.agent/prd/json-only-view/` and `.agent/prd/file-source-sync/` (prd.md / decision.log).
 
 ## Directory structure
 
@@ -123,7 +123,7 @@ syokan/                      # bun workspace root (package "syokan-workspace"): 
 │   │   ├── lib/             # cross-cutting utils (paths=XDG 3-way (config/data/state) resolution / cn / date / code / snapshots ...)
 │   │   ├── catalogs/        # ★ public types LLMs post as JSON. index.ts is the registry; manifest.ts JSON-Schemas it for GET /api/catalog
 │   │   └── components/      # internal UI not registered in the catalog (ui=shadcn / AppShell / AppSidebar / PageLayout ...)
-│   ├── server/             # Bun.serve (127.0.0.1 bind). routes.ts=/api/{snapshots,catalog,templates,settings,files}, store.ts=snapshots (ephemeral), templates.ts=template storage (persistent), setting.ts=display-settings singleton (persistent), fileSource.ts=file reads + change watching (connection-scoped runtime state), share.ts=publish/auth proxy to the share Worker (token holder; a Hono sub-app mounted in Bun.serve — the FE calls it via hc with the exported ShareAppType, so the FE depends only on its own server's contract, never on apps/share directly), materialize.ts=FileDoc freezing at publish
+│   ├── server/             # Bun.serve (127.0.0.1 bind). routes.ts=/api/{snapshots,catalog,templates,settings,files}, store.ts=snapshots (ephemeral), templates.ts=template storage (persistent), setting.ts=display-settings singleton (persistent), fileSource.ts=file reads + change watching (connection-scoped runtime state), share.ts=publish/auth proxy to the share Worker (token holder; a Hono sub-app mounted in Bun.serve — the FE calls it via hc with the exported ShareAppType, so the FE depends only on its own server's contract, never on apps/share directly), materialize.ts=TreeDoc freezing at publish
 │   └── .storybook/         # visual review base for the catalog
 ├── apps/share/             # bun workspace package (@syokan/share): the public-share Cloudflare Worker (worker.ts=Hono /api/v1/*, hc<AppType> RPC types), viewer/ (share page + landing SPA), wrangler.jsonc. Deploys independently (`bun run deploy:share`). viewer imports apps/syokan/src/catalogs + Render.tsx directly — a deliberate coupling so catalog and viewer share one deploy unit (no schema drift). Design/history: .agent/prd/public-share/
 └── skills/syokan/          # ★ SSOT of the syokan skill for LLMs. Bundled in the repo for distribution; the dotfiles side (.agents/skills/) is an installed copy. Always edit here when fixing the skill
@@ -175,7 +175,7 @@ The global tool is **a single executable** (`bun run compile` → `apps/syokan/d
 
 ### Catalog `Code` / `Diff` collapse in dev (StrictMode)
 
-`@pierre/diffs`' `File` (the catalog's `Code` / `Diff`, plus the code fences of `MarkdownDoc`, which delegates to `Code`) **collapses to height 0 on first render in `bun run dev` (React StrictMode) when the grammar is cold**. Easy to hit inside tabs or on client transitions (the home "usage" tab is deterministic; ViewPage is intermittent).
+`@pierre/diffs`' `File` (the catalog's `Code` / `Diff`) **collapses to height 0 on first render in `bun run dev` (React StrictMode) when the grammar is cold**. Easy to hit inside tabs or on client transitions (ViewPage is intermittent; the home "usage" tab used to be deterministic before it moved to `CodeSnippet`).
 
 - **Cause**: on a cold first render, File emits an empty placeholder (height 0) and swaps in the body via a re-render callback when async highlighting completes. Under StrictMode's mount→unmount→remount, that callback lands on the old instance, already `cleanUp`'d (`enabled=false`) at unmount, becoming a no-op — so it stays collapsed.
 - **Dev-only impact**. Warm (grammar cached) renders and production builds (StrictMode disabled) render fine. `disableWorkerPool` / delayed mount / removing the ResizeObserver patch / changing the default tab all fail (the core is async callback × lifecycle).
@@ -184,7 +184,7 @@ The global tool is **a single executable** (`bun run compile` → `apps/syokan/d
 
 ### Bun (macOS) `fs.watch`: watching a parent directory does not fire on content changes inside it
 
-Hit while implementing `FileDoc`'s change watching (`server/fileSource.ts`).
+Hit while implementing the file-reference node's change watching (`server/fileSource.ts`; then `FileDoc`, now `TreeDoc`).
 
 - **The pitfall**: a "write temp → rename" save (editors' common atomic save) swaps the target file's inode, so a naive `fs.watch(path)` loses track of changes after the swap. The textbook fix is "watch the parent directory and filter by basename", but on **Bun (macOS), `fs.watch(dir)` does not fire on content changes of files inside it** — verified on a real machine (dir watch is unusable).
 - **Policy**: watch the file itself; on a `rename` event (the signal for inode swap/deletion), re-arm a watch on the same path. If the replacement hasn't appeared yet, retry with a cap. This follows "rename save → subsequent in-place writes".

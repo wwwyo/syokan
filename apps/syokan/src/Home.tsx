@@ -1,10 +1,28 @@
-import { MarkdownDoc } from "./catalogs/MarkdownDoc";
 import { SidebarToggle } from "./components/AppSidebar/SidebarToggle";
+import { CodeSnippet } from "./components/CodeSnippet";
 import { FontSelect } from "./components/FontSelect";
 import { PageLayout } from "./components/PageLayout";
 import { ThemeSelect } from "./components/ThemeSelect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { t } from "./lib/i18n";
+
+function UsageSection({
+  title,
+  body,
+  code,
+}: {
+  title: string;
+  body: string;
+  code: string;
+}) {
+  return (
+    <section>
+      <h2 className="mb-3 mt-6 text-2xl font-semibold tracking-tight">{title}</h2>
+      <p className="my-3 leading-7">{body}</p>
+      <CodeSnippet code={code} />
+    </section>
+  );
+}
 
 export function Home() {
   return (
@@ -51,7 +69,29 @@ export function Home() {
         </TabsContent>
 
         <TabsContent value="usage">
-          <MarkdownDoc body={t.home.usageDoc} />
+          <UsageSection
+            title={t.home.usage.step1Title}
+            body={t.home.usage.step1Body}
+            code={t.home.usage.step1Code}
+          />
+          <p className="my-3 leading-7">{t.home.usage.responseLabel}</p>
+          <CodeSnippet code={t.home.usage.responseCode} />
+          <UsageSection
+            title={t.home.usage.step2Title}
+            body={t.home.usage.step2Body}
+            code={t.home.usage.step2Code}
+          />
+          <UsageSection
+            title={t.home.usage.step3Title}
+            body={t.home.usage.step3Body}
+            code={t.home.usage.step3Code}
+          />
+          <section>
+            <h2 className="mb-3 mt-6 text-2xl font-semibold tracking-tight">
+              {t.home.usage.typesTitle}
+            </h2>
+            <p className="my-3 leading-7">{t.home.usage.typesBody}</p>
+          </section>
         </TabsContent>
       </Tabs>
     </PageLayout>

@@ -16,91 +16,109 @@ describe("materializeTree", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  test("FileDoc for .md becomes MarkdownDoc with the file body", async () => {
-    const path = join(dir, "notes.md");
-    await writeFile(path, "# hi\n\nbody");
+  test("TreeDoc freezes into the referenced subtree", async () => {
+    const path = join(dir, "dashboard.json");
+    await writeFile(
+      path,
+      JSON.stringify({
+        type: "Stack",
+        props: {},
+        children: [{ type: "Text", props: { body: "frozen" } }],
+      }),
+    );
     const result = await materializeTree({
-      type: "FileDoc",
-      props: { path },
-    });
-    expect(result).toEqual({
-      ok: true,
-      root: { type: "MarkdownDoc", props: { body: "# hi\n\nbody" } },
-    });
-  });
-
-  test("FileDoc for .json becomes Code with lang/filename derived from the path", async () => {
-    const path = join(dir, "config.json");
-    await writeFile(path, '{"a":1}');
-    const result = await materializeTree({
-      type: "FileDoc",
+      type: "TreeDoc",
       props: { path },
     });
     expect(result).toEqual({
       ok: true,
       root: {
-        type: "Code",
-        props: { code: '{"a":1}', lang: "json", filename: "config.json" },
+        type: "Stack",
+        props: {},
+        children: [{ type: "Text", props: { body: "frozen" } }],
       },
     });
   });
 
-  test("FileDoc for .log becomes PlainText", async () => {
-    const path = join(dir, "run.log");
-    await writeFile(path, "line1\nline2");
-    const result = await materializeTree({
-      type: "FileDoc",
-      props: { path },
-    });
-    expect(result).toEqual({
-      ok: true,
-      root: { type: "PlainText", props: { body: "line1\nline2" } },
-    });
-  });
-
-  test("a nested FileDoc is materialized in place; key is preserved", async () => {
-    const path = join(dir, "doc.md");
-    await writeFile(path, "# nested");
+  test("a nested TreeDoc node is materialized in place; key is preserved", async () => {
+    const path = join(dir, "sub.json");
+    await writeFile(path, JSON.stringify({ type: "Text", props: { body: "sub" } }));
     const tree: Item = {
       type: "Stack",
       props: {},
       children: [
         { type: "Heading", props: { text: "T" } },
-        { type: "FileDoc", props: { path }, key: "k1" },
+        { type: "TreeDoc", props: { path }, key: "k1" },
       ],
     };
     const result = await materializeTree(tree);
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("unreachable");
     expect(result.root.children?.[1]).toEqual({
-      type: "MarkdownDoc",
-      props: { body: "# nested" },
+      type: "Text",
+      props: { body: "sub" },
       key: "k1",
     });
   });
 
   test("a single read failure fails the whole tree with path + reason", async () => {
-    const missing = join(dir, "gone.md");
-    const okPath = join(dir, "ok.md");
-    await writeFile(okPath, "# ok");
+    const missing = join(dir, "gone.json");
+    const okPath = join(dir, "ok.json");
+    await writeFile(okPath, JSON.stringify({ type: "Text", props: { body: "ok" } }));
     const result = await materializeTree({
       type: "Stack",
       props: {},
       children: [
-        { type: "FileDoc", props: { path: okPath } },
-        { type: "FileDoc", props: { path: missing } },
+        { type: "TreeDoc", props: { path: okPath } },
+        { type: "TreeDoc", props: { path: missing } },
       ],
     });
     expect(result).toEqual({ ok: false, path: missing, reason: "not_found" });
   });
 
+  test("broken JSON fails with invalid_json", async () => {
+    const path = join(dir, "broken.json");
+    await writeFile(path, "{ not json");
+    const result = await materializeTree({ type: "TreeDoc", props: { path } });
+    expect(result).toEqual({ ok: false, path, reason: "invalid_json" });
+  });
+
+  test("JSON that is not a catalog tree fails with invalid_tree", async () => {
+    const path = join(dir, "notatree.json");
+    await writeFile(path, JSON.stringify({ hello: "world" }));
+    const result = await materializeTree({ type: "TreeDoc", props: { path } });
+    expect(result).toEqual({ ok: false, path, reason: "invalid_tree" });
+  });
+
+  test("a TreeDoc nested inside the referenced tree fails with nested_treedoc", async () => {
+    const inner = join(dir, "inner.json");
+    const path = join(dir, "outer.json");
+    await writeFile(
+      path,
+      JSON.stringify({
+        type: "Stack",
+        props: {},
+        children: [{ type: "TreeDoc", props: { path: inner } }],
+      }),
+    );
+    const result = await materializeTree({ type: "TreeDoc", props: { path } });
+    expect(result).toEqual({ ok: false, path, reason: "nested_treedoc" });
+  });
+
+  test("a self-referencing TreeDoc does not recurse infinitely", async () => {
+    const path = join(dir, "self.json");
+    await writeFile(path, JSON.stringify({ type: "TreeDoc", props: { path } }));
+    const result = await materializeTree({ type: "TreeDoc", props: { path } });
+    expect(result).toEqual({ ok: false, path, reason: "nested_treedoc" });
+  });
+
   test("the input tree is not mutated", async () => {
-    const path = join(dir, "keep.md");
-    await writeFile(path, "# keep");
+    const path = join(dir, "keep.json");
+    await writeFile(path, JSON.stringify({ type: "Text", props: { body: "k" } }));
     const tree: Item = {
       type: "Stack",
       props: {},
-      children: [{ type: "FileDoc", props: { path } }],
+      children: [{ type: "TreeDoc", props: { path } }],
     };
     const before = structuredClone(tree);
     const result = await materializeTree(tree);
@@ -109,7 +127,7 @@ describe("materializeTree", () => {
     if (result.ok) expect(result.root).not.toBe(tree);
   });
 
-  test("a tree without FileDoc passes through structurally unchanged", async () => {
+  test("a tree without TreeDoc passes through structurally unchanged", async () => {
     const tree: Item = {
       type: "Stack",
       props: {},

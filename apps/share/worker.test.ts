@@ -266,7 +266,7 @@ describe("POST /api/v1/shares", () => {
 		);
 	});
 
-	test("a FileDoc anywhere in the tree is 400", async () => {
+	test("a TreeDoc anywhere in the tree is 400", async () => {
 		const { env } = createEnv();
 		const { token } = await login(env);
 		const res = await publish(env, token, {
@@ -274,13 +274,13 @@ describe("POST /api/v1/shares", () => {
 				root: {
 					type: "Stack",
 					props: {},
-					children: [{ type: "FileDoc", props: { path: "/tmp/a.md" } }],
+					children: [{ type: "TreeDoc", props: { path: "/tmp/a.json" } }],
 				},
 			}),
 		});
 		expect(res.status).toBe(400);
 		expect(((await res.json()) as { error: string }).error).toBe(
-			"filedoc_not_allowed",
+			"treedoc_not_allowed",
 		);
 	});
 

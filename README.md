@@ -5,10 +5,10 @@
 *syokan* (召喚, "summon") is a verb. Chant the name of what you want to see, and a view appears:
 
 ```bash
-syokan notes.md   # syokan your notes
+syokan dashboard.json   # syokan your dashboard
 ```
 
-An LLM speaks a JSON incantation, and a rich, living interface materializes — no JSX written, no build step. Scattered data — today's RSS, an in-flight PR review, shared meeting notes, a local markdown file — appears as structured UI only when you need it. Views are ephemeral: summoned when needed, they fade; nothing is hoarded. And anything can chant: Claude Code, a scheduled agent, a CLI one-liner, a webhook.
+An LLM speaks a JSON incantation, and a rich, living interface materializes — no JSX written, no build step. Scattered data — today's RSS, an in-flight PR review, shared meeting notes, a live status board — appears as structured UI only when you need it. Views are ephemeral: summoned when needed, they fade; nothing is hoarded. And anything can chant: Claude Code, a scheduled agent, a CLI one-liner, a webhook.
 
 日本語版: [README.ja.md](./README.ja.md)
 
@@ -46,11 +46,10 @@ syokan open   # open home
 
 Check props with `syokan catalog` and compose the tree. From there, syokan whatever you want to see.
 
-Local files need no envelope at all — just syokan the path. If the input is envelope JSON it is posted as-is; anything else (markdown / log / txt / config json, etc.) is auto-wrapped in a live `FileDoc`, so edits to the original file flow into the view:
+A tree file needs no envelope at all — just syokan the path. If the input is envelope JSON it is posted once; a bare catalog tree is auto-wrapped in a live `TreeDoc`, so edits to the file flow into the view (an LLM keeps rewriting the file; the view keeps up). Non-JSON input is rejected — syokan speaks catalog trees only:
 
 ```bash
-syokan notes.md   # renders the markdown; every save refreshes the view
-syokan app.log    # shows the growing log in monospace
+syokan dashboard.json   # summons the tree; every save re-renders the view
 ```
 
 ## Development
@@ -64,7 +63,7 @@ Dev uses port `5273` and the repo-local `./.syokan-dev/` directory, so it never 
 
 ## Envelope
 
-A snapshot **envelope** (**JSON** only; wrap Markdown/plain text in `MarkdownDoc` / `PlainText` nodes) is created with `POST /api/snapshots` and refreshed in place with `PUT /api/snapshots`:
+A snapshot **envelope** (**JSON** only; markdown is not rendered — structure prose into catalog nodes, or wrap raw text in `PlainText`) is created with `POST /api/snapshots` and refreshed in place with `PUT /api/snapshots`:
 
 ```jsonc
 {
@@ -85,9 +84,9 @@ The SSOT for `type` is the catalog (`apps/syokan/src/catalogs`). Fetch the manif
 GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
 ```
 
-Current types — containers: `Stack` `Card` / leaves: `Heading` `Link` `Text` `Time` `MarkdownDoc` `PlainText` `Diff` `Code` `Badge` `FileDoc`. Review them visually with Storybook (`bun run storybook`).
+Current types — containers: `Stack` `Card` / leaves: `Heading` `Link` `Text` `Time` `PlainText` `Diff` `Code` `Badge` `Mermaid` `TreeDoc`. Review them visually with Storybook (`bun run storybook`).
 
-`FileDoc` (props: `path`, **absolute paths only**) is a catalog node that references a file path. The server reads the content, infers the rendering format from the extension (`.md`/`.markdown` → markdown, `.json` → code, everything else → text), and keeps the view in sync with file changes (forward sync). The server binds to localhost only, and watching is transient state that lives only while a view is open (never persisted).
+`TreeDoc` (props: `path`, **absolute paths only**, no URLs) is a catalog node that references a catalog-tree JSON file. The server reads the content, the client validates it and renders it as a live subtree, and the view stays in sync with file changes (forward sync). A mid-write invalid save never blanks the view: the last valid render is kept with an unobtrusive error until the file is valid again. A `TreeDoc` cannot appear inside a synced tree (nesting is rejected, which rules out cycles). The server binds to localhost only, and watching is transient state that lives only while a view is open (never persisted). Publishing a view freezes each `TreeDoc` into its subtree at that moment — public payloads never reference files.
 
 ## Templates
 

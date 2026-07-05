@@ -1,7 +1,5 @@
 import type { Messages } from "./en";
 
-const FENCE = "```";
-
 export const ja: Messages = {
   common: {
     delete: "削除",
@@ -20,12 +18,10 @@ export const ja: Messages = {
     themeDescription: "システム設定に従うか、ライト / ダークを固定するか選べる。",
     font: "フォント",
     fontDescription: "表示フォントをプリセットから検索して選べる。",
-    usageDoc: `## 1. snapshot を作る — \`POST /api/snapshots\`
-
-\`root\` に catalog の type で組んだ tree を渡す。応答に \`id\` が返る。
-
-${FENCE}bash
-curl -X POST http://localhost:5173/api/snapshots \\
+    usage: {
+      step1Title: "1. snapshot を作る — POST /api/snapshots",
+      step1Body: "root に catalog の type で組んだ tree を渡す。応答に id が返る。",
+      step1Code: `curl -X POST http://localhost:5173/api/snapshots \\
   -H "content-type: application/json" \\
   -d '{
     "title": "今日のRSS",
@@ -38,34 +34,25 @@ curl -X POST http://localhost:5173/api/snapshots \\
         { "type": "Text", "props": { "body": "気になった記事をここに並べる" } }
       ]
     }
-  }'
-${FENCE}
-
-応答:
-
-${FENCE}json
-{
+  }'`,
+      responseLabel: "応答:",
+      responseCode: `{
   "id": "k3f9q2",
   "url": "/snapshots/k3f9q2",
   "snapshot": { "schemaVersion": 1, "id": "k3f9q2", ... }
-}
-${FENCE}
-
-## 2. 開く — \`syokan open <id>\`
-
-返ってきた \`id\` を渡すとブラウザで開く（server が無ければ自動起動）。作った
-snapshot は左上の **メニュー** からも辿れる。
-
-${FENCE}bash
-syokan open k3f9q2
-${FENCE}
-
-## 投げられる type
-
-\`Stack\` / \`Card\` / \`Heading\` / \`Text\` / \`Link\` / \`Badge\` / \`Time\` /
-\`Code\` / \`Diff\` / \`MarkdownDoc\` / \`PlainText\` / \`FileDoc\`。各 type の props は
-\`syokan catalog\`（\`GET /api/catalog\`）で確認できる。schema に合わない tree は
-400 で弾かれる。`,
+}`,
+      step2Title: "2. 開く — syokan open <id>",
+      step2Body:
+        "返ってきた id を渡すとブラウザで開く（server が無ければ自動起動）。作った snapshot は左上のメニューからも辿れる。",
+      step2Code: "syokan open k3f9q2",
+      step3Title: "3. tree ファイルを live sync — syokan <tree.json>",
+      step3Body:
+        "裸の catalog tree を持つファイルは TreeDoc として召喚され、保存のたびに view がその場で更新される。",
+      step3Code: "syokan ./dashboard.json",
+      typesTitle: "投げられる type",
+      typesBody:
+        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / PlainText / Mermaid / TreeDoc。各 type の props は syokan catalog（GET /api/catalog）で確認できる。schema に合わない tree は 400 で弾かれる。",
+    },
   },
   shell: {
     listError: "一覧の取得に失敗しました。",
@@ -93,17 +80,21 @@ ${FENCE}
     listLabel: "フォント",
     noMatches: "該当なし",
   },
-  fileDoc: {
+  treeDoc: {
     errors: {
       not_found: "ファイルが見つかりません（削除された可能性があります）。",
       not_regular_file: "通常ファイルではないため表示できません。",
       permission_denied: "読み取り権限がありません。",
       too_large: "ファイルが大きすぎるため表示できません（上限 2 MiB）。",
-      not_text: "テキストとして表示できません（バイナリ / 非 UTF-8）。",
+      not_text: "テキストとして読めません（バイナリ / 非 UTF-8）。",
       missing_path: "パスが指定されていません。",
       network: "読み込みに失敗しました（サーバに接続できません）。",
       error: "読み込みに失敗しました。",
+      invalid_json: "ファイルが正しい JSON ではありません。",
+      invalid_tree: "JSON が catalog tree の schema に一致しません。",
+      nested_treedoc: "sync 対象の tree の中に TreeDoc は置けません。",
     },
+    staleNotice: "最後に正常だった内容を表示しています。",
   },
   diff: {
     unparsable: "diff を表示できませんでした (patch を解釈できません)。",

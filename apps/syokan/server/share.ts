@@ -249,7 +249,7 @@ export function createShareApp(deps: ShareAppDeps) {
           404,
         );
       }
-      // Check auth before materializing; reading every FileDoc file is wasted work when not logged in.
+      // Check auth before materializing; reading every TreeDoc file is wasted work when not logged in.
       const auth = await readAuth(deps.authFilePath);
       if (!auth) {
         return c.json(

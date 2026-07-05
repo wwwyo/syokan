@@ -45,7 +45,7 @@ export type ShareErrorCode =
 	| "not_logged_in"
 	| "github_verification_failed"
 	| "validation_failed"
-	| "filedoc_not_allowed"
+	| "treedoc_not_allowed"
 	| "payload_too_large"
 	| "quota_exceeded"
 	| "not_found"

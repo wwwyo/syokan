@@ -23,7 +23,7 @@ export type StopResult = { stopped: boolean; pid?: number };
 export type CliDeps = {
   fetch: typeof fetch;
   readFile: (path: string) => Promise<string>;
-  // Absolute-path resolution (canonicalization) when wrapping in a FileDoc. Used as the dedup identifier.
+  // Absolute-path resolution (canonicalization) when wrapping in a TreeDoc. Used as the dedup identifier.
   resolvePath: (path: string) => string;
   // File size (bytes). -1 when stat fails (missing, etc.). Used to reject huge files without reading them.
   fileSize: (path: string) => number;
@@ -48,7 +48,7 @@ export type CliResult = { exitCode: number };
 
 type PostResult = { ok: boolean; status: number; data: unknown };
 
-// Cold start includes the import + bind of shiki / react-markdown, so leave headroom
+// Cold start includes the import + bind of shiki, so leave headroom
 // (15s). Too short returns server_unavailable just before ready and orphans the server.
 const READY_RETRIES = 150;
 const READY_INTERVAL_MS = 100;
@@ -195,9 +195,8 @@ async function postWithServer(
     : reportFailure(deps, result);
 }
 
-// Input is JSON envelope only. To display markdown / plain text too, express it inside the envelope
-// via the MarkdownDoc / PlainText catalog. Metadata such as source.label also goes in the
-// envelope (the CLI never adds any).
+// Input is JSON envelope only. To display plain text too, express it inside the envelope via the
+// PlainText catalog. Metadata such as source.label also goes in the envelope (the CLI never adds any).
 async function postText(text: string, deps: CliDeps): Promise<CliResult> {
   let payload: unknown;
   try {
@@ -226,31 +225,46 @@ function looksLikeEnvelope(value: unknown): boolean {
   );
 }
 
-// Wrap a file into an envelope of a single FileDoc node. title / source.label are the basename;
-// so a re-post of the same file points at the same id/url, the dedup identifier (idempotencyKey)
-// is the absolute path (FR-15..17).
-function wrapFileDoc(absPath: string): unknown {
+// Lightweight check for whether it's a bare catalog tree (`{ type: string, ... }`). A broken tree
+// passes here and lets the client render / publish validation surface the error.
+function looksLikeTree(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { type?: unknown }).type === "string"
+  );
+}
+
+// Wrap a tree file into an envelope of a single TreeDoc node. title / source.label are the
+// basename; so a re-post of the same file points at the same id/url, the dedup identifier
+// (idempotencyKey) is the absolute path.
+function wrapTreeDoc(absPath: string): unknown {
   const name = basename(absPath);
   return {
     title: name,
-    root: { type: "FileDoc", props: { path: absPath } },
+    root: { type: "TreeDoc", props: { path: absPath } },
     metadata: { source: { label: name } },
-    idempotencyKey: `filedoc:${absPath}`,
+    idempotencyKey: `treedoc:${absPath}`,
   };
 }
 
-// Match FileDoc's display limit. A file over this can't be an envelope and can't be displayed
-// anyway, so the CLI wraps it as a FileDoc without reading its contents (avoids OOM from reading a
-// huge log whole; the server displays too_large).
+const UNSUPPORTED_INPUT_MESSAGE =
+  "only JSON is accepted: a snapshot envelope ({ root: ... }, posted once) or a bare catalog tree ({ type: ..., props: ... }, summoned as a live TreeDoc)";
+
+// Match TreeDoc's display limit. A file over this can't be sniffed without risking OOM.
 const SNIFF_SIZE_LIMIT = 2 * 1024 * 1024;
 
-// `syokan <path>`: if the contents satisfy the envelope schema, post as before; otherwise
-// resolve to the absolute path, wrap in a FileDoc, and post (FR-13/14). markdown/log/txt fail
-// JSON.parse and so automatically take the wrap path.
+// `syokan <path>`: an envelope posts once; a bare catalog tree is wrapped in a TreeDoc (resolved
+// to the absolute path) and follows edits; anything else — non-JSON included — is rejected.
 export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
-  // A file over the display limit is wrapped immediately without sniffing (its contents aren't read).
+  // Over the sniff limit the contents aren't read. A .json file is still wrapped as a TreeDoc so
+  // the view surfaces too_large; anything else can't be valid input, so reject it here.
   if (deps.fileSize(file) > SNIFF_SIZE_LIMIT) {
-    return postWithServer(deps, wrapFileDoc(deps.resolvePath(file)));
+    if (file.toLowerCase().endsWith(".json")) {
+      return postWithServer(deps, wrapTreeDoc(deps.resolvePath(file)));
+    }
+    return argError(deps, "unsupported_input", UNSUPPORTED_INPUT_MESSAGE);
   }
   let text: string;
   try {
@@ -260,16 +274,18 @@ export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
     return { exitCode: 1 };
   }
   let parsed: unknown;
-  let parsedOk = true;
   try {
     parsed = JSON.parse(text);
   } catch {
-    parsedOk = false;
+    return argError(deps, "unsupported_input", UNSUPPORTED_INPUT_MESSAGE);
   }
-  if (parsedOk && looksLikeEnvelope(parsed)) {
+  if (looksLikeEnvelope(parsed)) {
     return postWithServer(deps, parsed);
   }
-  return postWithServer(deps, wrapFileDoc(deps.resolvePath(file)));
+  if (looksLikeTree(parsed)) {
+    return postWithServer(deps, wrapTreeDoc(deps.resolvePath(file)));
+  }
+  return argError(deps, "unsupported_input", UNSUPPORTED_INPUT_MESSAGE);
 }
 
 // Normalize the arg passed to open into a view URL. Whether it's post's output (full URL /
@@ -795,7 +811,7 @@ export const helpManifest = {
     {
       usage: "syokan <file>",
       summary:
-        "Post a file: envelope JSON is posted as-is; any other file (md/txt/log/json) is wrapped as a live FileDoc that follows edits. Prints the view URL",
+        "Post a JSON file: an envelope is posted once; a bare catalog tree is summoned as a live TreeDoc that follows edits. Non-JSON input is rejected. Prints the view URL",
     },
     { usage: "<json> | syokan", summary: "Post a snapshot envelope from stdin" },
     {
@@ -841,7 +857,7 @@ export const helpManifest = {
     {
       code: 1,
       summary:
-        "error: invalid_json | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand | unknown_option | not_logged_in | login_failed | invalid_expires | materialize_failed | share_api_unreachable",
+        "error: invalid_json | unsupported_input | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand | unknown_option | not_logged_in | login_failed | invalid_expires | materialize_failed | share_api_unreachable",
     },
   ],
 };

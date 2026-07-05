@@ -80,10 +80,10 @@ Show state with a `Badge`, and put a unified patch plus line comments on a `Diff
 }
 ```
 
-## Example 3: meeting notes or article body (markdown)
+## Example 3: meeting notes or article body (structured prose)
 
-Wrap long prose in a single `MarkdownDoc` node.
-Markdown cannot be posted bare outside an envelope.
+There is no markdown node — structure prose into catalog nodes.
+Headings become `Heading`, paragraphs `Text`, enumerations `PlainText` (whitespace preserved), diagrams `Mermaid`.
 
 ```json
 {
@@ -93,7 +93,11 @@ Markdown cannot be posted bare outside an envelope.
     "type": "Stack",
     "props": {},
     "children": [
-      { "type": "MarkdownDoc", "props": { "body": "## Agenda\n\n- Priorities this quarter\n- Next moves\n\n## Decisions\n\n1. Proceed with A\n2. B on hold\n" } }
+      { "type": "Heading", "props": { "text": "Agenda", "level": 2 } },
+      { "type": "PlainText", "props": { "body": "- Priorities this quarter\n- Next moves" } },
+      { "type": "Heading", "props": { "text": "Decisions", "level": 2 } },
+      { "type": "PlainText", "props": { "body": "1. Proceed with A\n2. B on hold" } },
+      { "type": "Mermaid", "props": { "code": "graph LR\n  A[Proposal] --> B[Decision]" } }
     ]
   }
 }
@@ -103,4 +107,40 @@ Post it.
 
 ```bash
 syokan meeting.json
+```
+
+## Example 4: live-synced view (TreeDoc)
+
+Write a bare catalog tree (no envelope) to a file and syokan the path — it is auto-wrapped in a `TreeDoc` and the view follows every save.
+This is the shape of the *file content*, not a POST body:
+
+```json
+{
+  "type": "Stack",
+  "props": {},
+  "children": [
+    { "type": "Heading", "props": { "text": "Build status", "level": 2 } },
+    { "type": "Badge", "props": { "text": "running", "variant": "secondary" } }
+  ]
+}
+```
+
+```bash
+syokan ./status.json   # keep rewriting status.json; the view updates in place
+```
+
+To embed a synced subtree inside a larger static view, place the node yourself (absolute path only; `TreeDoc` cannot appear inside the synced tree itself):
+
+```json
+{
+  "title": "Ops dashboard",
+  "root": {
+    "type": "Stack",
+    "props": {},
+    "children": [
+      { "type": "Heading", "props": { "text": "Ops dashboard", "level": 1 } },
+      { "type": "TreeDoc", "props": { "path": "/Users/me/status.json" } }
+    ]
+  }
+}
 ```

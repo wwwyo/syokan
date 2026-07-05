@@ -1,7 +1,7 @@
 ---
 name: syokan
 license: MIT
-description: "Build and POST a JSON snapshot envelope to syokan (召喚 — a verb: summon data into a rich, living view). Use when the user says \"syokan this\", \"syokan X\", \"show in syokan\", \"post a snapshot\", \"preview this markdown\", or in Japanese 『〜を syokan』『syokan に出して/表示して/投げて』『snapshot を作って/送って』『syokan のUIで見たい』『Markdown をプレビューして/md ファイルをブラウザで見たい』 — for RSS feeds, in-progress PR reviews, meeting-notes markdown, today's TODO, local Markdown files, or any aggregated data the user wants to see as structured UI. Compose the tree only from catalog components (Stack, Card, Heading, Link, Text, Time, MarkdownDoc, PlainText, Diff, Code, Badge, FileDoc) and send it via the syokan CLI or POST /api/snapshots. Never write JSX. Whenever the word syokan appears, use this skill even if the user does not explicitly say snapshot."
+description: "Build and POST a JSON snapshot envelope to syokan (召喚 — a verb: summon data into a rich, living view). Use when the user says \"syokan this\", \"syokan X\", \"show in syokan\", \"post a snapshot\", \"preview this markdown\", or in Japanese 『〜を syokan』『syokan に出して/表示して/投げて』『snapshot を作って/送って』『syokan のUIで見たい』『Markdown をプレビューして/md ファイルをブラウザで見たい』 — for RSS feeds, in-progress PR reviews, meeting notes, today's TODO, or any aggregated data the user wants to see as structured UI. Compose the tree only from catalog components (Stack, Card, Heading, Link, Text, Time, PlainText, Diff, Code, Badge, Mermaid, TreeDoc) and send it via the syokan CLI or POST /api/snapshots. Markdown is not rendered — structure prose into catalog nodes instead. Never write JSX. Whenever the word syokan appears, use this skill even if the user does not explicitly say snapshot."
 ---
 
 # syokan
@@ -15,7 +15,7 @@ If syokan is not installed yet (`syokan --help` fails), or the user says "onboar
 ## Non-negotiables
 
 - **Snapshots are ephemeral**: a posted snapshot has no persistence guarantee. Only put reconstructible, transient data there (today's RSS, an in-progress review, etc.). For layouts you reuse, save a template to reproduce them (templates persist — see "Templates for reproducibility" below).
-- **JSON only**: the server accepts nothing but a JSON envelope. Raw markdown or plain text is rejected. To show prose, wrap it in a `MarkdownDoc` or `PlainText` node.
+- **JSON only — markdown is not rendered**: the server accepts nothing but a JSON envelope, and there is no markdown node. Structure prose into catalog nodes yourself: headings → `Heading`, paragraphs → `Text`, code fences → `Code`, mermaid fences → `Mermaid`, preformatted or bullet text → `PlainText`.
 - **Strict schema**: props are validated strictly. Keys not in the schema are rejected — do not invent extra keys.
 - **Leaves cannot have children**: only `Stack` and `Card` accept children. Attaching children to a leaf node is rejected at ingest.
 
@@ -64,22 +64,23 @@ Pass the assembled envelope as a file or via stdin; on success the view URL is p
 
 For everything else — commands, subcommands, env vars, exit codes — consult `syokan --help --json`; for types and props, `syokan catalog`.
 
-## Previewing local files
+## Live-syncing a tree file (TreeDoc)
 
-For a local file, **`syokan <path>` is the shortest route** — you syokan the file itself. Envelope JSON is posted as-is; anything else (markdown / log / txt / json, ...) is auto-wrapped in a live `FileDoc`. The CLI resolves it to an absolute path and hands it to the server, which reads the content and infers the format from the extension (`.md`/`.markdown` → markdown, `.json` → code, everything else → text). **While the view is open it follows edits to the file** (no re-posting needed).
+To keep updating a view without re-posting, **write the catalog tree to a JSON file and syokan the path**. A file holding a bare catalog tree (`{ "type": ..., "props": ... }`, no envelope) is auto-wrapped in a live `TreeDoc`: the CLI resolves it to an absolute path, and **while the view is open it follows every save of the file**. Rewrite the file to update the view.
 
 ```bash
-syokan notes.md   # renders markdown; the view refreshes on every save
-syokan app.log    # shows a growing log in monospace
+syokan ./dashboard.json   # summons the tree; every save re-renders the view
 ```
 
-To combine multiple files into one view, or mix them with `Heading` and other nodes, place `FileDoc` nodes yourself (props: `path`, **absolute paths only**; FileDoc handles reading and change tracking).
+- `syokan <path>` accepts JSON only: an envelope posts once (static); a bare catalog tree live-syncs; anything else (markdown / log / txt / other JSON) is rejected with `unsupported_input`.
+- Mid-write invalid JSON is safe: the view keeps the last valid render and shows an unobtrusive error until the file is valid again.
+- To mix a synced subtree with static nodes, place `TreeDoc` nodes yourself (props: `path`, **absolute paths only**, no URLs). A `TreeDoc` cannot appear inside a synced tree (nesting is rejected).
 
-Conversely, to show a file's content **frozen statically** (no follow-up needed, or you are transforming the content), put the body into a `MarkdownDoc` / `PlainText` / `Code` node. `jq --rawfile` streams it in without worrying about JSON escaping.
+To show a local markdown / text file, there is no file viewer: read it, structure it into catalog nodes (see "JSON only" above), and post the result. For raw text, `jq --rawfile` streams a body in without worrying about JSON escaping.
 
 ```bash
-jq -n --rawfile body README.md \
-  '{title:"README.md", root:{type:"Stack",props:{},children:[{type:"MarkdownDoc",props:{body:$body}}]}}' \
+jq -n --rawfile body app.log \
+  '{title:"app.log", root:{type:"PlainText",props:{body:$body}}}' \
   | syokan
 ```
 

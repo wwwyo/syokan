@@ -18,7 +18,7 @@ export type PageLayoutProps = {
  * The per-route layout wrapping the body of snapshot / home. Rendered inside the content column
  * of the resident shell (AppShell), it composes the header and the body main. Background,
  * sidebar, and open/closed state are the shell's responsibility. The container carries no
- * heading (the root markdown etc. brings its own, so a duplicate heading is avoided).
+ * heading (the content brings its own, so a duplicate heading is avoided).
  *
  * Normal pages defer to document(window) scrolling. The header sticks to the top edge so the
  * sidebar toggle stays reachable after scrolling.

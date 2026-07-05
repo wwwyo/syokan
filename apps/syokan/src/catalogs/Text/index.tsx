@@ -13,7 +13,7 @@ export const textPropsSchema = z
 
 export type TextProps = z.infer<typeof textPropsSchema>;
 
-/** Short or supplementary text. For plain text that doesn't warrant the heavier MarkdownDoc. */
+/** Short or supplementary text (single line or a few lines). */
 export function Text({ body, muted, clamp }: TextProps) {
   return (
     <p

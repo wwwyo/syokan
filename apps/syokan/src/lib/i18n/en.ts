@@ -1,5 +1,3 @@
-const FENCE = "```";
-
 export const en = {
   common: {
     delete: "Delete",
@@ -18,12 +16,11 @@ export const en = {
     themeDescription: "Follow the system setting, or pin light / dark.",
     font: "Font",
     fontDescription: "Search the font presets and pick the display font.",
-    usageDoc: `## 1. Create a snapshot — \`POST /api/snapshots\`
-
-Pass a tree of catalog types as \`root\`. The response returns an \`id\`.
-
-${FENCE}bash
-curl -X POST http://localhost:5173/api/snapshots \\
+    usage: {
+      step1Title: "1. Create a snapshot — POST /api/snapshots",
+      step1Body:
+        "Pass a tree of catalog types as root. The response returns an id.",
+      step1Code: `curl -X POST http://localhost:5173/api/snapshots \\
   -H "content-type: application/json" \\
   -d '{
     "title": "Daily RSS",
@@ -36,35 +33,25 @@ curl -X POST http://localhost:5173/api/snapshots \\
         { "type": "Text", "props": { "body": "Articles that caught my eye" } }
       ]
     }
-  }'
-${FENCE}
-
-Response:
-
-${FENCE}json
-{
+  }'`,
+      responseLabel: "Response:",
+      responseCode: `{
   "id": "k3f9q2",
   "url": "/snapshots/k3f9q2",
   "snapshot": { "schemaVersion": 1, "id": "k3f9q2", ... }
-}
-${FENCE}
-
-## 2. Open it — \`syokan open <id>\`
-
-Pass the returned \`id\` to open it in the browser (the server starts
-automatically if it is not running). Summoned snapshots are also reachable
-from the **menu** at the top left.
-
-${FENCE}bash
-syokan open k3f9q2
-${FENCE}
-
-## Available types
-
-\`Stack\` / \`Card\` / \`Heading\` / \`Text\` / \`Link\` / \`Badge\` / \`Time\` /
-\`Code\` / \`Diff\` / \`MarkdownDoc\` / \`PlainText\` / \`FileDoc\`. Each type's
-props are listed by \`syokan catalog\` (\`GET /api/catalog\`). Trees that do not
-match the schema are rejected with 400.`,
+}`,
+      step2Title: "2. Open it — syokan open <id>",
+      step2Body:
+        "Pass the returned id to open it in the browser (the server starts automatically if it is not running). Summoned snapshots are also reachable from the menu at the top left.",
+      step2Code: "syokan open k3f9q2",
+      step3Title: "3. Live-sync a tree file — syokan <tree.json>",
+      step3Body:
+        "A file holding a bare catalog tree is summoned as a TreeDoc: every save of the file updates the view in place.",
+      step3Code: "syokan ./dashboard.json",
+      typesTitle: "Available types",
+      typesBody:
+        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / PlainText / Mermaid / TreeDoc. Each type's props are listed by syokan catalog (GET /api/catalog). Trees that do not match the schema are rejected with 400.",
+    },
   },
   shell: {
     listError: "Failed to load the snapshot list.",
@@ -92,17 +79,21 @@ match the schema are rejected with 400.`,
     listLabel: "Fonts",
     noMatches: "No matches",
   },
-  fileDoc: {
+  treeDoc: {
     errors: {
       not_found: "File not found (it may have been deleted).",
       not_regular_file: "Not a regular file, so it cannot be displayed.",
       permission_denied: "No permission to read the file.",
       too_large: "File is too large to display (limit: 2 MiB).",
-      not_text: "Cannot be displayed as text (binary / non-UTF-8).",
+      not_text: "Cannot be read as text (binary / non-UTF-8).",
       missing_path: "No path specified.",
       network: "Failed to load (cannot reach the server).",
       error: "Failed to load.",
+      invalid_json: "The file is not valid JSON.",
+      invalid_tree: "The JSON does not match the catalog tree schema.",
+      nested_treedoc: "TreeDoc cannot be nested inside a synced tree.",
     },
+    staleNotice: "Showing the last valid content.",
   },
   diff: {
     unparsable: "The diff could not be displayed (the patch could not be parsed).",
