@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["../syokan/src/*"]
+    }
+  },
+  "include": [
+    "types.ts",
+    "worker.ts",
+    "worker.test.ts",
+    "build.ts",
+    "csp.generated.ts",
+    "viewer"
+  ],
+  "exclude": ["node_modules", "viewer/dist"]
+}

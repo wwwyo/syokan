@@ -110,6 +110,27 @@ match the schema are rejected with 400.`,
     unassignedComments: (count: number) =>
       `${count} comment${count === 1 ? "" : "s"} could not be displayed (no file given, or the filename does not match the patch).`,
   },
+  share: {
+    share: "Share",
+    sharing: "Sharing…",
+    shared: "Shared",
+    successTitle: "Public link created",
+    loginTitle: "Login required",
+    loginBefore: "Run ",
+    loginAfter: " in your terminal, then try again.",
+    errorTitle: "Could not share",
+    expires: (dateTime: string) => `Expires ${dateTime}`,
+    unpublish: "Unpublish",
+    activeShares: "Active shares",
+    copyUrl: "Copy URL",
+    errors: {
+      materializeFailed: (path: string) =>
+        `A referenced file could not be read, so nothing was published: ${path}`,
+      unreachable: "Could not reach the share service.",
+      network: "Could not reach the local server.",
+      generic: "Failed to share.",
+    },
+  },
 };
 
 export type Messages = typeof en;

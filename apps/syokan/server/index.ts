@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { serve } from "bun";
 import {
+  authFile,
   dataDir as resolveDataDir,
   legacyTemplatesDir,
   settingFile,
@@ -19,6 +20,7 @@ import {
   getCatalog,
 } from "./routes";
 import { createSettingStore } from "./setting";
+import { createShareHandlers, shareApiOrigin } from "./share";
 import { createSnapshotStore } from "./store";
 import { createTemplateStore } from "./templates";
 
@@ -55,6 +57,12 @@ export function startServer() {
   const setting = createSettingHandlers(createSettingStore(settingFile()));
   // file 監視は永続化しない接続スコープの runtime state。server 寿命と同じ生存。
   const file = createFileHandlers(createFileWatcher());
+  const share = createShareHandlers({
+    store,
+    fetch: globalThis.fetch,
+    origin: shareApiOrigin(),
+    authFilePath: authFile(),
+  });
   const server = serve({
     routes: {
       "/api/health": () => Response.json({ ok: true, version: pkg.version }),
@@ -69,6 +77,16 @@ export function startServer() {
         GET: api.getSnapshot,
         DELETE: api.deleteSnapshot,
       },
+      // public share: publish は store の snapshot を凍結して Worker へ、auth は
+      // Worker token の交換・保持、shares は Worker への認証つき proxy。
+      "/api/snapshots/:id/publish": { POST: share.publishSnapshot },
+      "/api/auth/login": {
+        GET: share.loginStatus,
+        POST: share.login,
+        DELETE: share.logout,
+      },
+      "/api/shares": { GET: share.listShares },
+      "/api/shares/:id": { DELETE: share.deleteShare },
       "/api/templates": {
         GET: templates.listTemplates,
         POST: templates.createTemplate,

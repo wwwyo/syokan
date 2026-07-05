@@ -18,11 +18,6 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "isolatedModules": true,
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": ["src", "server", "cli", "scripts", "build.ts", "entry.ts", "index.html"],
-  "exclude": ["node_modules", "dist", "build"]
+    "isolatedModules": true
+  }
 }

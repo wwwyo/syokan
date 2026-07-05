@@ -104,5 +104,5 @@ Post it.
 ```bash
 syokan meeting.json
 # to check against the dev renderer, use:
-SYOKAN_BASE_URL=http://localhost:5273 bun cli/syokan.ts meeting.json
+SYOKAN_BASE_URL=http://localhost:5273 bun apps/syokan/cli/syokan.ts meeting.json
 ```

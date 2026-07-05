@@ -111,4 +111,25 @@ ${FENCE}
     unassignedComments: (count: number) =>
       `${count} 件のコメントを表示できませんでした (file 未指定、または patch 内のファイル名と不一致)。`,
   },
+  share: {
+    share: "共有",
+    sharing: "共有中…",
+    shared: "公開中",
+    successTitle: "公開リンクを作成しました",
+    loginTitle: "ログインが必要です",
+    loginBefore: "ターミナルで ",
+    loginAfter: " を実行してから、もう一度お試しください。",
+    errorTitle: "共有できませんでした",
+    expires: (dateTime: string) => `${dateTime} まで有効`,
+    unpublish: "公開停止",
+    activeShares: "公開中のリンク",
+    copyUrl: "URL をコピー",
+    errors: {
+      materializeFailed: (path: string) =>
+        `参照ファイルを読めなかったため公開を中止しました: ${path}`,
+      unreachable: "共有サービスに接続できません。",
+      network: "サーバに接続できません。",
+      generic: "共有に失敗しました。",
+    },
+  },
 };

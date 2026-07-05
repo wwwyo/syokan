@@ -1,7 +1,8 @@
 name: release
 
-# `npm version <patch|minor|major>` で bump + tag し `git push --follow-tags` した
-# tag を起点に、cross-compile したバイナリを添付した release を publish する。
+# apps/syokan で `npm version <patch|minor|major>` を実行して bump + tag し
+# `git push --follow-tags` した tag を起点に、cross-compile したバイナリを添付した
+# release を publish する。
 # 版を決めるのは人間 (tag)、重い compile と asset upload を CI に逃がす分担。
 on:
   push:
@@ -21,6 +22,6 @@ jobs:
       - run: bun run typecheck
       - run: bun test
       - run: bun run compile:all
-      - run: gh release create "$GITHUB_REF_NAME" dist/syokan-* --generate-notes
+      - run: gh release create "$GITHUB_REF_NAME" apps/syokan/dist/syokan-* --generate-notes
         env:
           GITHUB_TOKEN: ${{ github.token }}

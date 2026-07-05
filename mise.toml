@@ -1,7 +1,7 @@
 [tools]
 bun = "1.3.12"
 
-# このリポジトリに入っている間だけ `syokan` を CLI (cli/syokan.ts) の alias にする
+# このリポジトリに入っている間だけ `syokan` を CLI (apps/syokan/cli/syokan.ts) の alias にする
 # (ディレクトリを出ると自動で unset される)。引数はそのまま渡る (`syokan open` 等)。
 [shell_alias]
-syokan = "bun cli/syokan.ts"
+syokan = "bun apps/syokan/cli/syokan.ts"

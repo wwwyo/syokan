@@ -35,7 +35,23 @@ async function compile(outfile: string, target?: Build.CompileTarget) {
     for (const log of result.logs) console.error(log);
     process.exit(1);
   }
+  await adhocSign(outfile, target);
   console.log(`syokan: compiled → ${outfile}`);
+}
+
+// Bun 1.3.12 の compile 出力は署名が欠落/破損することがあり、Apple Silicon では
+// 未署名バイナリが SIGKILL される。darwin 向け出力は ad-hoc 署名し直す
+// (--remove-signature を先に通すのは、部分的に壊れた署名があると --sign が
+// "invalid or unsupported format" で失敗するため)。
+async function adhocSign(outfile: string, target?: Build.CompileTarget) {
+  const forDarwin = target ? target.includes("darwin") : process.platform === "darwin";
+  if (!forDarwin || process.platform !== "darwin") return;
+  await Bun.$`codesign --remove-signature ${outfile}`.quiet().nothrow();
+  const signed = await Bun.$`codesign --sign - --force ${outfile}`.quiet().nothrow();
+  if (signed.exitCode !== 0) {
+    console.error(`syokan: codesign failed for ${outfile}\n${signed.stderr.toString()}`);
+    process.exit(1);
+  }
 }
 
 if (process.argv.includes("--release")) {

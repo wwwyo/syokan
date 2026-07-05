@@ -1,0 +1,23 @@
+{
+  "name": "@syokan/share",
+  "version": "0.0.0",
+  "description": "syokan public share — Cloudflare Worker (API) + viewer/landing hosting",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "bun build.ts",
+    "deploy": "bun build.ts && wrangler deploy"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "0.8.0",
+    "hono": "4.12.27",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260627.1",
+    "bun-plugin-tailwind": "0.1.2",
+    "wrangler": "4.105.0"
+  }
+}

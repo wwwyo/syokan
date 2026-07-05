@@ -56,7 +56,7 @@ codesign --sign - ~/.local/bin/syokan   # or: xattr -dr com.apple.quarantine ~/.
 git clone https://github.com/wwwyo/syokan && cd syokan
 mise install && bun install
 bun run compile
-cp dist/syokan ~/.local/bin/
+cp apps/syokan/dist/syokan ~/.local/bin/
 ```
 
 ## 3. Verify the install

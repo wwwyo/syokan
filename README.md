@@ -79,7 +79,7 @@ A snapshot **envelope** (**JSON** only; wrap Markdown/plain text in `MarkdownDoc
 
 ## Catalog
 
-The SSOT for `type` is the catalog (`src/catalogs`). Fetch the manifest to get the props contract:
+The SSOT for `type` is the catalog (`apps/syokan/src/catalogs`). Fetch the manifest to get the props contract:
 
 ```
 GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
@@ -102,16 +102,16 @@ GET /api/settings              # { theme, font } (defaults if unset)
 PUT /api/settings              # partial update (only the keys you send are overwritten). Unknown keys / invalid values: 400
 ```
 
-`theme`: `system` `light` `dark` (SSOT: `src/schema/setting.ts`). `font`: an identifier for a font preset (default `system`; most presets load from Google Fonts, but `system`/`moralerspace` do not). The list and how to extend it live in `src/lib/fonts.ts` — adding one entry there adds a font (the actual font is loaded dynamically via `<link>` on selection and `--app-font-*` is rewritten; `styles.css` / `index.html` stay untouched).
+`theme`: `system` `light` `dark` (SSOT: `apps/syokan/src/schema/setting.ts`). `font`: an identifier for a font preset (default `system`; most presets load from Google Fonts, but `system`/`moralerspace` do not). The list and how to extend it live in `apps/syokan/src/lib/fonts.ts` — adding one entry there adds a font (the actual font is loaded dynamically via `<link>` on selection and `--app-font-*` is rewritten; `styles.css` / `index.html` stay untouched).
 
 ## Build (single binary)
 
 ```bash
-bun run compile       # → dist/syokan (CLI + server + frontend in one binary)
-bun run compile:all   # → dist/syokan-<os>-<arch> (cross-compile, for Release distribution)
+bun run compile       # → apps/syokan/dist/syokan (CLI + server + frontend in one binary)
+bun run compile:all   # → apps/syokan/dist/syokan-<os>-<arch> (cross-compile, for Release distribution)
 ```
 
-Dual-mode ([entry.ts](./entry.ts)): a normal launch is the CLI; the server re-execs the binary itself with `SYOKAN_SERVE=1`. The global binary uses port `5173`, and persistence follows the XDG base directories (settings = `~/.config/syokan/`, templates = `~/.local/share/syokan/`, snapshots + runtime/log = `~/.local/state/syokan/`). Override locations with `XDG_{CONFIG,DATA,STATE}_HOME` (absolute paths only; relative values are ignored). When upgrading from the old layout, templates are migrated to the new location automatically on startup. To distribute, upload the assets to a Release and install with `mise use -g github:wwwyo/syokan@latest`.
+Dual-mode ([entry.ts](./apps/syokan/entry.ts)): a normal launch is the CLI; the server re-execs the binary itself with `SYOKAN_SERVE=1`. The global binary uses port `5173`, and persistence follows the XDG base directories (settings = `~/.config/syokan/`, templates = `~/.local/share/syokan/`, snapshots + runtime/log = `~/.local/state/syokan/`). Override locations with `XDG_{CONFIG,DATA,STATE}_HOME` (absolute paths only; relative values are ignored). When upgrading from the old layout, templates are migrated to the new location automatically on startup. To distribute, upload the assets to a Release and install with `mise use -g github:wwwyo/syokan@latest`.
 
 ## More
 

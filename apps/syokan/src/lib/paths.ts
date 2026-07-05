@@ -53,3 +53,9 @@ export function legacyTemplatesDir(): string {
 export function settingFile(): string {
   return join(configHome(), "syokan", "settings.json");
 }
+
+// share API token は machine-local な secret。dotfiles 追跡対象 (config) に混ぜず
+// state に置く (0600 での保存は書き込み側が担う)。
+export function authFile(): string {
+  return join(stateHome(), "syokan", "auth.json");
+}

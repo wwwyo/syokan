@@ -79,7 +79,7 @@ snapshot **envelope**（**JSON** のみ。Markdown/plain-text は `MarkdownDoc` 
 
 ## catalog
 
-`type` の SSOT は catalog（`src/catalogs`）。manifest を取得して props 契約を引く:
+`type` の SSOT は catalog（`apps/syokan/src/catalogs`）。manifest を取得して props 契約を引く:
 
 ```
 GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
@@ -102,16 +102,16 @@ GET /api/settings              # { theme, font }（未設定なら既定値）
 PUT /api/settings              # 部分更新（送ったキーだけ上書き）。未知キー / 不正値は 400
 ```
 
-`theme`: `system` `light` `dark`（SSOT: `src/schema/setting.ts`）。`font`: フォントプリセットの識別子（既定 `system`）。ほとんどは Google Fonts から読み込むが、`system`/`moralerspace` はそうではない。一覧と追加は `src/lib/fonts.ts` が SSOT で、ここに 1 エントリ足すだけでフォントが増える（実フォントは選択時に `<link>` を動的読込し、`--app-font-*` を書き換える。`styles.css` / `index.html` は触らない）。
+`theme`: `system` `light` `dark`（SSOT: `apps/syokan/src/schema/setting.ts`）。`font`: フォントプリセットの識別子（既定 `system`）。ほとんどは Google Fonts から読み込むが、`system`/`moralerspace` はそうではない。一覧と追加は `apps/syokan/src/lib/fonts.ts` が SSOT で、ここに 1 エントリ足すだけでフォントが増える（実フォントは選択時に `<link>` を動的読込し、`--app-font-*` を書き換える。`styles.css` / `index.html` は触らない）。
 
 ## ビルド (単体バイナリ)
 
 ```bash
-bun run compile       # → dist/syokan（CLI+server+frontend を 1 バイナリに）
-bun run compile:all   # → dist/syokan-<os>-<arch>（cross-compile、Release 配布用）
+bun run compile       # → apps/syokan/dist/syokan（CLI+server+frontend を 1 バイナリに）
+bun run compile:all   # → apps/syokan/dist/syokan-<os>-<arch>（cross-compile、Release 配布用）
 ```
 
-dual-mode（[entry.ts](./entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173`、永続先は XDG base directory に従い分散する（settings=`~/.config/syokan/`、templates=`~/.local/share/syokan/`、snapshot+runtime/log=`~/.local/state/syokan/`。場所の上書きは `XDG_{CONFIG,DATA,STATE}_HOME` で行う（絶対パスのみ、相対値は無視）。旧レイアウトからの upgrade では templates を起動時に新 location へ自動移行する）。配布は Release に asset を上げて `mise use -g github:wwwyo/syokan@latest`。
+dual-mode（[entry.ts](./apps/syokan/entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173`、永続先は XDG base directory に従い分散する（settings=`~/.config/syokan/`、templates=`~/.local/share/syokan/`、snapshot+runtime/log=`~/.local/state/syokan/`。場所の上書きは `XDG_{CONFIG,DATA,STATE}_HOME` で行う（絶対パスのみ、相対値は無視）。旧レイアウトからの upgrade では templates を起動時に新 location へ自動移行する）。配布は Release に asset を上げて `mise use -g github:wwwyo/syokan@latest`。
 
 ## その他
 

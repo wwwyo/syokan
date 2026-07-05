@@ -455,6 +455,243 @@ export async function runTemplates(
   return { exitCode: 1 };
 }
 
+// GitHub OAuth App (device flow 用 public client)。OAuth App 作成後に実 client_id へ差し替える。
+const GITHUB_OAUTH_CLIENT_ID = "PLACEHOLDER_CLIENT_ID";
+const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
+const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
+const DEVICE_FLOW_DEFAULT_INTERVAL_S = 5;
+
+// GitHub の device flow endpoint を form-encoded で叩き JSON を返す。網羅的な型付けは
+// せず、呼び出し側が必要な field だけ見る。ネットワーク断 / 非 JSON は null。
+async function githubPost(
+  deps: CliDeps,
+  url: string,
+  params: Record<string, string>,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await deps.fetch(url, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams(params).toString(),
+    });
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+// GitHub device flow → 得た access token を local server へ渡して Worker token に交換する。
+// scope は空 (public プロフィールの取得だけで足りる)。
+export async function runLogin(deps: CliDeps): Promise<CliResult> {
+  const device = await githubPost(deps, GITHUB_DEVICE_CODE_URL, {
+    client_id: GITHUB_OAUTH_CLIENT_ID,
+  });
+  const deviceCode = device?.device_code;
+  const userCode = device?.user_code;
+  const verificationUri = device?.verification_uri;
+  if (
+    typeof deviceCode !== "string" ||
+    typeof userCode !== "string" ||
+    typeof verificationUri !== "string"
+  ) {
+    return argError(
+      deps,
+      "login_failed",
+      "could not start the GitHub device flow",
+    );
+  }
+  deps.stdout(`Open ${verificationUri} and enter code: ${userCode}`);
+
+  let interval =
+    typeof device?.interval === "number"
+      ? device.interval
+      : DEVICE_FLOW_DEFAULT_INTERVAL_S;
+  let accessToken: string | undefined;
+  for (;;) {
+    await deps.sleep(interval * 1000);
+    const poll = await githubPost(deps, GITHUB_ACCESS_TOKEN_URL, {
+      client_id: GITHUB_OAUTH_CLIENT_ID,
+      device_code: deviceCode,
+      grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+    });
+    if (typeof poll?.access_token === "string") {
+      accessToken = poll.access_token;
+      break;
+    }
+    const error = poll?.error;
+    if (error === "authorization_pending") continue;
+    if (error === "slow_down") {
+      interval += 5;
+      continue;
+    }
+    // expired_token / access_denied / 未知エラー / ネットワーク断は打ち切る
+    // (継続しても成功しない or 無限ループになる)。
+    return argError(
+      deps,
+      "login_failed",
+      typeof error === "string" ? error : "GitHub device flow failed",
+    );
+  }
+
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(deps, "/api/auth/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ githubAccessToken: accessToken }),
+  });
+  if (!result.ok) return reportFailure(deps, result);
+  const login = (result.data as { login?: string } | null)?.login;
+  deps.stdout(`Logged in as ${login}`);
+  return { exitCode: 0 };
+}
+
+export async function runLogout(deps: CliDeps): Promise<CliResult> {
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(deps, "/api/auth/login", { method: "DELETE" });
+  if (!result.ok) return reportFailure(deps, result);
+  deps.stdout("Logged out");
+  return { exitCode: 0 };
+}
+
+// `--expires 30d` / `12h` を秒に変換する。不正は undefined (呼び出し側が arg error にする)。
+function parseExpires(value: string): number | undefined {
+  const match = /^(\d+)([dh])$/.exec(value);
+  if (!match) return undefined;
+  const n = Number(match[1]);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return match[2] === "d" ? n * 86_400 : n * 3_600;
+}
+
+// share 系エラーの共通整形。エラー出力は他コマンドと同じく JSON 1 行の契約を保ちつつ、
+// message に案内を載せる。該当しない status は raw body をそのまま出す。
+function reportShareFailure(
+  deps: CliDeps,
+  result: PostResult,
+  notFoundMessage: string,
+): CliResult {
+  const error = (result.data as { error?: string } | null)?.error;
+  if (result.status === 401 && error === "not_logged_in") {
+    return argError(deps, "not_logged_in", "Run `syokan login` first");
+  }
+  if (result.status === 404 && error === "not_found") {
+    return argError(deps, "not_found", notFoundMessage);
+  }
+  if (error === "materialize_failed") {
+    const d = result.data as { path?: string; reason?: string };
+    return argError(
+      deps,
+      "materialize_failed",
+      `could not read ${d.path} (${d.reason}); fix the file and retry`,
+    );
+  }
+  if (error === "share_api_unreachable") {
+    return argError(
+      deps,
+      "share_api_unreachable",
+      "the share API did not respond; try again later",
+    );
+  }
+  return reportFailure(deps, result);
+}
+
+export async function runPublish(
+  args: readonly string[],
+  deps: CliDeps,
+): Promise<CliResult> {
+  let id: string | undefined;
+  let expiresIn: number | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === undefined) continue;
+    if (a === "--expires") {
+      const v = args[i + 1];
+      if (v === undefined || v.startsWith("--")) {
+        return argError(deps, "missing_option_value", "--expires needs a value");
+      }
+      const parsed = parseExpires(v);
+      if (parsed === undefined) {
+        return argError(
+          deps,
+          "invalid_expires",
+          `--expires expects <Nd|Nh> (e.g. 30d, 12h), got: ${v}`,
+        );
+      }
+      expiresIn = parsed;
+      i++;
+    } else if (a.startsWith("--")) {
+      return argError(deps, "unknown_option", a);
+    } else if (id !== undefined) {
+      return argError(deps, "too_many_args", `unexpected argument: ${a}`);
+    } else {
+      id = a;
+    }
+  }
+  if (!id) return argError(deps, "missing_id", "snapshot id is required");
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(
+    deps,
+    `/api/snapshots/${encodeURIComponent(id)}/publish`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(expiresIn !== undefined ? { expiresIn } : {}),
+    },
+  );
+  if (!result.ok) {
+    return reportShareFailure(deps, result, `snapshot ${id} not found`);
+  }
+  const data = result.data as { url?: string; expiresAt?: string } | null;
+  deps.stdout(data?.url ?? JSON.stringify(result.data));
+  if (data?.expiresAt) deps.stdout(`Expires: ${data.expiresAt}`);
+  return { exitCode: 0 };
+}
+
+export async function runShares(deps: CliDeps): Promise<CliResult> {
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(deps, "/api/shares");
+  if (!result.ok) {
+    return reportShareFailure(deps, result, "share not found");
+  }
+  const shares =
+    (result.data as {
+      shares?: Array<{ id: string; url: string; expiresAt: string }>;
+    } | null)?.shares ?? [];
+  if (shares.length === 0) {
+    deps.stdout("No active shares");
+    return { exitCode: 0 };
+  }
+  for (const s of shares) {
+    deps.stdout(`${s.id}  ${s.url}  expires ${s.expiresAt}`);
+  }
+  return { exitCode: 0 };
+}
+
+export async function runUnpublish(
+  shareId: string | undefined,
+  deps: CliDeps,
+): Promise<CliResult> {
+  if (!shareId) return argError(deps, "missing_id", "share id is required");
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(
+    deps,
+    `/api/shares/${encodeURIComponent(shareId)}`,
+    { method: "DELETE" },
+  );
+  if (!result.ok) {
+    return reportShareFailure(deps, result, `share ${shareId} not found`);
+  }
+  deps.stdout(`Unpublished ${shareId}`);
+  return { exitCode: 0 };
+}
+
 // --help の単一ソース。text と --json はどちらもここから導出するので drift しない。
 // agent はこれを読めばコマンド・env・exit code・出力形式を把握でき、静的 doc に依存しない。
 // router 登録と help の出所を 1 箇所に集約する宣言 (help は下の helpManifest が
@@ -513,6 +750,37 @@ const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
     ],
     run: (rest, deps) => runTemplates(rest, deps),
   },
+  {
+    name: "login",
+    usage: "syokan login",
+    summary: "Log in with GitHub (device flow) to enable publishing",
+    run: (_rest, deps) => runLogin(deps),
+  },
+  {
+    name: "logout",
+    usage: "syokan logout",
+    summary: "Log out from the share API",
+    run: (_rest, deps) => runLogout(deps),
+  },
+  {
+    name: "publish",
+    usage: "syokan publish <id> [--expires <Nd|Nh>]",
+    summary:
+      "Publish a snapshot to a public URL (frozen at publish time; default expiry 7d, max 30d)",
+    run: (rest, deps) => runPublish(rest, deps),
+  },
+  {
+    name: "shares",
+    usage: "syokan shares",
+    summary: "List your active shares (id, url, expiry)",
+    run: (_rest, deps) => runShares(deps),
+  },
+  {
+    name: "unpublish",
+    usage: "syokan unpublish <shareId>",
+    summary: "Delete a published share",
+    run: (rest, deps) => runUnpublish(rest[0], deps),
+  },
 ];
 
 // help の静的メタ。コマンドでない既定の使い方 (file/stdin/bare) は commands と区別して
@@ -546,6 +814,11 @@ export const helpManifest = {
       summary: "Server base URL (default http://localhost:5173)",
     },
     {
+      name: "SYOKAN_SHARE_API",
+      summary:
+        "Share API origin the server publishes to (default https://syokan.dev)",
+    },
+    {
       name: "XDG_CONFIG_HOME",
       summary:
         "Config root (default ~/.config); settings.json lives under <root>/syokan",
@@ -568,7 +841,7 @@ export const helpManifest = {
     {
       code: 1,
       summary:
-        "error: invalid_json | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand | unknown_option",
+        "error: invalid_json | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand | unknown_option | not_logged_in | login_failed | invalid_expires | materialize_failed | share_api_unreachable",
     },
   ],
 };

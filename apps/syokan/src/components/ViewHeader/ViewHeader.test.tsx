@@ -30,4 +30,14 @@ describe("ViewHeader", () => {
     expect(without).not.toContain("view-menu-trigger");
     expect(without).not.toContain("view-delete");
   });
+
+  test("shows the share controls only when snapshotId is provided", () => {
+    const withId = renderToString(
+      createElement(ViewHeader, { snapshotId: "k3f9q2" }),
+    );
+    expect(withId).toContain("data-slot=\"share-button\"");
+
+    const without = renderToString(createElement(ViewHeader, {}));
+    expect(without).not.toContain("share-button");
+  });
 });

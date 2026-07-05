@@ -86,7 +86,8 @@ function makeDeps(opts: {
       const captured: Captured = {
         url,
         method: init?.method ?? "GET",
-        body: init?.body ? JSON.parse(init.body as string) : undefined,
+        // JSON でない body (device flow の form-encoded) は raw 文字列のまま持つ
+        body: init?.body ? parseBodyLoose(init.body as string) : undefined,
       };
       calls.push(captured);
       return opts.respond(captured);
@@ -101,6 +102,14 @@ function makeDeps(opts: {
     spawnCount: () => spawns,
     stopCalls: () => stops,
   };
+}
+
+function parseBodyLoose(body: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
 }
 
 function okResponse(id = "generated-id"): Response {
@@ -763,5 +772,215 @@ describe("cli main: help (generated from command declarations)", () => {
     const usages = manifest.commands.map((c) => c.usage);
     expect(usages).toContain("syokan open [id]");
     expect(usages).toContain("syokan templates [list|add|get|rm]");
+  });
+});
+
+describe("cli main: share commands (login / logout / publish / shares / unpublish)", () => {
+  const DEVICE_CODE_URL = "https://github.com/login/device/code";
+  const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
+
+  test("login: device flow polls until the token arrives, then exchanges it via the local server", async () => {
+    let polls = 0;
+    const { deps, out, calls } = makeDeps({
+      respond: (captured) => {
+        if (captured.url === DEVICE_CODE_URL) {
+          return Response.json({
+            device_code: "dev-1",
+            user_code: "ABCD-1234",
+            verification_uri: "https://github.com/login/device",
+            interval: 0,
+          });
+        }
+        if (captured.url === ACCESS_TOKEN_URL) {
+          polls += 1;
+          return polls === 1
+            ? Response.json({ error: "authorization_pending" })
+            : Response.json({ access_token: "gh-tok" });
+        }
+        return Response.json({ login: "octocat" });
+      },
+    });
+    const result = await main(["login"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(out[0]).toBe(
+      "Open https://github.com/login/device and enter code: ABCD-1234",
+    );
+    expect(out[1]).toBe("Logged in as octocat");
+    // device flow で得た GitHub token は local server へ渡す (CLI は保存しない)
+    const exchange = calls.find((c) => c.url.endsWith("/api/auth/login"));
+    expect(exchange?.method).toBe("POST");
+    expect(exchange?.body).toEqual({ githubAccessToken: "gh-tok" });
+  });
+
+  test("login: access_denied stops polling and fails with login_failed", async () => {
+    const { deps, err } = makeDeps({
+      respond: (captured) => {
+        if (captured.url === DEVICE_CODE_URL) {
+          return Response.json({
+            device_code: "dev-1",
+            user_code: "ABCD-1234",
+            verification_uri: "https://github.com/login/device",
+            interval: 0,
+          });
+        }
+        return Response.json({ error: "access_denied" });
+      },
+    });
+    const result = await main(["login"], deps);
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(err[0] as string) as { error: string };
+    expect(parsed.error).toBe("login_failed");
+  });
+
+  test("logout: DELETE /api/auth/login and print Logged out", async () => {
+    const { deps, out, calls } = makeDeps({
+      respond: () => Response.json({ ok: true }),
+    });
+    const result = await main(["logout"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(out).toEqual(["Logged out"]);
+    expect(calls[0]?.method).toBe("DELETE");
+    expect(calls[0]?.url).toBe("http://localhost:5173/api/auth/login");
+  });
+
+  test("publish: posts expiresIn (12h -> seconds) and prints url + expiry", async () => {
+    const { deps, out, calls } = makeDeps({
+      respond: () =>
+        Response.json(
+          {
+            id: "s1",
+            url: "https://syokan.dev/shares/s1",
+            expiresAt: "2026-07-11T00:00:00.000Z",
+          },
+          { status: 201 },
+        ),
+    });
+    const result = await main(["publish", "abc", "--expires", "12h"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(out).toEqual([
+      "https://syokan.dev/shares/s1",
+      "Expires: 2026-07-11T00:00:00.000Z",
+    ]);
+    expect(calls[0]?.url).toBe(
+      "http://localhost:5173/api/snapshots/abc/publish",
+    );
+    expect(calls[0]?.method).toBe("POST");
+    expect(calls[0]?.body).toEqual({ expiresIn: 43_200 });
+  });
+
+  test("publish: 401 not_logged_in points at `syokan login`", async () => {
+    const { deps, err } = makeDeps({
+      respond: () =>
+        Response.json({ error: "not_logged_in" }, { status: 401 }),
+    });
+    const result = await main(["publish", "abc"], deps);
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(err[0] as string) as {
+      error: string;
+      message: string;
+    };
+    expect(parsed.error).toBe("not_logged_in");
+    expect(parsed.message).toContain("syokan login");
+  });
+
+  test("publish: 422 materialize_failed is reported with path + reason", async () => {
+    const { deps, err } = makeDeps({
+      respond: () =>
+        Response.json(
+          { error: "materialize_failed", path: "/x/gone.md", reason: "not_found" },
+          { status: 422 },
+        ),
+    });
+    const result = await main(["publish", "abc"], deps);
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(err[0] as string) as {
+      error: string;
+      message: string;
+    };
+    expect(parsed.error).toBe("materialize_failed");
+    expect(parsed.message).toContain("/x/gone.md");
+    expect(parsed.message).toContain("not_found");
+  });
+
+  test("publish: an invalid --expires value is an arg error (no request is made)", async () => {
+    const { deps, err, calls } = makeDeps({ respond: () => okResponse() });
+    const result = await main(["publish", "abc", "--expires", "30x"], deps);
+    expect(result.exitCode).toBe(1);
+    expect(calls).toEqual([]);
+    const parsed = JSON.parse(err[0] as string) as { error: string };
+    expect(parsed.error).toBe("invalid_expires");
+  });
+
+  test("publish: missing id is an arg error", async () => {
+    const { deps, err } = makeDeps({ respond: () => okResponse() });
+    const result = await main(["publish"], deps);
+    expect(result.exitCode).toBe(1);
+    const parsed = JSON.parse(err[0] as string) as { error: string };
+    expect(parsed.error).toBe("missing_id");
+  });
+
+  test("shares: prints one line per share", async () => {
+    const { deps, out } = makeDeps({
+      respond: () =>
+        Response.json({
+          shares: [
+            {
+              id: "s1",
+              url: "https://syokan.dev/shares/s1",
+              sourceSnapshotId: "a",
+              createdAt: "c",
+              expiresAt: "e1",
+            },
+            {
+              id: "s2",
+              url: "https://syokan.dev/shares/s2",
+              sourceSnapshotId: "b",
+              createdAt: "c",
+              expiresAt: "e2",
+            },
+          ],
+        }),
+    });
+    const result = await main(["shares"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(out).toEqual([
+      "s1  https://syokan.dev/shares/s1  expires e1",
+      "s2  https://syokan.dev/shares/s2  expires e2",
+    ]);
+  });
+
+  test("shares: empty list prints 'No active shares'", async () => {
+    const { deps, out } = makeDeps({
+      respond: () => Response.json({ shares: [] }),
+    });
+    const result = await main(["shares"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(out).toEqual(["No active shares"]);
+  });
+
+  test("unpublish: DELETE /api/shares/:id and print confirmation", async () => {
+    const { deps, out, calls } = makeDeps({
+      respond: () => Response.json({ ok: true }),
+    });
+    const result = await main(["unpublish", "s1"], deps);
+    expect(result.exitCode).toBe(0);
+    expect(out).toEqual(["Unpublished s1"]);
+    expect(calls[0]?.method).toBe("DELETE");
+    expect(calls[0]?.url).toBe("http://localhost:5173/api/shares/s1");
+  });
+
+  test("--help lists the share commands", async () => {
+    const h = makeDeps({ respond: () => okResponse() });
+    await main(["--help"], h.deps);
+    const text = h.out.join("\n");
+    for (const usage of [
+      "syokan login",
+      "syokan logout",
+      "syokan publish <id> [--expires <Nd|Nh>]",
+      "syokan shares",
+      "syokan unpublish <shareId>",
+    ]) {
+      expect(text).toContain(usage);
+    }
   });
 });
