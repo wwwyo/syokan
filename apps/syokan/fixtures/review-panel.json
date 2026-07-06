@@ -141,7 +141,8 @@
                     "type": "Diff",
                     "props": {
                       "patch": "diff --git a/apps/syokan/server/share.ts b/apps/syokan/server/share.ts\n--- a/apps/syokan/server/share.ts\n+++ b/apps/syokan/server/share.ts\n@@ -10,6 +10,7 @@\n context\n-old line\n+forwardAuthHeader(req)\n context"
-                    }
+                    },
+                    "id": "risk-token-log-hunk"
                   }
                 ]
               },
@@ -354,10 +355,10 @@
         "id": "review-checklist",
         "children": [
           {
-            "type": "Text",
+            "type": "Link",
             "props": {
-              "body": "Open #risk-token-log and re-run the probe after new commits.",
-              "muted": true
+              "href": "#risk-token-log-hunk",
+              "text": "→ open the evidence and re-run the probe after new commits"
             }
           },
           {
