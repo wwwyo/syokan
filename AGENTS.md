@@ -201,8 +201,8 @@ Hit while wiring the brand `Logo` into `Home.tsx` and the sidebar.
 
 Hit while adding the brand favicon + OG image.
 
-- **Two entrypoints**: `apps/syokan/index.html` (main app) and `apps/share/viewer/index.html` (public share) are independent heads. `<link rel="icon">`, `<title>`, and OG/Twitter `<meta>` must be added to **both** and kept in sync by hand.
-- **Bundler blind spot**: Bun's HTML-entry build (`apps/share/build.ts`) only follows `<script>` / `<link rel=stylesheet>` imports. A static file referenced *only* from `<meta property="og:image">` is **not** copied into `dist` — `build.ts` must copy it explicitly. Inline `data:` URIs (the SVG favicon) survive minify, so they need no copy.
+- **Two entrypoints**: `apps/syokan/index.html` (main app) and `apps/share/viewer/index.html` (public share) are independent heads. The shared favicon (`<link rel="icon">` SVG data URI) must be added to **both** and kept in sync by hand. OG/Twitter `<meta>` and the raster icon fallbacks (`.ico` / apple-touch) live on the **public share head only** — the main app is a localhost bind, never unfurled or home-screened, so it stays SVG-favicon-only.
+- **Bundler blind spot**: Bun's HTML-entry build (`apps/share/build.ts`) only follows `<script>` / `<link rel=stylesheet>` imports. A static file referenced *only* from `<meta property="og:image">` is **not** copied into `dist` — `build.ts` must copy it explicitly. It also tries to *resolve* file-path `<link href>` (favicon `.ico` / apple-touch), which fails the build, so those links are injected post-build instead of living in the source HTML. Inline `data:` URIs (the SVG favicon) survive minify, so they need no copy.
 
 ## Communication policy
 

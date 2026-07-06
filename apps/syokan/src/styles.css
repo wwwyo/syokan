@@ -133,7 +133,9 @@
 
 /* Brand wordmark face: Grenze Gotisch, subset to just the glyphs in "syokan" (~1.5KB) and
    inlined so the lockup is self-contained (no runtime CDN) and unaffected by the
-   user-selectable app font. Used only by .font-brand (the LogoLockup wordmark). */
+   user-selectable app font. Used only by .font-brand (the LogoLockup wordmark).
+   Source: Google Fonts (Omnibus-Type/Grenze-Gotisch), subset via the css2 `text=` API.
+   Licensed under SIL OFL 1.1 — full license + copyright: components/Logo/GrenzeGotisch-OFL.txt */
 @font-face {
   font-family: "Grenze Gotisch";
   font-style: normal;
