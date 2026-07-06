@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import type { Item } from "./schema";
 import { components } from "./catalogs";
+import { NodeWrapper } from "./components/NodeWrapper";
 import { UnknownComponent } from "./components/UnknownComponent";
 
 export type RenderProps = {
@@ -15,5 +16,7 @@ export function Render({ item }: RenderProps): ReactElement {
   const childElements = item.children?.map((child, index) => (
     <Render key={child.key ?? index} item={child} />
   ));
-  return <Component {...item.props}>{childElements}</Component>;
+  const element = <Component {...item.props}>{childElements}</Component>;
+  if (item.id === undefined && item.tags === undefined) return element;
+  return <NodeWrapper item={item}>{element}</NodeWrapper>;
 }

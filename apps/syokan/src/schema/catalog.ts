@@ -5,6 +5,10 @@ export type Item = {
   props: Record<string, unknown>;
   children?: Item[];
   key?: string;
+  // cross-cutting mechanisms (available on every node, independent of type):
+  // id anchors the node for in-view navigation; tags opt the node into TagFilter narrowing.
+  id?: string;
+  tags?: string[];
 };
 
 export type ComponentSpec<
@@ -85,6 +89,8 @@ function buildUnion(
         props: spec.propsSchema,
         children: childrenSchema,
         key: z.string().min(1).optional(),
+        id: z.string().min(1).optional(),
+        tags: z.array(z.string().min(1)).optional(),
       })
       .strict();
   });

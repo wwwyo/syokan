@@ -2,6 +2,7 @@ import { t } from "./lib/i18n";
 import type { SnapshotEnvelope } from "./schema";
 import { PageLayout } from "./components/PageLayout";
 import { ViewHeader } from "./components/ViewHeader";
+import { ViewStateProvider } from "./lib/viewState";
 import { Render } from "./Render";
 
 // Only when root is a resizable Stack, drop the width constraint and spread full-screen.
@@ -33,7 +34,9 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
         />
       }
     >
-      <Render item={envelope.root} />
+      <ViewStateProvider scopeKey={envelope.id}>
+        <Render item={envelope.root} />
+      </ViewStateProvider>
     </PageLayout>
   );
 }

@@ -151,4 +151,35 @@ describe("createCatalog", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  test("accepts cross-cutting id and tags on any node", () => {
+    const { itemSchema } = createCatalog([TextSpec, ContainerSpec]);
+    const parsed = itemSchema.parse({
+      type: "Container",
+      props: {},
+      id: "risk-1",
+      tags: ["high"],
+      children: [
+        { type: "Text", props: { content: "hi" }, id: "risk-1-body" },
+      ],
+    });
+    expect(parsed.id).toBe("risk-1");
+    expect(parsed.tags).toEqual(["high"]);
+    expect(parsed.children?.[0]?.id).toBe("risk-1-body");
+  });
+
+  test("rejects empty id and empty tag entries", () => {
+    const { itemSchema } = createCatalog([TextSpec]);
+    expect(
+      itemSchema.safeParse({ type: "Text", props: { content: "x" }, id: "" })
+        .success,
+    ).toBe(false);
+    expect(
+      itemSchema.safeParse({
+        type: "Text",
+        props: { content: "x" },
+        tags: [""],
+      }).success,
+    ).toBe(false);
+  });
 });
