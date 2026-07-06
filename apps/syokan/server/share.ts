@@ -10,8 +10,6 @@ import {
   type ShareServiceDeps,
 } from "./shareService";
 
-export type ShareAppDeps = ShareServiceDeps;
-
 const loginInputSchema = z
   .object({ githubAccessToken: z.string().min(1) })
   .strict();
@@ -92,7 +90,7 @@ function emitFailure(c: Context, failure: ServiceFailure) {
  * routing, the cross-origin (CSRF) guard, and request/response shaping; the Worker calls, auth-file
  * handling, and TreeDoc freezing live in the service layer (shareService.ts).
  */
-export function createShareApp(deps: ShareAppDeps) {
+export function createShareApp(deps: ShareServiceDeps) {
   const service = createShareService(deps);
 
   return new Hono()

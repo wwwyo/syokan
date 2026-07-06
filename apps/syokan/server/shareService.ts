@@ -15,7 +15,7 @@ import {
 import { materializeTree } from "./materialize";
 import type { SnapshotStore } from "./store";
 
-export type AuthData = { token: string; login: string };
+type AuthData = { token: string; login: string };
 
 /** The origin the local server calls the Worker at. Switch deploy targets with a single env var. */
 export function shareApiOrigin(): string {
@@ -96,6 +96,26 @@ export type ServiceFailure =
   | { ok: false; kind: "not_found"; id: string }
   | { ok: false; kind: "materialize_failed"; path: string; reason: string }
   | { ok: false; kind: "worker_error"; status: WorkerFailure["status"]; body: WorkerFailure["body"] };
+
+// Parse a Worker success body; a broken proxy that returns non-JSON folds into bad_response.
+async function parseJson<T>(
+  res: Response,
+): Promise<{ ok: true; value: T } | ServiceFailure> {
+  try {
+    return { ok: true, value: (await res.json()) as T };
+  } catch {
+    return { ok: false, kind: "bad_response" };
+  }
+}
+
+// A Worker 401 on an authenticated call = the stored token expired, so tell the client to log in
+// again; any other failure forwards verbatim. (login is exempt: its 401 is a GitHub-verification
+// failure and must pass through as worker_error.)
+async function workerFailureAsService(res: Response): Promise<ServiceFailure> {
+  const failure = await workerFailure(res);
+  if (failure.status === 401) return { ok: false, kind: "not_logged_in" };
+  return { ok: false, kind: "worker_error", ...failure };
+}
 
 export type CurrentLoginResult = { login: string } | undefined;
 export type LoginResult = { ok: true; login: string } | ServiceFailure;
@@ -210,17 +230,10 @@ export function createShareService(deps: ShareServiceDeps): ShareService {
         return { ok: false, kind: "unreachable" };
       }
       if (res.status === 201) {
-        try {
-          return { ok: true, share: (await res.json()) as CreateShareResponse };
-        } catch {
-          // A 201 with a non-JSON body means a broken proxy between us and the Worker.
-          return { ok: false, kind: "bad_response" };
-        }
+        const parsed = await parseJson<CreateShareResponse>(res);
+        return parsed.ok ? { ok: true, share: parsed.value } : parsed;
       }
-      const failure = await workerFailure(res);
-      // A Worker 401 = stored token expired. Surface it to the client as "log in again".
-      if (failure.status === 401) return { ok: false, kind: "not_logged_in" };
-      return { ok: false, kind: "worker_error", ...failure };
+      return workerFailureAsService(res);
     },
 
     async listShares(snapshot) {
@@ -237,16 +250,10 @@ export function createShareService(deps: ShareServiceDeps): ShareService {
         return { ok: false, kind: "unreachable" };
       }
       if (res.status === 200) {
-        try {
-          const body = (await res.json()) as ListSharesResponse;
-          return { ok: true, shares: body.shares };
-        } catch {
-          return { ok: false, kind: "bad_response" };
-        }
+        const parsed = await parseJson<ListSharesResponse>(res);
+        return parsed.ok ? { ok: true, shares: parsed.value.shares } : parsed;
       }
-      const failure = await workerFailure(res);
-      if (failure.status === 401) return { ok: false, kind: "not_logged_in" };
-      return { ok: false, kind: "worker_error", ...failure };
+      return workerFailureAsService(res);
     },
 
     async deleteShare(id) {
@@ -264,16 +271,10 @@ export function createShareService(deps: ShareServiceDeps): ShareService {
         return { ok: false, kind: "unreachable" };
       }
       if (res.status === 200) {
-        try {
-          await res.json();
-          return { ok: true };
-        } catch {
-          return { ok: false, kind: "bad_response" };
-        }
+        const parsed = await parseJson<unknown>(res);
+        return parsed.ok ? { ok: true } : parsed;
       }
-      const failure = await workerFailure(res);
-      if (failure.status === 401) return { ok: false, kind: "not_logged_in" };
-      return { ok: false, kind: "worker_error", ...failure };
+      return workerFailureAsService(res);
     },
   };
 }

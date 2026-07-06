@@ -59,7 +59,7 @@ mise install && bun install
 bun run dev    # both apps: syokan server (Bun.serve + HMR) and the share Worker (wrangler dev)
 ```
 
-Root `dev` fans out to every workspace app (`bun --filter '@syokan/*' dev`); each app owns its own `dev` script. It brings up two processes:
+Root `dev` fans out to every workspace app (`bun --filter '@syokan/*' --parallel dev`); each app owns its own `dev` script. It brings up two processes:
 
 - **`@syokan/app`** on port `5273` (`https://syokan.localhost` via portless), writing to the repo-local `./.syokan-dev/` directory, so it never collides with a global install (port `5173` / standard XDG directories).
 - **`@syokan/share`** on port `8787` (`wrangler dev`, local KV via miniflare). The viewer is bundled once at startup; worker code hot-reloads, but viewer edits need a re-run (no viewer HMR).

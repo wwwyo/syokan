@@ -16,7 +16,7 @@
     "#hooks/*": "./src/hooks/*"
   },
   "scripts": {
-    "dev": "portless run --app-port 5273 env XDG_CONFIG_HOME=$PWD/../../.syokan-dev/config XDG_DATA_HOME=$PWD/../../.syokan-dev/data XDG_STATE_HOME=$PWD/../../.syokan-dev/state SYOKAN_SHARE_API=http://localhost:8787 bun --hot server/index.ts",
+    "dev": "portless run --name syokan --app-port 5273 env XDG_CONFIG_HOME=$PWD/../../.syokan-dev/config XDG_DATA_HOME=$PWD/../../.syokan-dev/data XDG_STATE_HOME=$PWD/../../.syokan-dev/state SYOKAN_SHARE_API=http://localhost:8787 bun --hot server/index.ts",
     "compile": "bun build.ts",
     "compile:all": "bun build.ts --release",
     "release": "bun scripts/release.ts",

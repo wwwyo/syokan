@@ -4,7 +4,7 @@
   "private": true,
   "workspaces": ["apps/*"],
   "scripts": {
-    "dev": "bun --filter '@syokan/*' dev",
+    "dev": "bun --filter '@syokan/*' --parallel --elide-lines 0 dev",
     "compile": "bun --filter @syokan/app compile",
     "compile:all": "bun --filter @syokan/app compile:all",
     "release": "bun apps/syokan/scripts/release.ts",
