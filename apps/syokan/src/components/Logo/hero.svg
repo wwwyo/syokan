@@ -1,0 +1,30 @@
+<!-- Accent "summon" variant of the mark: glowing indigo→violet `{ ✦ }`, for OGP / splash /
+     empty states. Fixed colors (not currentColor) since it is a standalone illustrative
+     asset, not the theme-following in-app mark. Transparent background; sits on any dark surface. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" role="img" aria-label="syokan">
+  <defs>
+    <linearGradient id="sigilMagic" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a5b4fc"/>
+      <stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+    <radialGradient id="sigilAura" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#a5b4fc" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#a5b4fc" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="sigilGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="50" cy="50" r="38" fill="url(#sigilAura)"/>
+  <g filter="url(#sigilGlow)">
+    <g stroke="url(#sigilMagic)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M34 23 C27 23,27 29,27 39 C27 45,23 47,18 50 C23 53,27 55,27 61 C27 71,27 77,34 77"/>
+      <path d="M66 23 C73 23,73 29,73 39 C73 45,77 47,82 50 C77 53,73 55,73 61 C73 71,73 77,66 77"/>
+    </g>
+    <path d="M50 38.5 C50.79 46.91,53.09 49.21,61.5 50 C53.09 50.79,50.79 53.09,50 61.5 C49.21 53.09,46.91 50.79,38.5 50 C46.91 49.21,49.21 46.91,50 38.5 Z" fill="url(#sigilMagic)"/>
+  </g>
+</svg>

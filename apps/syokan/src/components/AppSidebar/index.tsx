@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router";
-import { X } from "lucide-react";
+import { Settings, X } from "lucide-react";
 import { shellRouteApi } from "../AppShell/shellRouteApi";
 import { useDeleteSnapshot } from "../AppShell/useDeleteSnapshot";
 import {
@@ -41,11 +41,13 @@ export function AppSidebar() {
     >
       <div className="flex h-full w-64 flex-col">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          {/* Home is the settings screen, so this reads as a settings affordance */}
           <Link
             to="/"
-            className="text-sm font-semibold tracking-tight text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={t.shell.settings}
+            className="-ml-1 flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
-            syokan
+            <Settings className="size-4" />
           </Link>
           {/* Place a close control inside the sidebar too, so it can be closed even without a ViewHeader (not-found / pending / error) */}
           {sidebar ? (

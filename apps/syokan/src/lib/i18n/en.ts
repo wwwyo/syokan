@@ -58,6 +58,7 @@ export const en = {
     reload: "Reload",
     pageNotFound: "Page not found.",
     sidebarLabel: "Snapshots",
+    settings: "Settings",
     close: "Close",
     emptyList: "No snapshots yet",
   },

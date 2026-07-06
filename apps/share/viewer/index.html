@@ -4,6 +4,44 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>syokan</title>
+    <meta
+      name="description"
+      content="Syokan (summon) UI on the spot — post JSON, not JSX."
+    />
+    <!-- Open Graph / Twitter card for link unfurls. og:image must be absolute; the JPEG is
+         copied into the asset dir by build.ts and served at /og-image.jpg. Generic brand card
+         (share pages are an SPA on one HTML, so per-snapshot images aren't wired). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="syokan" />
+    <meta property="og:title" content="syokan" />
+    <meta
+      property="og:description"
+      content="Syokan (summon) UI on the spot — post JSON, not JSX."
+    />
+    <!-- No og:url: the same static HTML backs both / and /shares/:id, so a fixed canonical
+         would collapse every share's unfurl to the root. Omitting it lets unfurlers use the
+         actual request URL while still showing the generic brand card below. -->
+    <meta property="og:image" content="https://syokan.dev/og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="syokan" />
+    <meta
+      name="twitter:description"
+      content="Syokan (summon) UI on the spot — post JSON, not JSX."
+    />
+    <meta name="twitter:image" content="https://syokan.dev/og-image.jpg" />
+    <!-- Favicon set. The SVG (theme-aware via prefers-color-scheme) is primary for modern
+         browsers; the .ico (legacy fallback) and apple-touch-icon (opaque iOS tile) links are
+         injected by build.ts — Bun's HTML bundler would try to resolve their file-path hrefs at
+         build time, so they can't live here. The SVG data URI is kept in sync with
+         apps/syokan/index.html by eye. -->
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Cstyle%3E*%7B--c:%23141414%7D@media(prefers-color-scheme:dark)%7B*%7B--c:%23fafafa%7D%7D%3C/style%3E%3Cg%20fill='none'%20stroke='var(--c)'%20stroke-width='4.5'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M34%2023%20C27%2023%2027%2029%2027%2039%20C27%2045%2023%2047%2018%2050%20C23%2053%2027%2055%2027%2061%20C27%2071%2027%2077%2034%2077'/%3E%3Cpath%20d='M66%2023%20C73%2023%2073%2029%2073%2039%20C73%2045%2077%2047%2082%2050%20C77%2053%2073%2055%2073%2061%20C73%2071%2073%2077%2066%2077'/%3E%3C/g%3E%3Cpath%20d='M50%2038.5%20C50.79%2046.91%2053.09%2049.21%2061.5%2050%20C53.09%2050.79%2050.79%2053.09%2050%2061.5%20C49.21%2053.09%2046.91%2050.79%2038.5%2050%20C46.91%2049.21%2049.21%2046.91%2050%2038.5%20Z'%20fill='var(--c)'/%3E%3C/svg%3E"
+    />
     <script>
       // viewer に設定 UI はないので OS 設定のみに追従する
       (function () {
