@@ -8,6 +8,21 @@ export type MaterializeResult =
   | { ok: true; root: Item }
   | { ok: false; path: string; reason: MaterializeFailure };
 
+// key and the cross-cutting mechanisms (id / tags) ride along unchanged
+function carryNodeFields(from: Item, to: Item): void {
+  if (from.key !== undefined) to.key = from.key;
+  if (from.id !== undefined) to.id = from.id;
+  if (from.tags !== undefined) to.tags = from.tags;
+}
+
+// A published envelope leaves the localhost trust boundary: probe args/results can
+// carry local paths, so hiding them in the shared *view* is not enough — strip them
+// from the published data itself unless the producer opted in with shareVisible.
+function redactProbe(props: Record<string, unknown>): Record<string, unknown> {
+  if (props.shareVisible === true) return { ...props };
+  return typeof props.label === "string" ? { label: props.label } : {};
+}
+
 /**
  * Copy the tree while freezing each TreeDoc into its referenced subtree at publish time.
  * Interpretation of the file content (parse / validation / the nested-TreeDoc ban) mirrors the
@@ -21,8 +36,12 @@ export async function materializeTree(item: Item): Promise<MaterializeResult> {
     if (!result.ok) return { ok: false, path, reason: result.reason };
     const parsed = parseTreeContent(result.content);
     if (!parsed.ok) return { ok: false, path, reason: parsed.reason };
-    const node = parsed.root;
-    if (item.key !== undefined) node.key = item.key;
+    // the synced subtree can itself contain Probes; re-run the copy over it so
+    // redaction applies (it can't contain TreeDoc — nesting is banned at parse)
+    const inner = await materializeTree(parsed.root);
+    if (!inner.ok) return inner;
+    const node = inner.root;
+    carryNodeFields(item, node);
     return { ok: true, root: node };
   }
   let children: Item[] | undefined;
@@ -34,8 +53,11 @@ export async function materializeTree(item: Item): Promise<MaterializeResult> {
       children.push(result.root);
     }
   }
-  const copy: Item = { type: item.type, props: { ...item.props } };
+  const copy: Item = {
+    type: item.type,
+    props: item.type === "Probe" ? redactProbe(item.props) : { ...item.props },
+  };
   if (children) copy.children = children;
-  if (item.key !== undefined) copy.key = item.key;
+  carryNodeFields(item, copy);
   return { ok: true, root: copy };
 }

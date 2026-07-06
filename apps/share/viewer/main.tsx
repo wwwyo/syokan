@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { CodeSnippet } from "@syokan/app/components/CodeSnippet";
 import { Render } from "@syokan/app/render";
 import type { Item } from "@syokan/app/schema";
+import { ViewStateProvider } from "@syokan/app/viewState";
 import type { PublicShareResponse } from "../types";
 
 const GITHUB_URL = "https://github.com/wwwyo/syokan";
@@ -167,7 +168,11 @@ function ShareView({ id }: { id: string }) {
         </div>
       </header>
       <main className={`${width} flex-1 px-6 py-8`}>
-        <Render item={envelope.root} />
+        {/* shared=true gates capabilities (Probe rerun etc.); viewers still get their own
+            device-local interaction state (collapse/checks/filter) under the share scope */}
+        <ViewStateProvider scopeKey={`share:${id}`} shared>
+          <Render item={envelope.root} />
+        </ViewStateProvider>
       </main>
       <footer className="flex justify-center py-6">
         <SummonedBadge />

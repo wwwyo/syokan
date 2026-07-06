@@ -27,6 +27,11 @@ export const probePropsSchema = z
 
 export type ProbeProps = z.infer<typeof probePropsSchema>;
 
+// what the component actually receives: published envelopes strip check/result at
+// publish time unless shareVisible (server/materialize.ts), so check can be absent
+// even though producers must always send it.
+type ProbeComponentProps = Omit<ProbeProps, "check"> & { check?: ProbeCheck };
+
 function describeCheck(check: ProbeCheck): string {
   switch (check.kind) {
     case "diff_clean":
@@ -53,7 +58,7 @@ const statusStyles = {
  * schema (check.ts) — no arbitrary shell. diff_clean results go stale when repo HEAD
  * moves past the run.
  */
-export function Probe({ label, check, result, shareVisible }: ProbeProps) {
+export function Probe({ label, check, result, shareVisible }: ProbeComponentProps) {
   const shared = useSharedView();
   const [rerunResult, setRerunResult] = useNodeUiState<ProbeResult | null>(
     "probe",
@@ -64,7 +69,7 @@ export function Probe({ label, check, result, shareVisible }: ProbeProps) {
   const latest = rerunResult ?? result;
 
   // stale = target ref moved past the last run. Only diff_clean defines a target ref.
-  const repo = check.kind === "diff_clean" ? check.repo : null;
+  const repo = check?.kind === "diff_clean" ? check.repo : null;
   const resultCommit = latest?.ref?.commit ?? null;
   useEffect(() => {
     if (shared || repo === null || resultCommit === null) return;
@@ -93,6 +98,7 @@ export function Probe({ label, check, result, shareVisible }: ProbeProps) {
     resultCommit !== null && headCommit !== null && headCommit !== resultCommit;
 
   const rerun = async () => {
+    if (check === undefined) return;
     setRunning(true);
     try {
       const res = await fetch("/api/probes/run", {
@@ -122,7 +128,7 @@ export function Probe({ label, check, result, shareVisible }: ProbeProps) {
     }
   };
 
-  const hiddenOnShare = shared && shareVisible !== true;
+  const hiddenOnShare = (shared && shareVisible !== true) || check === undefined;
   return (
     <div
       data-slot="probe"
@@ -144,7 +150,7 @@ export function Probe({ label, check, result, shareVisible }: ProbeProps) {
             not run
           </span>
         )}
-        <span className="font-medium">{label ?? check.kind}</span>
+        <span className="font-medium">{label ?? check?.kind ?? "probe"}</span>
         {stale && !hiddenOnShare && (
           <Badge variant="outline" data-slot="probe-stale">
             stale
@@ -175,12 +181,14 @@ export function Probe({ label, check, result, shareVisible }: ProbeProps) {
       ) : (
         <>
           {/* what would run is always inspectable — the reader never re-runs a black box */}
-          <p
-            data-slot="probe-check"
-            className="break-all font-mono text-xs text-muted-foreground"
-          >
-            {describeCheck(check)}
-          </p>
+          {check !== undefined && (
+            <p
+              data-slot="probe-check"
+              className="break-all font-mono text-xs text-muted-foreground"
+            >
+              {describeCheck(check)}
+            </p>
+          )}
           {latest?.detail !== undefined && (
             <p data-slot="probe-detail" className="text-xs text-muted-foreground">
               {latest.detail}
