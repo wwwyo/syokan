@@ -20,7 +20,8 @@ import {
   getCatalog,
 } from "./routes";
 import { createSettingStore } from "./setting";
-import { createShareApp, shareApiOrigin } from "./share";
+import { createShareApp } from "./share";
+import { shareApiOrigin } from "./shareService";
 import { createSnapshotStore } from "./store";
 import { createTemplateStore } from "./templates";
 

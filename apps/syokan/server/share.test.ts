@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createShareApp, readAuth } from "./share";
+import { createShareApp } from "./share";
+import { readAuth } from "./shareService";
 import { createSnapshotStore, type SnapshotStore } from "./store";
 
 const ORIGIN = "https://share.test";
