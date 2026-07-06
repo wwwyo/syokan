@@ -5,6 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "dev": "bun build.ts && wrangler dev --port 8787",
     "build": "bun build.ts",
     "deploy": "bun build.ts && wrangler deploy"
   },

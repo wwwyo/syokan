@@ -31,6 +31,8 @@ yarn-error.log*
 data/
 # dev server のローカル XDG base (dev script が XDG_*_HOME=$PWD/.syokan-dev/{config,data,state})
 .syokan-dev/
+# wrangler dev のローカル状態 (miniflare の KV/Cache = sqlite, bundle 一時ファイル)。本番とは無関係の再生成物
+.wrangler/
 
 # TypeScript
 *.tsbuildinfo

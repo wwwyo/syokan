@@ -56,10 +56,15 @@ syokan dashboard.json   # summons the tree; every save re-renders the view
 
 ```bash
 mise install && bun install
-bun run dev    # Bun.serve + HMR (https://syokan.localhost via portless)
+bun run dev    # both apps: syokan server (Bun.serve + HMR) and the share Worker (wrangler dev)
 ```
 
-Dev uses port `5273` and the repo-local `./.syokan-dev/` directory, so it never collides with a global install (port `5173` / standard XDG directories). Inside this repo the mise `[shell_alias]` points `syokan` at the local-source CLI pinned to the dev server (`SYOKAN_BASE_URL=http://localhost:5273`), so `syokan <file>` posts to dev, not your production instance; outside the repo `syokan` is the global install. To skip portless, use `PORTLESS=0 bun run dev` (default port `5173`).
+Root `dev` fans out to every workspace app (`bun --filter '@syokan/*' --parallel dev`); each app owns its own `dev` script. It brings up two processes:
+
+- **`@syokan/app`** on port `5273` (`https://syokan.localhost` via portless), writing to the repo-local `./.syokan-dev/` directory, so it never collides with a global install (port `5173` / standard XDG directories).
+- **`@syokan/share`** on port `8787` (`wrangler dev`, local KV via miniflare). The viewer is bundled once at startup; worker code hot-reloads, but viewer edits need a re-run (no viewer HMR).
+
+In dev the syokan server points `SYOKAN_SHARE_API` at the local Worker (`http://localhost:8787`), so publishing/sharing is exercised against local KV — it never touches the production `syokan.dev` share service. Inside this repo the mise `[shell_alias]` likewise points the `syokan` CLI at the dev server (`SYOKAN_BASE_URL=http://localhost:5273`), so `syokan <file>` posts to dev, not production; outside the repo `syokan` is the global install. To skip portless, use `PORTLESS=0 bun run dev` (default port `5173`). To run just one app, use its own `dev` (e.g. `bun --filter @syokan/app dev`) — note `@syokan/app` alone still targets local share on `8787`, so publishing needs the share Worker up too.
 
 ## Envelope
 
