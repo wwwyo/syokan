@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { LogoLockup } from "./LogoLockup";
+import { LogoLockup } from ".";
 
 const meta = {
   title: "Components/LogoLockup",

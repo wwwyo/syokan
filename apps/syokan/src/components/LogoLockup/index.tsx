@@ -1,5 +1,5 @@
+import { BRACE_LEFT, BRACE_RIGHT, SIGIL_VIEWBOX_TIGHT, SPARK } from "../Logo";
 import { cn } from "../../lib/utils";
-import { BRACE_LEFT, BRACE_RIGHT, SIGIL_VIEWBOX_TIGHT, SPARK } from ".";
 
 /**
  * The brand lockup: the `{ ✦ }` mark set with the lowercase "syokan" wordmark in Grenze
@@ -8,15 +8,18 @@ import { BRACE_LEFT, BRACE_RIGHT, SIGIL_VIEWBOX_TIGHT, SPARK } from ".";
  * Both mark and text follow currentColor; size the whole thing with font-size (via className).
  */
 type LogoLockupProps = {
+  /** Accessible name. For decorative use (e.g. another element labels the region), pass "" to aria-hide. */
   title?: string;
   className?: string;
 };
 
 export function LogoLockup({ title = "syokan", className }: LogoLockupProps) {
+  const decorative = title === "";
   return (
     <span
-      role="img"
-      aria-label={title}
+      role={decorative ? undefined : "img"}
+      aria-label={decorative ? undefined : title}
+      aria-hidden={decorative || undefined}
       className={cn(
         "font-brand inline-flex items-center gap-[0.36em] leading-none tracking-[0.02em]",
         className,

@@ -1,7 +1,7 @@
 import { SidebarToggle } from "./components/AppSidebar/SidebarToggle";
 import { CodeSnippet } from "./components/CodeSnippet";
 import { FontSelect } from "./components/FontSelect";
-import { LogoLockup } from "./components/Logo/LogoLockup";
+import { LogoLockup } from "./components/LogoLockup";
 import { PageLayout } from "./components/PageLayout";
 import { ThemeSelect } from "./components/ThemeSelect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
