@@ -4,6 +4,10 @@
 
 > **Setup and usage (the `POST /api/snapshots` envelope schema / source.label spec / catalog type list) live in [README.md](./README.md); CLI commands live in `syokan --help` (machine-readable via `--help --json`) — those are the SSOT.** This AGENTS.md covers design judgments (why) and development conventions (how to change things).
 
+## Repo learning skills
+
+- Brand/logo/OGP changes should load `.agents/skills/brand-assets/` for repo-specific asset pitfalls maintained by session-retro.
+
 ## Why build this
 
 ### The problem to solve
