@@ -6,6 +6,7 @@ import { Checklist } from "./Checklist";
 import { Code } from "./Code";
 import { Collapsible } from "./Collapsible";
 import { Diff } from "./Diff";
+import { Graph } from "./Graph";
 import { Heading } from "./Heading";
 import { Link } from "./Link";
 import { Mermaid } from "./Mermaid";
@@ -77,9 +78,10 @@ describe("catalog", () => {
     expect(components.get("Checklist")).toBe(asItem(Checklist));
     expect(components.get("Collapsible")).toBe(asItem(Collapsible));
     expect(components.get("TagFilter")).toBe(asItem(TagFilter));
+    expect(components.get("Graph")).toBe(asItem(Graph));
     expect(components.get("MarkdownDoc")).toBeUndefined();
     expect(components.get("FileDoc")).toBeUndefined();
-    expect(components.size).toBe(17);
+    expect(components.size).toBe(18);
   });
 
   test("Heading requires text and is strict", () => {

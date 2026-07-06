@@ -7,6 +7,7 @@ import { Checklist, checklistPropsSchema } from "./Checklist";
 import { Code, codePropsSchema } from "./Code";
 import { Collapsible, collapsiblePropsSchema } from "./Collapsible";
 import { Diff, diffPropsSchema } from "./Diff";
+import { Graph, graphPropsSchema } from "./Graph";
 import { Heading, headingPropsSchema } from "./Heading";
 import { Link, linkPropsSchema } from "./Link";
 import { Mermaid, mermaidPropsSchema } from "./Mermaid";
@@ -83,6 +84,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Checklist", checklistPropsSchema, Checklist),
   defineViewComponent("Collapsible", collapsiblePropsSchema, Collapsible),
   defineViewComponent("TagFilter", tagFilterPropsSchema, TagFilter),
+  defineViewComponent("Graph", graphPropsSchema, Graph, { childrenTypes: [] }),
 ];
 
 const catalog = createCatalog(entries.map((e) => e.spec));
