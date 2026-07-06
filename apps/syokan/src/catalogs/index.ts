@@ -3,13 +3,18 @@ import type { z } from "zod";
 import { type ComponentSpec, createCatalog, defineComponent } from "../schema";
 import { Badge, badgePropsSchema } from "./Badge";
 import { Card, cardPropsSchema } from "./Card";
+import { Checklist, checklistPropsSchema } from "./Checklist";
 import { Code, codePropsSchema } from "./Code";
+import { Collapsible, collapsiblePropsSchema } from "./Collapsible";
 import { Diff, diffPropsSchema } from "./Diff";
 import { Heading, headingPropsSchema } from "./Heading";
 import { Link, linkPropsSchema } from "./Link";
 import { Mermaid, mermaidPropsSchema } from "./Mermaid";
 import { PlainText, plainTextPropsSchema } from "./PlainText";
 import { Stack, stackPropsSchema } from "./Stack";
+import { Stat, statPropsSchema } from "./Stat";
+import { Table, tablePropsSchema } from "./Table";
+import { TagFilter, tagFilterPropsSchema } from "./TagFilter";
 import { Text, textPropsSchema } from "./Text";
 import { Time, timePropsSchema } from "./Time";
 import { TreeDoc, treeDocPropsSchema } from "./TreeDoc";
@@ -71,6 +76,13 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("TreeDoc", treeDocPropsSchema, TreeDoc, {
     childrenTypes: [],
   }),
+  // composite leaves: cells / labels embed the inline subset via props (see inline.tsx)
+  defineViewComponent("Table", tablePropsSchema, Table, { childrenTypes: [] }),
+  defineViewComponent("Stat", statPropsSchema, Stat, { childrenTypes: [] }),
+  // children[i] is the expanded body of items[i]
+  defineViewComponent("Checklist", checklistPropsSchema, Checklist),
+  defineViewComponent("Collapsible", collapsiblePropsSchema, Collapsible),
+  defineViewComponent("TagFilter", tagFilterPropsSchema, TagFilter),
 ];
 
 const catalog = createCatalog(entries.map((e) => e.spec));
