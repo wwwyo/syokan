@@ -5,14 +5,14 @@ import { Badge, badgePropsSchema } from "./Badge";
 import { Card, cardPropsSchema } from "./Card";
 import { Code, codePropsSchema } from "./Code";
 import { Diff, diffPropsSchema } from "./Diff";
-import { FileDoc, fileDocPropsSchema } from "./FileDoc";
 import { Heading, headingPropsSchema } from "./Heading";
 import { Link, linkPropsSchema } from "./Link";
-import { MarkdownDoc, markdownDocPropsSchema } from "./MarkdownDoc";
+import { Mermaid, mermaidPropsSchema } from "./Mermaid";
 import { PlainText, plainTextPropsSchema } from "./PlainText";
 import { Stack, stackPropsSchema } from "./Stack";
 import { Text, textPropsSchema } from "./Text";
 import { Time, timePropsSchema } from "./Time";
+import { TreeDoc, treeDocPropsSchema } from "./TreeDoc";
 
 export type ItemComponent = ComponentType<
   Record<string, unknown> & { children?: ReactNode }
@@ -59,16 +59,16 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Link", linkPropsSchema, Link, { childrenTypes: [] }),
   defineViewComponent("Text", textPropsSchema, Text, { childrenTypes: [] }),
   defineViewComponent("Time", timePropsSchema, Time, { childrenTypes: [] }),
-  defineViewComponent("MarkdownDoc", markdownDocPropsSchema, MarkdownDoc, {
-    childrenTypes: [],
-  }),
   defineViewComponent("PlainText", plainTextPropsSchema, PlainText, {
     childrenTypes: [],
   }),
   defineViewComponent("Diff", diffPropsSchema, Diff, { childrenTypes: [] }),
   defineViewComponent("Code", codePropsSchema, Code, { childrenTypes: [] }),
   defineViewComponent("Badge", badgePropsSchema, Badge, { childrenTypes: [] }),
-  defineViewComponent("FileDoc", fileDocPropsSchema, FileDoc, {
+  defineViewComponent("Mermaid", mermaidPropsSchema, Mermaid, {
+    childrenTypes: [],
+  }),
+  defineViewComponent("TreeDoc", treeDocPropsSchema, TreeDoc, {
     childrenTypes: [],
   }),
 ];

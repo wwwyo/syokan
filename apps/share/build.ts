@@ -17,7 +17,7 @@ const result = await Bun.build({
   target: "browser",
   plugins: [tailwind],
   minify: true,
-  // mermaid is already dynamic-imported (src/catalogs/MarkdownDoc/Mermaid). Unlike binary
+  // mermaid is already dynamic-imported (src/catalogs/Mermaid). Unlike binary
   // embedding, chunk splitting works for web delivery, so keep it out of the initial load
   // until a share containing a diagram is opened
   splitting: true,

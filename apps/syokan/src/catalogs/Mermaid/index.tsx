@@ -1,21 +1,27 @@
 import { useEffect, useId, useState } from "react";
-import { useColorScheme } from "../../../lib/useColorScheme";
+import { z } from "zod";
+import { useColorScheme } from "../../lib/useColorScheme";
 
-type MermaidProps = {
-  chart: string;
-};
+export const mermaidPropsSchema = z
+  .object({
+    // mermaid diagram source (e.g. "graph TD; A-->B")
+    code: z.string().min(1),
+  })
+  .strict();
+
+export type MermaidProps = z.infer<typeof mermaidPropsSchema>;
 
 /**
- * MarkdownDoc-internal part that renders a ```mermaid fence as a diagram.
+ * A catalog component that renders mermaid diagram source as a diagram.
  *
- * mermaid (~several MB) is dynamically imported to defer module evaluation until a doc containing a
+ * mermaid (~several MB) is dynamically imported to defer module evaluation until a view containing a
  * diagram is rendered (so the heavy mermaid init does not run at startup). Note that in single-binary
  * distribution Bun inlines it into the same chunk, so the bytes still land in the initial bundle
  * (there is no split-chunk delivery). Rendering is document-dependent and client-only, so before
  * SSR / mount the raw code is shown in a <pre> (content never disappears before the diagram appears,
  * and it stays here on parse failure too). dark/light follows useColorScheme.
  */
-export function Mermaid({ chart }: MermaidProps) {
+export function Mermaid({ code }: MermaidProps) {
   const scheme = useColorScheme();
   const id = useId().replace(/[^a-zA-Z0-9-]/g, "");
   const [svg, setSvg] = useState<string | null>(null);
@@ -32,14 +38,14 @@ export function Mermaid({ chart }: MermaidProps) {
         mermaid.initialize({
           startOnLoad: false,
           theme: scheme === "dark" ? "dark" : "default",
-          // chart is external / LLM-sourced. Sanitize HTML inside labels (the default, made explicit)
+          // code is external / LLM-sourced. Sanitize HTML inside labels (the default, made explicit)
           securityLevel: "strict",
           // suppress mermaid from injecting an error diagram into document.body on parse failure,
           // and have it remove the temp element and throw. Failures are funneled to the <pre> fallback in the catch below.
           // (wrapping via the container arg is an option, but it breaks rendering multiple diagrams at once, so it is not used)
           suppressErrorRendering: true,
         });
-        const { svg } = await mermaid.render(`mermaid-${id}`, chart);
+        const { svg } = await mermaid.render(`mermaid-${id}`, code);
         if (!cancelled) setSvg(svg);
       } catch {
         if (!cancelled) {
@@ -51,7 +57,7 @@ export function Mermaid({ chart }: MermaidProps) {
     return () => {
       cancelled = true;
     };
-  }, [chart, scheme, id]);
+  }, [code, scheme, id]);
 
   if (failed || svg === null) {
     return (
@@ -60,7 +66,7 @@ export function Mermaid({ chart }: MermaidProps) {
         data-state={failed ? "error" : "loading"}
         className="my-4 overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-6"
       >
-        {chart}
+        {code}
       </pre>
     );
   }

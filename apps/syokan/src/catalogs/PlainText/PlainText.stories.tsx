@@ -20,7 +20,7 @@ export const Log: Story = {
   },
 };
 
-// the difference from MarkdownDoc: # and * come out as literal characters, not interpreted as markdown
+// # and * come out as literal characters, not interpreted as markup
 export const MarkdownCharsStayLiteral: Story = {
   args: {
     body: "# this does not become a heading\n- nor does this become a bullet\n**not bold either**",

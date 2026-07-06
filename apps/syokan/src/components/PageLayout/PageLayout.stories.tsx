@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Card } from "../../catalogs/Card";
 import { Heading } from "../../catalogs/Heading";
-import { MarkdownDoc } from "../../catalogs/MarkdownDoc";
+import { PlainText } from "../../catalogs/PlainText";
 import { Stack } from "../../catalogs/Stack";
 import { Text } from "../../catalogs/Text";
 import { PageLayout } from ".";
@@ -42,8 +42,8 @@ export const Dashboard: Story = {
           </Card>
         </Stack>
         <Heading text="Meeting notes" level={2} />
-        <MarkdownDoc
-          body={"## Decisions\n\n- Restructure the catalog into composable primitives\n"}
+        <PlainText
+          body={"Decisions\n- Restructure the catalog into composable primitives"}
         />
       </Stack>
     </PageLayout>

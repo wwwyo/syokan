@@ -240,7 +240,7 @@ export type FileApiHandlers = {
   watchFile: (req: Request) => Response;
 };
 
-// File-reference node (FileDoc) read + change watching. The read returns the body/error via GET,
+// File-reference node (TreeDoc) read + change watching. The read returns the body/error via GET,
 // and watching notifies only "it changed" over SSE (the client re-fetches the content via GET). Watchers are
 // runtime state scoped to the server process's lifetime — not persisted.
 // Extract and validate the path query param. Relative paths depend on the server CWD and could point

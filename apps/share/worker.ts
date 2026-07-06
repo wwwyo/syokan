@@ -182,9 +182,11 @@ const app = new Hono<Env>()
 		async (c) => {
 			const auth = c.get("auth");
 			const { envelope, sourceSnapshotId, expiresIn } = c.req.valid("json");
-			if (containsType(envelope.root, "FileDoc")) {
+			// The local server freezes TreeDoc at publish time (the primary defense); this is the last
+			// line of defense so a file-referencing node can never land in a public payload.
+			if (containsType(envelope.root, "TreeDoc")) {
 				return c.json(
-					{ error: "filedoc_not_allowed" } satisfies ShareErrorResponse,
+					{ error: "treedoc_not_allowed" } satisfies ShareErrorResponse,
 					400,
 				);
 			}

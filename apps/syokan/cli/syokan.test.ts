@@ -163,7 +163,7 @@ describe("cli main: post (default action)", () => {
 
   test("does not inject any source label (envelope owns metadata)", async () => {
     const tree = JSON.stringify({
-      root: { type: "MarkdownDoc", props: { body: "# hi" } },
+      root: { type: "PlainText", props: { body: "hi" } },
     });
     const { deps, calls } = makeDeps({
       files: { "doc.json": tree },
@@ -177,7 +177,7 @@ describe("cli main: post (default action)", () => {
 
   test("passes through metadata.source.label written in the envelope", async () => {
     const tree = JSON.stringify({
-      root: { type: "MarkdownDoc", props: { body: "# hi" } },
+      root: { type: "PlainText", props: { body: "hi" } },
       metadata: { source: { label: "daily-rss" } },
     });
     const { deps, calls } = makeDeps({
@@ -202,38 +202,45 @@ describe("cli main: post (default action)", () => {
     expect(parsed.error).toBe("invalid_json");
   });
 
-  test("non-JSON file is wrapped as a live FileDoc (title/label/key = basename/abs path)", async () => {
+  test("bare catalog tree file is wrapped as a live TreeDoc (title/label/key = basename/abs path)", async () => {
     const { deps, out, calls } = makeDeps({
-      files: { "notes.md": "# Meeting notes\n\n- Decisions" },
-      respond: () => okResponse("md-1"),
+      files: {
+        "dashboard.json": JSON.stringify({
+          type: "Heading",
+          props: { text: "hi" },
+        }),
+      },
+      respond: () => okResponse("tree-1"),
     });
-    const result = await main(["notes.md"], deps);
+    const result = await main(["dashboard.json"], deps);
     expect(result.exitCode).toBe(0);
-    expect(out).toEqual(["http://localhost:5173/snapshots/md-1"]);
+    expect(out).toEqual(["http://localhost:5173/snapshots/tree-1"]);
     const body = calls[0]?.body as {
       title: string;
       root: { type: string; props: { path: string } };
       metadata: { source: { label: string } };
       idempotencyKey: string;
     };
-    expect(body.root.type).toBe("FileDoc");
-    expect(body.root.props.path).toBe("/abs/notes.md");
-    expect(body.title).toBe("notes.md");
-    expect(body.metadata.source.label).toBe("notes.md");
-    expect(body.idempotencyKey).toBe("filedoc:/abs/notes.md");
+    expect(body.root.type).toBe("TreeDoc");
+    expect(body.root.props.path).toBe("/abs/dashboard.json");
+    expect(body.title).toBe("dashboard.json");
+    expect(body.metadata.source.label).toBe("dashboard.json");
+    expect(body.idempotencyKey).toBe("treedoc:/abs/dashboard.json");
     // A payload with an idempotencyKey tries PUT (update) first.
     expect(calls[0]?.method).toBe("PUT");
   });
 
   test("PUT 404 not_found falls back to POST to create the snapshot (first-ever post of a key)", async () => {
     const { deps, out, calls } = makeDeps({
-      files: { "notes.md": "# first post" },
+      files: {
+        "dashboard.json": JSON.stringify({ type: "Text", props: { body: "b" } }),
+      },
       respond: (captured) =>
         captured.method === "PUT"
           ? Response.json({ error: "not_found" }, { status: 404 })
           : okResponse("created-1"),
     });
-    const result = await main(["notes.md"], deps);
+    const result = await main(["dashboard.json"], deps);
     expect(result.exitCode).toBe(0);
     expect(out).toEqual(["http://localhost:5173/snapshots/created-1"]);
     expect(calls.map((c) => c.method)).toEqual(["PUT", "POST"]);
@@ -242,44 +249,66 @@ describe("cli main: post (default action)", () => {
 
   test("PUT 200 (existing key) does not fall back to POST", async () => {
     const { deps, calls } = makeDeps({
-      files: { "notes.md": "# refresh" },
+      files: {
+        "dashboard.json": JSON.stringify({ type: "Text", props: { body: "b" } }),
+      },
       respond: (captured) =>
         captured.method === "PUT"
           ? okResponse("existing-1")
           : Response.json({ error: "unexpected_post" }, { status: 500 }),
     });
-    const result = await main(["notes.md"], deps);
+    const result = await main(["dashboard.json"], deps);
     expect(result.exitCode).toBe(0);
     expect(calls.map((c) => c.method)).toEqual(["PUT"]);
   });
 
-  test("JSON file without an envelope root is wrapped as a FileDoc", async () => {
-    const { deps, calls } = makeDeps({
+  test("non-JSON file is rejected with unsupported_input (nothing posted)", async () => {
+    const { deps, calls, err } = makeDeps({
+      files: { "notes.md": "# Meeting notes\n\n- Decisions" },
+      respond: () => okResponse(),
+    });
+    const result = await main(["notes.md"], deps);
+    expect(result.exitCode).toBe(1);
+    expect(calls).toEqual([]);
+    const parsed = JSON.parse(err[0] as string) as {
+      error: string;
+      message: string;
+    };
+    expect(parsed.error).toBe("unsupported_input");
+    expect(parsed.message).toContain("envelope");
+    expect(parsed.message).toContain("catalog tree");
+  });
+
+  test("JSON that is neither an envelope nor a tree is rejected with unsupported_input", async () => {
+    const { deps, calls, err } = makeDeps({
       files: { "config.json": JSON.stringify({ port: 5173, name: "x" }) },
       respond: () => okResponse(),
     });
     const result = await main(["config.json"], deps);
-    expect(result.exitCode).toBe(0);
-    const body = calls[0]?.body as { root: { type: string } };
-    expect(body.root.type).toBe("FileDoc");
+    expect(result.exitCode).toBe(1);
+    expect(calls).toEqual([]);
+    expect((JSON.parse(err[0] as string) as { error: string }).error).toBe(
+      "unsupported_input",
+    );
   });
 
-  test("malformed JSON file is wrapped as a FileDoc (no invalid_json error)", async () => {
+  test("a type field alone does not make a tree (package.json-like input is rejected)", async () => {
     const { deps, calls, err } = makeDeps({
-      files: { "broken.json": "{not json" },
+      files: { "package.json": JSON.stringify({ type: "module", name: "x" }) },
       respond: () => okResponse(),
     });
-    const result = await main(["broken.json"], deps);
-    expect(result.exitCode).toBe(0);
-    expect(err).toEqual([]);
-    const body = calls[0]?.body as { root: { type: string } };
-    expect(body.root.type).toBe("FileDoc");
+    const result = await main(["package.json"], deps);
+    expect(result.exitCode).toBe(1);
+    expect(calls).toEqual([]);
+    expect((JSON.parse(err[0] as string) as { error: string }).error).toBe(
+      "unsupported_input",
+    );
   });
 
-  test("a file over the display limit is wrapped without reading its contents", async () => {
+  test("a .json file over the sniff limit is wrapped as a TreeDoc without reading its contents", async () => {
     let read = false;
     const { deps, calls } = makeDeps({
-      fileSizes: { "huge.log": 5 * 1024 * 1024 },
+      fileSizes: { "huge.json": 5 * 1024 * 1024 },
       respond: () => okResponse(),
     });
     // Record if readFile is called (confirming a huge file isn't read).
@@ -288,12 +317,32 @@ describe("cli main: post (default action)", () => {
       read = true;
       return orig(p);
     };
-    const result = await main(["huge.log"], deps);
+    const result = await main(["huge.json"], deps);
     expect(result.exitCode).toBe(0);
     expect(read).toBe(false);
     const body = calls[0]?.body as { root: { type: string; props: { path: string } } };
-    expect(body.root.type).toBe("FileDoc");
-    expect(body.root.props.path).toBe("/abs/huge.log");
+    expect(body.root.type).toBe("TreeDoc");
+    expect(body.root.props.path).toBe("/abs/huge.json");
+  });
+
+  test("a non-.json file over the sniff limit is rejected without reading its contents", async () => {
+    let read = false;
+    const { deps, calls, err } = makeDeps({
+      fileSizes: { "huge.log": 5 * 1024 * 1024 },
+      respond: () => okResponse(),
+    });
+    const orig = deps.readFile;
+    deps.readFile = async (p) => {
+      read = true;
+      return orig(p);
+    };
+    const result = await main(["huge.log"], deps);
+    expect(result.exitCode).toBe(1);
+    expect(read).toBe(false);
+    expect(calls).toEqual([]);
+    expect((JSON.parse(err[0] as string) as { error: string }).error).toBe(
+      "unsupported_input",
+    );
   });
 
   test("envelope JSON file is posted as-is (not wrapped, no injected idempotencyKey)", async () => {
@@ -316,11 +365,13 @@ describe("cli main: post (default action)", () => {
 
   test("re-posting the same path yields a stable idempotencyKey", async () => {
     const { deps, calls } = makeDeps({
-      files: { "log.log": "line 1" },
+      files: {
+        "tree.json": JSON.stringify({ type: "Text", props: { body: "b" } }),
+      },
       respond: () => okResponse(),
     });
-    await main(["log.log"], deps);
-    await main(["log.log"], deps);
+    await main(["tree.json"], deps);
+    await main(["tree.json"], deps);
     const a = calls[0]?.body as { idempotencyKey: string };
     const b = calls[1]?.body as { idempotencyKey: string };
     expect(a.idempotencyKey).toBe(b.idempotencyKey);

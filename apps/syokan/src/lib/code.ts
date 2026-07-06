@@ -25,23 +25,3 @@ export function toCodeLang(lang?: string): string {
   if (!lang) return "text";
   return SUPPORTED_LANGS.has(lang.toLowerCase()) ? lang : "text";
 }
-
-/**
- * Interpret a code fence's info string as a language ID and a filename.
- * If it contains `.`, treat it as a filename and use the extension as-is as the
- * language candidate (e.g. "hoge.json" → { lang: "json", filename: "hoge.json" }).
- * Shiki resolves major extensions like py/yml/ts/rs/md/sh as language aliases, so
- * there is no dedicated extension→language map. Without a `.` it is treated as a
- * language ID (e.g. "ts" → { lang: "ts" }).
- */
-export function resolveCodeInfo(info?: string): {
-  lang?: string;
-  filename?: string;
-} {
-  if (!info) return {};
-  if (info.includes(".")) {
-    const ext = info.slice(info.lastIndexOf(".") + 1).toLowerCase();
-    return { lang: ext || undefined, filename: info };
-  }
-  return { lang: info };
-}
