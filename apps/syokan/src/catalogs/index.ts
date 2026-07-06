@@ -12,6 +12,7 @@ import { Heading, headingPropsSchema } from "./Heading";
 import { Link, linkPropsSchema } from "./Link";
 import { Mermaid, mermaidPropsSchema } from "./Mermaid";
 import { PlainText, plainTextPropsSchema } from "./PlainText";
+import { Probe, probePropsSchema } from "./Probe";
 import { Stack, stackPropsSchema } from "./Stack";
 import { Stat, statPropsSchema } from "./Stat";
 import { Table, tablePropsSchema } from "./Table";
@@ -85,6 +86,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Collapsible", collapsiblePropsSchema, Collapsible),
   defineViewComponent("TagFilter", tagFilterPropsSchema, TagFilter),
   defineViewComponent("Graph", graphPropsSchema, Graph, { childrenTypes: [] }),
+  defineViewComponent("Probe", probePropsSchema, Probe, { childrenTypes: [] }),
 ];
 
 const catalog = createCatalog(entries.map((e) => e.spec));

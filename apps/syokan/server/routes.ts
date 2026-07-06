@@ -3,6 +3,8 @@ import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { itemSchema } from "../src/catalogs";
 import { catalogManifest } from "../src/catalogs/manifest";
+import { probeCheckSchema } from "../src/catalogs/Probe/check";
+import { resolveRepoHead, runProbe } from "./probe";
 import { isFontValue } from "../src/lib/fonts";
 import {
   CURRENT_SCHEMA_VERSION,
@@ -156,6 +158,61 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
 // The catalog's SSOT is src/catalogs. Derive and return the list of defined types from there every time.
 export function getCatalog(): Response {
   return Response.json({ items: catalogManifest() });
+}
+
+const probeRunInputSchema = z.object({ check: probeCheckSchema }).strict();
+
+const probeRefInputSchema = z
+  .object({
+    repo: z.string().min(1).refine(isAbsolute, "must be an absolute path"),
+  })
+  .strict();
+
+export type ProbeApiHandlers = {
+  runProbe: (req: Request) => Promise<Response>;
+  resolveRef: (req: Request) => Promise<Response>;
+};
+
+// Probe runs are stateless on the server: results live in the client's device-local
+// UI state, so a restart loses nothing (watcher-like runtime state doesn't even arise).
+export function createProbeHandlers(): ProbeApiHandlers {
+  return {
+    async runProbe(req) {
+      const body = await readJsonBody(req);
+      if (!body.ok) return body.response;
+      const parsed = probeRunInputSchema.safeParse(body.value);
+      if (!parsed.success) {
+        return jsonError(400, {
+          error: "validation_failed",
+          message: "Request body does not satisfy the probe check schema",
+          issues: formatValidationError(parsed.error),
+        });
+      }
+      return Response.json(await runProbe(parsed.data.check));
+    },
+
+    // current HEAD of a repo — the client compares it with a result's ref for staleness
+    async resolveRef(req) {
+      const body = await readJsonBody(req);
+      if (!body.ok) return body.response;
+      const parsed = probeRefInputSchema.safeParse(body.value);
+      if (!parsed.success) {
+        return jsonError(400, {
+          error: "validation_failed",
+          message: "Request body must be { repo: <absolute path> }",
+          issues: formatValidationError(parsed.error),
+        });
+      }
+      const resolved = await resolveRepoHead(parsed.data.repo);
+      if (!resolved.ok) {
+        return jsonError(422, {
+          error: "ref_unresolved",
+          message: resolved.message,
+        });
+      }
+      return Response.json({ commit: resolved.commit });
+    },
+  };
 }
 
 const templateInputSchema = z
