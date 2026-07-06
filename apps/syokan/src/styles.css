@@ -130,3 +130,19 @@
     opacity: 1;
   }
 }
+/* Brand wordmark face: Cormorant (a sharp, high-contrast display serif), subset to just the
+   glyphs in "syokan" (~1.6KB) and inlined so the lockup is self-contained (no runtime CDN) and
+   unaffected by the user-selectable app font. Used only by .font-brand (the LogoLockup wordmark).
+   Source: Google Fonts (CatharsisFonts/Cormorant), subset via the css2 `text=` API.
+   Licensed under SIL OFL 1.1 — full license + copyright: components/Logo/Cormorant-OFL.txt */
+@font-face {
+  font-family: "Cormorant";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url(data:font/woff2;base64,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) format("woff2");
+}
+.font-brand {
+  font-family: "Cormorant", serif;
+  font-weight: 600;
+}

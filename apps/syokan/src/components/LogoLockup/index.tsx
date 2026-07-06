@@ -2,11 +2,10 @@ import { BRACE_LEFT, BRACE_RIGHT, SIGIL_VIEWBOX_TIGHT, SPARK } from "../Logo";
 import { cn } from "../../lib/utils";
 
 /**
- * The brand lockup: the `{ ✦ }` mark set flush against the lowercase "syokan" wordmark. The
- * wordmark stays in the app's own sans (semibold) — the geometric mark pairs better with a
- * plain typeface than a display face. The mark uses a tight viewBox so it sits against the
- * word instead of floating in the square icon padding. Both mark and text follow currentColor;
- * size the whole thing with font-size (via className).
+ * The brand lockup: the `{ ✦ }` mark set flush against the lowercase "syokan" wordmark in
+ * Cormorant — a sharp, high-contrast display serif whose thin strokes echo the thin mark. The
+ * mark uses a tight viewBox so it sits against the word instead of floating in the square icon
+ * padding. Both mark and text follow currentColor; size the whole thing with font-size.
  */
 type LogoLockupProps = {
   /** Accessible name. For decorative use (e.g. another element labels the region), pass "" to aria-hide. */
@@ -22,7 +21,7 @@ export function LogoLockup({ title = "syokan", className }: LogoLockupProps) {
       aria-label={decorative ? undefined : title}
       aria-hidden={decorative || undefined}
       className={cn(
-        "inline-flex items-center gap-[0.28em] font-semibold leading-none tracking-tight",
+        "font-brand inline-flex items-center gap-[0.26em] leading-none tracking-tight",
         className,
       )}
     >
