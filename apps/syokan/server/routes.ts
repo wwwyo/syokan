@@ -2,7 +2,7 @@ import type { BunRequest } from "bun";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { itemSchema } from "../src/catalogs";
-import { catalogManifest } from "../src/catalogs/manifest";
+import { catalogManifest, catalogMechanisms } from "../src/catalogs/manifest";
 import { probeCheckSchema } from "../src/catalogs/Probe/check";
 import { resolveRepoHead, runProbe } from "./probe";
 import { isFontValue } from "../src/lib/fonts";
@@ -157,7 +157,11 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
 
 // The catalog's SSOT is src/catalogs. Derive and return the list of defined types from there every time.
 export function getCatalog(): Response {
-  return Response.json({ items: catalogManifest() });
+  // mechanisms rides alongside items (additive, so older consumers keep working)
+  return Response.json({
+    items: catalogManifest(),
+    mechanisms: catalogMechanisms(),
+  });
 }
 
 const probeRunInputSchema = z.object({ check: probeCheckSchema }).strict();

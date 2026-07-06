@@ -41,13 +41,14 @@ function defineViewComponent<
   type: TType,
   propsSchema: z.ZodType<TProps>,
   component: ComponentType<TProps & { children?: ReactNode }>,
-  options?: { childrenTypes?: readonly string[] },
+  options?: { childrenTypes?: readonly string[]; notes?: string },
 ): ViewComponentEntry<TType, TProps> {
   return {
     spec: defineComponent({
       type,
       propsSchema,
       ...(options?.childrenTypes ? { childrenTypes: options.childrenTypes } : {}),
+      ...(options?.notes ? { notes: options.notes } : {}),
     }),
     component: component as unknown as ItemComponent,
   };
@@ -79,14 +80,38 @@ const entries: readonly ViewComponentEntry[] = [
     childrenTypes: [],
   }),
   // composite leaves: cells / labels embed the inline subset via props (see inline.tsx)
-  defineViewComponent("Table", tablePropsSchema, Table, { childrenTypes: [] }),
-  defineViewComponent("Stat", statPropsSchema, Stat, { childrenTypes: [] }),
-  // children[i] is the expanded body of items[i]
-  defineViewComponent("Checklist", checklistPropsSchema, Checklist),
-  defineViewComponent("Collapsible", collapsiblePropsSchema, Collapsible),
-  defineViewComponent("TagFilter", tagFilterPropsSchema, TagFilter),
-  defineViewComponent("Graph", graphPropsSchema, Graph, { childrenTypes: [] }),
-  defineViewComponent("Probe", probePropsSchema, Probe, { childrenTypes: [] }),
+  defineViewComponent("Table", tablePropsSchema, Table, {
+    childrenTypes: [],
+    notes:
+      "Display-only. Cells accept a string, one inline node (Text/Link/Badge/Time), or an array of them. Row narrowing is not a Table feature — tag the rows' surrounding nodes and use TagFilter.",
+  }),
+  defineViewComponent("Stat", statPropsSchema, Stat, {
+    childrenTypes: [],
+    notes:
+      'Display-only labelled figure. Put several in a Stack direction="horizontal" for a dashboard row.',
+  }),
+  defineViewComponent("Checklist", checklistPropsSchema, Checklist, {
+    notes:
+      "children[i] is the expanded body of items[i] (optional). Checking folds the body to the label line; checks are viewer-local UI state, never written back. Give the node an id to persist progress across reloads.",
+  }),
+  defineViewComponent("Collapsible", collapsiblePropsSchema, Collapsible, {
+    notes:
+      "children are the folded body. Open/closed is viewer-local UI state; give the node an id to persist it. Anchor navigation opens closed ancestors automatically.",
+  }),
+  defineViewComponent("TagFilter", tagFilterPropsSchema, TagFilter, {
+    notes:
+      "Narrows descendants: when chips are selected, only nodes whose cross-cutting `tags` intersect the selection stay visible; untagged nodes always show. Give the node an id to persist the selection.",
+  }),
+  defineViewComponent("Graph", graphPropsSchema, Graph, {
+    childrenTypes: [],
+    notes:
+      "Static directed graph. role→color/stroke is fixed by the renderer (added=green, removed=red+dashed, hotspot=amber+bold, neutral=muted). Put two side by side for a before/after contrast.",
+  }),
+  defineViewComponent("Probe", probePropsSchema, Probe, {
+    childrenTypes: [],
+    notes:
+      "check must be one of the predefined read-only kinds (see mechanisms.probe.kinds); include the generation-time run as `result`. Viewers re-run it via the local server; reruns land in viewer-local UI state. On shared views rerun is disabled and args/results are hidden unless shareVisible.",
+  }),
 ];
 
 const catalog = createCatalog(entries.map((e) => e.spec));

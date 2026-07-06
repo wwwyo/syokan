@@ -19,6 +19,9 @@ export type ComponentSpec<
   propsSchema: z.ZodType<TProps>;
   // when set, children types are restricted to the allowed list; unset means no restriction
   childrenTypes?: readonly string[];
+  // usage contract not expressible in the props schema (e.g. children pairing rules);
+  // published via the manifest so producers don't rely on hand-copied docs
+  notes?: string;
 };
 
 export function defineComponent<
