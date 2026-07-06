@@ -1,7 +1,7 @@
 ---
 name: syokan
 license: MIT
-description: "Build and POST a JSON snapshot envelope to syokan (召喚 — a verb: summon data into a rich, living view). Use when the user says \"syokan this\", \"syokan X\", \"show in syokan\", \"post a snapshot\", \"preview this markdown\", or in Japanese 『〜を syokan』『syokan に出して/表示して/投げて』『snapshot を作って/送って』『syokan のUIで見たい』『Markdown をプレビューして/md ファイルをブラウザで見たい』 — for RSS feeds, in-progress PR reviews, meeting notes, today's TODO, or any aggregated data the user wants to see as structured UI. Compose the tree only from catalog components (Stack, Card, Heading, Link, Text, Time, PlainText, Diff, Code, Badge, Mermaid, TreeDoc) and send it via the syokan CLI or POST /api/snapshots. Markdown is not rendered — structure prose into catalog nodes instead. Never write JSX. Whenever the word syokan appears, use this skill even if the user does not explicitly say snapshot."
+description: "Build and POST a JSON snapshot envelope to syokan (召喚 — a verb: summon data into a rich, living view). Use when the user says \"syokan this\", \"syokan X\", \"show in syokan\", \"post a snapshot\", \"preview this markdown\", or in Japanese 『〜を syokan』『syokan に出して/表示して/投げて』『snapshot を作って/送って』『syokan のUIで見たい』『Markdown をプレビューして/md ファイルをブラウザで見たい』 — for RSS feeds, in-progress PR reviews, review risk panels, meeting notes, today's TODO, dashboards, or any aggregated data the user wants to see as structured UI. Compose the tree only from catalog components (Stack, Card, Heading, Link, Text, Time, PlainText, Diff, Code, Badge, Mermaid, TreeDoc, Table, Stat, Checklist, Collapsible, TagFilter, Graph, Probe) and send it via the syokan CLI or POST /api/snapshots. Markdown is not rendered — structure prose into catalog nodes instead. Never write JSX. Whenever the word syokan appears, use this skill even if the user does not explicitly say snapshot."
 ---
 
 # syokan
@@ -17,7 +17,8 @@ If syokan is not installed yet (`syokan --help` fails), or the user says "onboar
 - **Snapshots are ephemeral**: a posted snapshot has no persistence guarantee. Only put reconstructible, transient data there (today's RSS, an in-progress review, etc.). For layouts you reuse, save a template to reproduce them (templates persist — see "Templates for reproducibility" below).
 - **JSON only — markdown is not rendered**: the server accepts nothing but a JSON envelope, and there is no markdown node. Structure prose into catalog nodes yourself: headings → `Heading`, paragraphs → `Text`, code fences → `Code`, mermaid fences → `Mermaid`, preformatted or bullet text → `PlainText`.
 - **Strict schema**: props are validated strictly. Keys not in the schema are rejected — do not invent extra keys.
-- **Leaves cannot have children**: only `Stack` and `Card` accept children. Attaching children to a leaf node is rejected at ingest.
+- **Leaves cannot have children**: only containers (`Stack`, `Card`, `Checklist`, `Collapsible`, `TagFilter`) accept children; check `childrenTypes` in `syokan catalog`. Attaching children to a leaf node is rejected at ingest.
+- **Probes are predefined checks only**: `Probe.check` must be one of the kinds published in the catalog's `mechanisms.probe.kinds`. There is no way to run an arbitrary command from a view — do not try.
 
 ## From composing to viewing
 
@@ -51,12 +52,34 @@ For daily or recurring views, include something like the date in the `idempotenc
 
 Get the available `type`s and their props definitions **from `syokan catalog`** (never transcribe them into md — pull them from here every time).
 
-The output is `{ "items": [{ "type", "props", "childrenTypes" }] }`.
+The output is `{ "items": [{ "type", "props", "childrenTypes", "notes" }], "mechanisms": { ... } }`.
 
 - `props`: the type's props as JSON Schema. Satisfy `required` / `enum` / `format` (httpUrl is `uri`, `Time.datetime` is `date-time`) / `additionalProperties:false` (unknown keys are rejected) exactly as given.
 - `childrenTypes`: `null` means a container that accepts children, `[]` means a leaf that accepts none, `[..]` means only the listed types may be children.
+- `notes`: usage contract the props schema can't express (e.g. `Checklist` pairs `children[i]` with `items[i]`). Read it before using a type.
+- `mechanisms`: cross-cutting capabilities that work on **every** node — read this to know what `id` / `tags` do and which `Probe` kinds exist.
 
 For complete examples combining the components, see [references/examples.md](references/examples.md).
+
+## Cross-cutting node fields (id / tags)
+
+Besides `type` / `props` / `children` / `key`, any node may carry:
+
+- `id`: makes the node addressable. A `Link` with `href: "#<id>"` jumps to it inside the view (revealing it if folded or filtered out). It is also the identity for viewer-local UI state — **give an `id` to every `Checklist` / `Collapsible` / `TagFilter` / `Probe`** so checks, folds, and selections survive reloads.
+- `tags`: opts the node into narrowing by an ancestor `TagFilter` (e.g. tag finding cards with `"High"` / `"Medium"` and let the reader show only High). Untagged nodes are never filtered.
+
+Interaction state (checks, folds, filter selections, probe re-runs) lives in the viewer's browser, never in the envelope — post the *initial* state (`checked`, `defaultOpen`, `result`) and let the reader take it from there.
+
+## Interactive views (risk panels, TODO, dashboards)
+
+Typical composition for a review risk panel (condensed envelope in [references/examples.md](references/examples.md) Example 5):
+
+- `Stat` row up top for the counts; `Table` as the cockpit where each row `Link`s (`#id`) to its finding `Card`.
+- `TagFilter` around the findings; cards tagged by severity.
+- Low-priority detail (evidence hunks, verified-None sections) goes inside `Collapsible` instead of being deleted.
+- "No findings" claims carry a `Probe` whose `check` re-measures the claim (search count, diff cleanliness, file existence). Include the `result` you measured at generation time — you can run it via `POST /api/probes/run` with the same `check` — or omit it and the reader runs it. On public shares, probe args/results are stripped unless you set `shareVisible: true`.
+- `Graph` (roles: added/removed/hotspot/neutral, colors fixed by syokan) side by side in a horizontal `Stack` for before/after dependency contrasts. Prefer it over `Mermaid` when the diagram is a plain node/edge sketch — it cannot fail to parse.
+- `Checklist` for reviewer progress; checked items fold to one line.
 
 ## Posting
 

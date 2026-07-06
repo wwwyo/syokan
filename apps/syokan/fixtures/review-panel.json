@@ -1,0 +1,156 @@
+{
+  "title": "Review risk panel — share service split",
+  "metadata": { "source": { "label": "review-guide", "url": "https://github.com/wwwyo/syokan/pull/27" } },
+  "idempotencyKey": "review-pr-27",
+  "root": {
+    "type": "Stack",
+    "props": {},
+    "children": [
+      { "type": "Heading", "props": { "text": "Risk panel — PR #27 share service split", "level": 1 } },
+      {
+        "type": "Stack",
+        "props": { "direction": "horizontal" },
+        "children": [
+          { "type": "Stat", "props": { "label": "High", "value": 1 } },
+          { "type": "Stat", "props": { "label": "Medium", "value": 1 } },
+          { "type": "Stat", "props": { "label": "None (verified)", "value": 2, "delta": { "text": "all re-runnable", "direction": "flat" } } }
+        ]
+      },
+      {
+        "type": "TagFilter",
+        "props": { "tags": ["High", "Medium", "None"], "label": "Severity" },
+        "id": "severity-filter",
+        "children": [
+          {
+            "type": "Table",
+            "props": {
+              "columns": ["Finding", "Severity", "Jump"],
+              "rows": [
+                [
+                  "share token could reach Worker logs",
+                  { "type": "Badge", "props": { "text": "High", "variant": "destructive" } },
+                  { "type": "Link", "props": { "href": "#risk-token-log", "text": "→ details" } }
+                ],
+                [
+                  "publish retry lacks idempotency",
+                  { "type": "Badge", "props": { "text": "Medium", "variant": "secondary" } },
+                  { "type": "Link", "props": { "href": "#risk-retry", "text": "→ details" } }
+                ]
+              ]
+            }
+          },
+          {
+            "type": "Card",
+            "props": {},
+            "id": "risk-token-log",
+            "tags": ["High"],
+            "children": [
+              { "type": "Heading", "props": { "text": "share token could reach Worker logs", "level": 3 } },
+              { "type": "Text", "props": { "body": "server/share.ts forwards the auth header; confirm the Worker never logs it." } },
+              {
+                "type": "Collapsible",
+                "props": { "summary": "Evidence (1 hunk)" },
+                "id": "risk-token-log-evidence",
+                "children": [
+                  { "type": "Diff", "props": { "patch": "diff --git a/apps/syokan/server/share.ts b/apps/syokan/server/share.ts\n--- a/apps/syokan/server/share.ts\n+++ b/apps/syokan/server/share.ts\n@@ -10,6 +10,7 @@\n context\n-old line\n+forwardAuthHeader(req)\n context" } }
+                ]
+              },
+              {
+                "type": "Probe",
+                "props": {
+                  "label": "no console.log of the auth header",
+                  "check": { "kind": "search_count", "path": "/Users/yuito_watanabe/src/github.com/wwwyo/syokan/apps/share", "pattern": "console.log(auth", "expected": 0, "op": "max" },
+                  "result": { "status": "pass", "detail": "0 matches in 9 files (expected <= 0)", "ranAt": "2026-07-06T09:00:00Z" }
+                }
+              }
+            ]
+          },
+          {
+            "type": "Card",
+            "props": {},
+            "id": "risk-retry",
+            "tags": ["Medium"],
+            "children": [
+              { "type": "Heading", "props": { "text": "publish retry lacks idempotency", "level": 3 } },
+              { "type": "Text", "props": { "body": "A retried publish may duplicate the share. Related: the store dedupes snapshots by idempotencyKey (compare the paths)." } }
+            ]
+          },
+          {
+            "type": "Collapsible",
+            "props": { "summary": "None — checked areas with no findings (2)" },
+            "id": "none-findings",
+            "tags": ["None"],
+            "children": [
+              {
+                "type": "Probe",
+                "props": {
+                  "label": "store/routes behavior files untouched",
+                  "check": { "kind": "diff_clean", "repo": "/Users/yuito_watanabe/src/github.com/wwwyo/syokan", "base": "main", "paths": ["apps/syokan/server/store.ts"] },
+                  "result": { "status": "pass", "detail": "no diff from main", "ranAt": "2026-07-06T09:00:00Z", "ref": { "commit": "ad4cc6d12cdac3da7245179327876bbe93e06f5d" } }
+                }
+              },
+              {
+                "type": "Probe",
+                "props": {
+                  "label": "wrangler config still present",
+                  "check": { "kind": "file_exists", "path": "/Users/yuito_watanabe/src/github.com/wwwyo/syokan/apps/share/wrangler.jsonc" },
+                  "result": { "status": "pass", "detail": "exists", "ranAt": "2026-07-06T09:00:00Z" }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      { "type": "Heading", "props": { "text": "Dependency shape", "level": 2 } },
+      {
+        "type": "Stack",
+        "props": { "direction": "horizontal" },
+        "children": [
+          {
+            "type": "Graph",
+            "props": {
+              "nodes": [
+                { "id": "fe", "label": "frontend" },
+                { "id": "share", "label": "apps/share", "role": "hotspot" }
+              ],
+              "edges": [{ "from": "fe", "to": "share", "role": "removed" }],
+              "caption": "before: FE imports apps/share directly"
+            }
+          },
+          {
+            "type": "Graph",
+            "props": {
+              "nodes": [
+                { "id": "fe", "label": "frontend" },
+                { "id": "proxy", "label": "server/share.ts", "role": "added" },
+                { "id": "share", "label": "apps/share" }
+              ],
+              "edges": [
+                { "from": "fe", "to": "proxy", "role": "added" },
+                { "from": "proxy", "to": "share", "role": "added" }
+              ],
+              "caption": "after: FE depends only on its own server contract"
+            }
+          }
+        ]
+      },
+      { "type": "Heading", "props": { "text": "Reviewer checklist", "level": 2 } },
+      {
+        "type": "Checklist",
+        "props": {
+          "items": [
+            { "label": [{ "type": "Badge", "props": { "text": "High", "variant": "destructive" } }, { "type": "Text", "props": { "body": "token never logged (re-run the probe)" } }] },
+            { "label": "publish retry idempotency reasoning read" },
+            { "label": "dev-mode share Worker boots locally", "checked": true }
+          ]
+        },
+        "id": "review-checklist",
+        "children": [
+          { "type": "Text", "props": { "body": "Open #risk-token-log and re-run the probe after new commits.", "muted": true } },
+          { "type": "Text", "props": { "body": "See #risk-retry for the comparison with snapshot idempotency.", "muted": true } },
+          { "type": "Text", "props": { "body": "bun run dev boots the Worker on :8787.", "muted": true } }
+        ]
+      }
+    ]
+  }
+}
