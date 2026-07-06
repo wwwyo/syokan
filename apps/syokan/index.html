@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>syokan</title>
+    <!-- Brand mark `{ ✦ }`: JSON braces summoning a spark. prefers-color-scheme flips the
+         single color so it stays legible in both light/dark. A bolder stroke than the in-app
+         Logo keeps the thin brace curves readable at favicon size. SSOT is src/components/Logo
+         (the data URI is a minimal copy to keep the favicon build-independent). -->
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Cstyle%3E*%7B--c:%23141414%7D@media(prefers-color-scheme:dark)%7B*%7B--c:%23fafafa%7D%7D%3C/style%3E%3Cg%20fill='none'%20stroke='var(--c)'%20stroke-width='4.5'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M34%2023%20C27%2023%2027%2029%2027%2039%20C27%2045%2023%2047%2018%2050%20C23%2053%2027%2055%2027%2061%20C27%2071%2027%2077%2034%2077'/%3E%3Cpath%20d='M66%2023%20C73%2023%2073%2029%2073%2039%20C73%2045%2077%2047%2082%2050%20C77%2053%2073%2055%2073%2061%20C73%2071%2073%2077%2066%2077'/%3E%3C/g%3E%3Cpath%20d='M50%2038.5%20C50.79%2046.91%2053.09%2049.21%2061.5%2050%20C53.09%2050.79%2050.79%2053.09%2050%2061.5%20C49.21%2053.09%2046.91%2050.79%2038.5%2050%20C46.91%2049.21%2049.21%2046.91%2050%2038.5%20Z'%20fill='var(--c)'/%3E%3C/svg%3E"
+    />
     <script>
       // FOUC 防止: React 描画前に保存済み theme/font を <html> へ当てる。
       // 規則は src/lib/{theme,font}.ts と揃える (import できないため最小限を複製)。

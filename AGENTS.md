@@ -190,9 +190,23 @@ Hit while implementing the file-reference node's change watching (`server/fileSo
 - **Policy**: watch the file itself; on a `rename` event (the signal for inode swap/deletion), re-arm a watch on the same path. If the replacement hasn't appeared yet, retry with a cap. This follows "rename save → subsequent in-place writes".
 - **Remaining limit**: if a file is deleted and re-created at the same path only after a while, live updates stop once the re-arm retry cap is exceeded (the view shows not_found via GET). Accepted for MVP. Details in `.agent/prd/file-source-sync/decision.log` #7.
 
+### Bun dev server serves a stale module bundle after an edit
+
+Hit while wiring the brand `Logo` into `Home.tsx` and the sidebar.
+
+- **The pitfall**: after editing a source file, `bun run dev` (the HTML-import bundler + HMR) can keep serving the *previous* bundle of the edited module — the DOM still shows the old code — even though an unrelated sibling edited in the same batch reloads fine. `touch`-ing the file and reloading the browser do **not** clear it.
+- **Policy**: when an edit doesn't appear in the preview, restart the dev server (stop → start) for a clean bundle instead of chasing HMR. `tsc` stays green regardless, so a source-vs-DOM mismatch (not the type checker) is the signal.
+
+### Favicon / OG live in two HTML heads, and `<meta>`-only assets aren't bundled
+
+Hit while adding the brand favicon + OG image.
+
+- **Two entrypoints**: `apps/syokan/index.html` (main app) and `apps/share/viewer/index.html` (public share) are independent heads. `<link rel="icon">`, `<title>`, and OG/Twitter `<meta>` must be added to **both** and kept in sync by hand.
+- **Bundler blind spot**: Bun's HTML-entry build (`apps/share/build.ts`) only follows `<script>` / `<link rel=stylesheet>` imports. A static file referenced *only* from `<meta property="og:image">` is **not** copied into `dist` — `build.ts` must copy it explicitly. Inline `data:` URIs (the SVG favicon) survive minify, so they need no copy.
+
 ## Communication policy
 
 - Docs and product copy are English-first (Japanese versions live in `*.ja.md`, e.g. `README.ja.md`). Use "syokan" as a bare transitive verb in both languages — EN "syokan your notes", JA 「今日の RSS を syokan」 — never "do syokan" / 「syokan する」; "syokan" stands on its own
 - No flattery. Point out problems and risks bluntly
-- Write comments only to explain "why"
+- Write comments only to explain "why". Code comments (and JSDoc) are written in English
 - Uphold the "no data persistence" principle. When persistence becomes tempting, think about a promotion path to a separate persistence layer

@@ -59,6 +59,7 @@ export const ja: Messages = {
     reload: "再読み込み",
     pageNotFound: "ページが見つかりません。",
     sidebarLabel: "ページ一覧",
+    settings: "設定",
     close: "閉じる",
     emptyList: "まだ snapshot がありません",
   },

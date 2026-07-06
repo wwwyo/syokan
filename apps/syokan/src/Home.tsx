@@ -1,6 +1,7 @@
 import { SidebarToggle } from "./components/AppSidebar/SidebarToggle";
 import { CodeSnippet } from "./components/CodeSnippet";
 import { FontSelect } from "./components/FontSelect";
+import { LogoLockup } from "./components/Logo/LogoLockup";
 import { PageLayout } from "./components/PageLayout";
 import { ThemeSelect } from "./components/ThemeSelect";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
@@ -35,7 +36,9 @@ export function Home() {
         </header>
       }
     >
-      <h1 className="text-3xl font-semibold tracking-tight">syokan</h1>
+      <h1>
+        <LogoLockup className="text-4xl" />
+      </h1>
       <p className="mt-4 text-lg font-medium tracking-tight">{t.home.introLead}</p>
       <p className="mt-2 text-muted-foreground">{t.home.introBody}</p>
 
