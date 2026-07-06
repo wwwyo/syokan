@@ -53,9 +53,12 @@ export function hashContent(value: unknown): string {
   return (h >>> 0).toString(36);
 }
 
-// identity of the node currently being rendered (set by Render for nodes carrying an id).
+// identity of the node currently being rendered (set by Render for every node: the
+// node's own id, or null when it has none). Render resets it per node — state must
+// never attach to an ancestor's id, or two stateful nodes under one identified
+// ancestor would collide on the same storage key.
 // hash covers the whole item (props + children) so any content change invalidates state.
-type NodeMeta = { id: string; hash: string };
+export type NodeMeta = { id: string; hash: string };
 
 const NodeMetaContext = createContext<NodeMeta | null>(null);
 
@@ -63,7 +66,7 @@ export function NodeMetaProvider({
   meta,
   children,
 }: {
-  meta: NodeMeta;
+  meta: NodeMeta | null;
   children?: ReactNode;
 }) {
   return (

@@ -1,41 +1,14 @@
-import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 import { navigateToNode, registerReveal } from "../../lib/anchor";
 import { useActiveTagFilter } from "../../lib/tagFilter";
-import { hashContent, NodeMetaProvider } from "../../lib/viewState";
-import type { Item } from "../../schema";
 
 /**
- * Carrier of the cross-cutting node mechanisms (anchor id / tag narrowing / UI state
- * identity). display:contents keeps it out of layout so wrapping any node is safe;
- * anchor navigation therefore scrolls to the wrapper's first child box (lib/anchor).
+ * Carrier of the cross-cutting anchor / tag-narrowing mechanisms (UI-state identity
+ * is provided per node by Render). display:contents keeps it out of layout so
+ * wrapping any node is safe; anchor navigation therefore scrolls to the wrapper's
+ * first child box (lib/anchor).
  */
 export function NodeWrapper({
-  item,
-  children,
-}: {
-  item: Item;
-  children?: ReactNode;
-}) {
-  const { id, tags } = item;
-  // state identity = (id, content hash): changed content must not inherit old marks
-  const meta = useMemo(
-    () => (id === undefined ? null : { id, hash: hashContent(item) }),
-    [id, item],
-  );
-  const body =
-    meta === null ? (
-      children
-    ) : (
-      <NodeMetaProvider meta={meta}>{children}</NodeMetaProvider>
-    );
-  return (
-    <FilterableWrapper id={id} tags={tags}>
-      {body}
-    </FilterableWrapper>
-  );
-}
-
-function FilterableWrapper({
   id,
   tags,
   children,
