@@ -130,20 +130,3 @@
     opacity: 1;
   }
 }
-
-/* Brand wordmark face: Grenze Gotisch, subset to just the glyphs in "syokan" (~1.5KB) and
-   inlined so the lockup is self-contained (no runtime CDN) and unaffected by the
-   user-selectable app font. Used only by .font-brand (the LogoLockup wordmark).
-   Source: Google Fonts (Omnibus-Type/Grenze-Gotisch), subset via the css2 `text=` API.
-   Licensed under SIL OFL 1.1 — full license + copyright: components/Logo/GrenzeGotisch-OFL.txt */
-@font-face {
-  font-family: "Grenze Gotisch";
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url(data:font/woff2;base64,d09GMgABAAAAAAXAABAAAAAACdAAAAVmAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGhYbahwoBmA/U1RBVCoAXBEICogIhjULEgABNgIkAyAEIAWERgcgDAcb0QcR1aQeyDRSFs7fz/9y+/dc2G9LzLx04b2Y2M6kWhJHYkLgm0pRpmj+pAwG4lXTTdYHsQfID5kTl9PmeeAbAyyln6M5cU2bAyzAsTibGyMMKA2QA2sZXl3wLmWDAPQB51RANB1p3wNwTMEiKGvXb92LfpeO37qCTGBVsK8i7eLpG1cQ7cOmJoOCaJBbwbBashkYE1GB4F8p0q+bQa1tU/DmxDimYdoo0kEQhY0Eh2pUSb2IyFOksg/AFnc2HcEc6guN+IFDwU5M2EJCsJ7Hjm3bN6EUE3Cfbf3/HGBhejQB9D4/SKXKQRLAdD9gEHA3MAQLxsTvnj13i7YEqumNoN4torAgK4YsIjQEDBsZut+yV0diAo7jIq7iJu4DR+KSK2uDv8GPwAms4F3wss9yIpNAQYD+BIzNGEDmgo4B9LoGy2xaBYUc2C8HY4wNZxNGzlg+bOjqBRc1xjmP0PqiD51HH9JlczqJ36N18wOexWmGXzAdsY25oTD2hsI5NVVTrbyiJChL4WZmcul9IhpGIn6aLSunHNy3FG6my6VnU8QycnJ8XzMsC3v3S88bFiK/IYVEvMdlbO6MSZpTkJCgGV14Vto4RV8K03VdXXqfSF1Gws/J0QzLApyEBF8zurqApRBuvys/kSqSPS7dzClKxspMXXaT6BntlLQUdPbOnSPMwsbcSY7v0+ceEt3FXLpDzE4866rTZXZ19bTwBt3KytIM5zOJ+PxV+cXJJD4PdxIKEjQjqypr6F4+yfayPS5NE8/i8ob+qStKwrMPQ8zEwlxdfvpEYdPl0qYDy0j4Of6H4tFLlyomJIjTAhnQ5HI6baZCcryLxsT+bR0pyanJb5NTkwMi50bOEUfOjcQqodWj24bKi47FGZmyUmra2tw/S0Mts6lr05ObWtYTtbxuyPjLboie+DAtZESa72nmt02REskL1IJ9rFMx8YBVdjVW1MDakj0yo49HpP4Tkwj2ksLXXEL/3af08/42joaWftlCwxm8z5pKvGYx/XhmgqbsXanb1iQ8wNtVj88ty+7tYjcd3WKHQiGR+kBKIlkcSaCU/L1P9U9+/5rBsfTW0A/yfubJYmvBV0K1PhAp1ncaj7fLi69syWJrAhc/haXlxdUWUnGT2hbbbBMVl1QU2kjGDbVMtFkWbp0aikBRmKe1UvBNA6Fc3zHZ5NAA3RA13BeKLi6O12WmZCuEf2kJEPL2zxDJOc/UHfzioiap5tJ2z+yiQHKjzaeHnA6PfJur9pe5vKEoKbky+Z9m6heuKYvVI8oP6Shi+VZyaIBYjpogRzg3UNTZZoEp/pcpMdOkji/ki0VRFsfsUa0Xu4BD3h6ifYvUqyYK8bhfHwAABgCDvh75cQ5Z0u5fBYS8AIBbzx4udE/e1Y769Xftv6d0LXkIgHeH4RbIqzA3l/m79l8JXXsjXxNwpOHCrIQ2cwIazCNoMeegz9TAgJn///9XA9fOFaAefIy8IGUaS983qvOlMFIh6z3C0FDBgMUtBQdSOKMg8MS4dlqu4EIN9QoeTBAul4I9VCjmLWclCCH3EBCBAuSjBA2oQBLKLEERilFvptajGq6wYhbVIQ+1KEE16gnSUgbwI+WwRBVqUQQrRCEQ4QhiUwtQiVYU4EgV6lHSqrcYFmMIE+na9p9WoRI6sIElrGENW1/bDVGIQCRCmtKnMJYswv3lyEFti246rK5Oph+qUI2WxSELd+vAFkCuNXQQj+LWdfe1Khq1qEIpCpAnuX3QsIHQ5pB1JG+ymWwd6y5CSamzAblSJA9VqNjEb1egEiXIRQPqYIF4tKAaBbAaW58FbfrfgPyw/9kwh5a+g/k/sIGOBQA=) format("woff2");
-}
-.font-brand {
-  font-family: "Grenze Gotisch", serif;
-  font-weight: 500;
-}
