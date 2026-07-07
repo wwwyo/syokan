@@ -2,7 +2,15 @@
   "name": "syokan-workspace",
   "type": "module",
   "private": true,
-  "workspaces": ["apps/*"],
+  "workspaces": {
+    "packages": ["apps/*"],
+    "catalog": {
+      "react": "19.2.6",
+      "react-dom": "19.2.6",
+      "@types/react": "19.2.14",
+      "@types/react-dom": "19.2.3"
+    }
+  },
   "scripts": {
     "dev": "bun --filter '@syokan/*' --parallel --elide-lines 0 dev",
     "compile": "bun --filter @syokan/app compile",
@@ -11,7 +19,7 @@
     "build:share": "bun --filter @syokan/share build",
     "deploy:share": "bun --filter @syokan/share deploy",
     "test": "bun test",
-    "typecheck": "tsc --noEmit -p apps/syokan && tsc --noEmit -p apps/share",
+    "typecheck": "tsc --noEmit -p apps/syokan && tsc --noEmit -p apps/share && tsc --noEmit -p apps/demo-video",
     "storybook": "cd apps/syokan && storybook dev -p 6006",
     "build-storybook": "cd apps/syokan && storybook build"
   }
