@@ -8,7 +8,9 @@ import { resolveRepoHead, runProbe } from "./probe";
 import { isFontValue } from "../src/lib/fonts";
 import {
   CURRENT_SCHEMA_VERSION,
+  findDuplicateId,
   formatValidationError,
+  type Item,
   settingPatchSchema,
   type SnapshotEnvelope,
   snapshotMetadataSchema,
@@ -23,7 +25,22 @@ import { type SettingStore } from "./setting";
 import { type SnapshotStore } from "./store";
 import { type TemplateStore } from "./templates";
 
-const postInputSchema = z
+// ids must be unique tree-wide: anchor lookup and UI-state keying both assume it.
+function uniqueRootIds(
+  value: { root: Item },
+  ctx: z.RefinementCtx,
+): void {
+  const dup = findDuplicateId(value.root);
+  if (dup !== null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["root"],
+      message: `duplicate node id "${dup}" (ids must be unique tree-wide)`,
+    });
+  }
+}
+
+const inputBaseSchema = z
   .object({
     schemaVersion: z.literal(CURRENT_SCHEMA_VERSION).optional(),
     title: z.string().min(1).optional(),
@@ -33,10 +50,12 @@ const postInputSchema = z
   })
   .strict();
 
+const postInputSchema = inputBaseSchema.superRefine(uniqueRootIds);
+
 // PUT is identical to POST except it requires idempotencyKey.
-const putInputSchema = postInputSchema.extend({
-  idempotencyKey: z.string().min(1),
-});
+const putInputSchema = inputBaseSchema
+  .extend({ idempotencyKey: z.string().min(1) })
+  .superRefine(uniqueRootIds);
 
 function jsonError(
   status: number,

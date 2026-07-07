@@ -4,6 +4,7 @@ export {
   type Item,
   createCatalog,
   defineComponent,
+  findDuplicateId,
 } from "./catalog";
 export {
   type ValidationIssue,

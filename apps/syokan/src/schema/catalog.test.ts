@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { createCatalog, defineComponent } from "./catalog";
+import { createCatalog, defineComponent, findDuplicateId } from "./catalog";
 import { formatValidationError } from "./error";
 
 const TextSpec = defineComponent({
@@ -166,6 +166,26 @@ describe("createCatalog", () => {
     expect(parsed.id).toBe("risk-1");
     expect(parsed.tags).toEqual(["high"]);
     expect(parsed.children?.[0]?.id).toBe("risk-1-body");
+  });
+
+  test("findDuplicateId returns the first id used more than once, else null", () => {
+    const unique = {
+      type: "Stack",
+      props: {},
+      id: "a",
+      children: [
+        { type: "Text", props: { body: "x" }, id: "b" },
+        { type: "Text", props: { body: "y" } },
+      ],
+    };
+    expect(findDuplicateId(unique)).toBeNull();
+    const dup = {
+      type: "Stack",
+      props: {},
+      id: "dup",
+      children: [{ type: "Text", props: { body: "x" }, id: "dup" }],
+    };
+    expect(findDuplicateId(dup)).toBe("dup");
   });
 
   test("rejects empty id and empty tag entries", () => {

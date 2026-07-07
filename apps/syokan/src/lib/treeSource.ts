@@ -3,7 +3,7 @@
 // prevent interpretation drift.
 
 import { itemSchema } from "../catalogs";
-import type { Item } from "../schema";
+import { findDuplicateId, type Item } from "../schema";
 
 export type ParseTreeFailure = "invalid_json" | "invalid_tree" | "nested_treedoc";
 
@@ -31,6 +31,10 @@ export function parseTreeContent(content: string): ParseTreeResult {
   if (!parsed.success) return { ok: false, reason: "invalid_tree" };
   if (containsTreeDoc(parsed.data)) {
     return { ok: false, reason: "nested_treedoc" };
+  }
+  // duplicate ids collide on anchors / UI state; treat as an invalid tree
+  if (findDuplicateId(parsed.data) !== null) {
+    return { ok: false, reason: "invalid_tree" };
   }
   return { ok: true, root: parsed.data };
 }

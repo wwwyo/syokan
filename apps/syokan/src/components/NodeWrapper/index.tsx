@@ -63,6 +63,9 @@ export function AnchorLink({
       className={className}
       onClick={(e) => {
         e.preventDefault();
+        // reflect the target in the URL (without a native jump) so the link stays
+        // shareable / reload-restorable; ViewStateProvider handles it on load
+        history.replaceState(null, "", `#${encodeURIComponent(nodeId)}`);
         navigateToNode(nodeId);
       }}
     >

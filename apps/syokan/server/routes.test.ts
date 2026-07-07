@@ -85,6 +85,26 @@ describe("api routes", () => {
     expect(data.issues.length).toBeGreaterThan(0);
   });
 
+  test("POST /api/snapshots rejects duplicate node ids tree-wide", async () => {
+    const res = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          root: {
+            type: "Stack",
+            props: {},
+            id: "dup",
+            children: [{ type: "Text", props: { body: "x" }, id: "dup" }],
+          },
+        }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toBe("validation_failed");
+  });
+
   test("POST /api/snapshots returns 400 for non-JSON body", async () => {
     const res = await api.createSnapshot(
       makeRequest("/api/snapshots", {
