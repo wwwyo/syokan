@@ -1,7 +1,7 @@
 import { ChevronRightIcon } from "lucide-react";
-import { type ReactNode, useEffect, useId } from "react";
+import type { ReactNode } from "react";
 import { z } from "zod";
-import { registerReveal } from "../../lib/anchor";
+import { useReveal } from "../../lib/anchor";
 import { cn } from "../../lib/utils";
 import { useNodeUiState } from "../../lib/viewState";
 import { inlineContentSchema, InlineContentView } from "../inline";
@@ -29,11 +29,7 @@ export function Collapsible({
   children,
 }: CollapsibleProps) {
   const [open, setOpen] = useNodeUiState<boolean>("open", defaultOpen);
-  const uid = useId();
-  useEffect(() => {
-    if (open) return;
-    return registerReveal(uid, () => setOpen(true));
-  }, [open, uid, setOpen]);
+  const revealId = useReveal(!open, () => setOpen(true));
   return (
     <div data-slot="collapsible" className="flex flex-col">
       <button
@@ -53,7 +49,7 @@ export function Collapsible({
       </button>
       <div
         className={cn("ml-5.5 mt-1.5", !open && "hidden")}
-        data-reveal={open ? undefined : uid}
+        data-reveal={revealId}
       >
         {children}
       </div>

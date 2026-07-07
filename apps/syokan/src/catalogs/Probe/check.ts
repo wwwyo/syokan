@@ -4,12 +4,18 @@
 // "no false green" rests on the renderer being able to re-run exactly what is declared.
 
 import { z } from "zod";
+import { absoluteLocalPath } from "../../lib/path";
 
-// same rule as TreeDoc.path (client-bundled, so no node:path here)
-const absolutePath = z
+// op → human label, shared by the run detail (server) and the check description (client)
+// so a new op can't render inconsistently between them.
+export const SEARCH_OP_LABEL = { eq: "==", max: "<=", min: ">=" } as const;
+
+// A git revision passed to `git diff <base> -- <paths>`. Reject a leading dash so it can
+// never be read as a git option (base sits before the `--` separator, unlike paths).
+const gitRef = z
   .string()
   .min(1)
-  .regex(/^(\/|[A-Za-z]:[\\/])/, "must be an absolute local path");
+  .refine((v) => !v.startsWith("-"), "must not start with '-'");
 
 export const probeCheckSchema = z.discriminatedUnion("kind", [
   // the given paths have no diff from base (e.g. "refactor didn't touch behavior files").
@@ -17,8 +23,8 @@ export const probeCheckSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("diff_clean"),
-      repo: absolutePath,
-      base: z.string().min(1),
+      repo: absoluteLocalPath,
+      base: gitRef,
       paths: z.array(z.string().min(1)).min(1),
     })
     .strict(),
@@ -27,7 +33,7 @@ export const probeCheckSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("search_count"),
-      path: absolutePath,
+      path: absoluteLocalPath,
       pattern: z.string().min(1),
       expected: z.int().min(0),
       op: z.enum(["eq", "max", "min"]).optional(),
@@ -37,7 +43,7 @@ export const probeCheckSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("file_exists"),
-      path: absolutePath,
+      path: absoluteLocalPath,
       expected: z.boolean().optional(),
     })
     .strict(),

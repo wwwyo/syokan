@@ -1,5 +1,5 @@
-import { type ReactNode, useEffect, useId, useState } from "react";
-import { navigateToNode, registerReveal } from "../../lib/anchor";
+import { type ReactNode, useEffect, useState } from "react";
+import { navigateToNode, useReveal } from "../../lib/anchor";
 import { useActiveTagFilter } from "../../lib/tagFilter";
 
 /**
@@ -18,7 +18,6 @@ export function NodeWrapper({
   children?: ReactNode;
 }) {
   const active = useActiveTagFilter();
-  const uid = useId();
   // transient reveal for anchor navigation into a filtered-out node: the filter
   // selection itself must stay untouched, so force-show locally and reset when
   // the selection changes.
@@ -32,15 +31,12 @@ export function NodeWrapper({
     tags !== undefined &&
     !tags.some((t) => active.includes(t));
   const hidden = filtered && !forceShown;
-  useEffect(() => {
-    if (!hidden) return;
-    return registerReveal(uid, () => setForceShown(true));
-  }, [hidden, uid]);
+  const revealId = useReveal(hidden, () => setForceShown(true));
   return (
     <div
       style={{ display: hidden ? "none" : "contents" }}
       data-node-id={id}
-      data-reveal={hidden ? uid : undefined}
+      data-reveal={revealId}
     >
       {children}
     </div>

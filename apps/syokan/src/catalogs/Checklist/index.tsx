@@ -1,7 +1,7 @@
-import { Children, type ReactNode, useEffect, useId, useState } from "react";
+import { Children, type ReactNode, useState } from "react";
 import { z } from "zod";
 import { Checkbox } from "../../components/ui/checkbox";
-import { registerReveal } from "../../lib/anchor";
+import { useReveal } from "../../lib/anchor";
 import { cn } from "../../lib/utils";
 import { useNodeUiState } from "../../lib/viewState";
 import { inlineContentSchema, InlineContentView } from "../inline";
@@ -83,14 +83,10 @@ function ChecklistItem({
 }) {
   // transient re-open of a checked (folded) item; resets when the check changes
   const [peek, setPeek] = useState(false);
-  const uid = useId();
   const folded = checked && !peek;
   const bodyHidden = body !== undefined && folded;
   // anchor navigation into a folded body re-opens it transiently (lib/anchor)
-  useEffect(() => {
-    if (!bodyHidden) return;
-    return registerReveal(uid, () => setPeek(true));
-  }, [bodyHidden, uid]);
+  const revealId = useReveal(bodyHidden, () => setPeek(true));
   return (
     <li data-slot="checklist-item" className="flex flex-col gap-1.5">
       <span className="flex items-start gap-2.5">
@@ -125,10 +121,7 @@ function ChecklistItem({
         )}
       </span>
       {body !== undefined && (
-        <div
-          className={cn("ml-6.5", bodyHidden && "hidden")}
-          data-reveal={bodyHidden ? uid : undefined}
-        >
+        <div className={cn("ml-6.5", bodyHidden && "hidden")} data-reveal={revealId}>
           {body}
         </div>
       )}

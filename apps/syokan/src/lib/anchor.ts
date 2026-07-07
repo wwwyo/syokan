@@ -6,6 +6,8 @@
 // changing persistent settings (the filter selection itself is untouched —
 // hidden wrappers reveal via a transient force-show).
 
+import { useEffect, useId, useRef } from "react";
+
 const revealRegistry = new Map<string, () => void>();
 
 export function registerReveal(uid: string, reveal: () => void): () => void {
@@ -15,10 +17,36 @@ export function registerReveal(uid: string, reveal: () => void): () => void {
   };
 }
 
+/**
+ * Register `onReveal` to run when anchor navigation reaches a node hidden inside this
+ * container, and return the id to spread as `data-reveal` on the wrapper (or undefined
+ * when not hidden). One place for the subscribe-while-hidden lifecycle shared by every
+ * container that can hide a descendant (Collapsible, Checklist, TagFilter wrapper).
+ */
+export function useReveal(
+  hidden: boolean,
+  onReveal: () => void,
+): string | undefined {
+  const uid = useId();
+  const onRevealRef = useRef(onReveal);
+  onRevealRef.current = onReveal;
+  useEffect(() => {
+    if (!hidden) return;
+    return registerReveal(uid, () => onRevealRef.current());
+  }, [hidden, uid]);
+  return hidden ? uid : undefined;
+}
+
 export const ANCHOR_FLASH_CLASS = "anchor-flash";
 const FLASH_DURATION_MS = 1600;
-// after reveals trigger React re-renders; a frame is not enough for state flushes
-const SETTLE_MS = 80;
+
+// Run after the reveals' React commit has painted, so the target is laid out before we
+// scroll. Two rAFs: the first lands after React flushes the state updates, the second
+// after the browser has laid the revealed subtree out. Robust to render depth, unlike a
+// fixed delay.
+function afterReveal(fn: () => void): void {
+  requestAnimationFrame(() => requestAnimationFrame(fn));
+}
 
 function flash(el: Element): void {
   el.classList.remove(ANCHOR_FLASH_CLASS);
@@ -56,6 +84,6 @@ export function navigateToNode(nodeId: string): boolean {
   for (const uid of reveals.reverse()) {
     revealRegistry.get(uid)?.();
   }
-  window.setTimeout(() => scrollAndFlash(target), SETTLE_MS);
+  afterReveal(() => scrollAndFlash(target));
   return true;
 }

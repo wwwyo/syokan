@@ -10,6 +10,7 @@ import {
   type ProbeResult,
   probeCheckSchema,
   probeResultSchema,
+  SEARCH_OP_LABEL,
 } from "./check";
 
 export const probePropsSchema = z
@@ -37,7 +38,7 @@ function describeCheck(check: ProbeCheck): string {
     case "diff_clean":
       return `diff_clean: ${check.paths.join(", ")} vs ${check.base} (${check.repo})`;
     case "search_count": {
-      const op = { eq: "==", max: "<=", min: ">=" }[check.op ?? "eq"];
+      const op = SEARCH_OP_LABEL[check.op ?? "eq"];
       return `search_count: "${check.pattern}" in ${check.path} ${op} ${check.expected}`;
     }
     case "file_exists":

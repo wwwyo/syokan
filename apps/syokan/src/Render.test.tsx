@@ -32,13 +32,31 @@ describe("Render", () => {
 
   test("unknown type renders UnknownComponent and the type name is visible", () => {
     const item: Item = { type: "MissingType", props: {} };
-    const element = Render({ item });
+    const element = unwrap(Render({ item }));
     expect(element.type).toBe(UnknownComponent);
     expect((element.props as { type: string }).type).toBe("MissingType");
 
     const html = renderToString(createElement(Render, { item }));
     expect(html).toContain("MissingType");
     expect(html).toContain("Unknown component type");
+  });
+
+  test("a node carrying id/tags renders through NodeWrapper with a data-node-id anchor", () => {
+    const item: Item = {
+      type: "Text",
+      props: { body: "anchored" },
+      id: "risk-1",
+      tags: ["High"],
+    };
+    const html = renderToString(createElement(Render, { item }));
+    expect(html).toContain('data-node-id="risk-1"');
+    expect(html).toContain("anchored");
+  });
+
+  test("an unknown-type node with an id still renders a data-node-id anchor", () => {
+    const item: Item = { type: "MissingType", props: {}, id: "ghost" };
+    const html = renderToString(createElement(Render, { item }));
+    expect(html).toContain('data-node-id="ghost"');
   });
 
   test("Stack children are recursively wrapped in Render elements", () => {

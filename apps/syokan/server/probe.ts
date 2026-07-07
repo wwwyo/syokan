@@ -6,12 +6,18 @@
 import { existsSync, type Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { ProbeCheck, ProbeResult } from "../src/catalogs/Probe/check";
+import {
+  type ProbeCheck,
+  type ProbeResult,
+  SEARCH_OP_LABEL,
+} from "../src/catalogs/Probe/check";
 import { readTextFile } from "./fileSource";
 
 const GIT_TIMEOUT_MS = 10_000;
 // walk caps so search_count can't freeze the server on a huge tree
 const SEARCH_MAX_FILES = 5_000;
+// bounded fan-out for file reads (overlap I/O without exhausting file descriptors)
+const SEARCH_READ_CONCURRENCY = 16;
 const SKIPPED_DIRS = new Set([".git", "node_modules"]);
 
 async function git(
@@ -147,15 +153,19 @@ async function runSearchCount(
   } else if (single.reason === "not_regular_file") {
     const collected = await collectFiles(check.path, SEARCH_MAX_FILES);
     truncated = collected.truncated;
-    for (const file of collected.files) {
-      const read = await readTextFile(file);
-      if (!read.ok) {
-        // binary / oversized / vanished files don't abort the whole search
-        skipped++;
-        continue;
+    // reads are independent; overlap I/O in bounded batches instead of awaiting each
+    for (let i = 0; i < collected.files.length; i += SEARCH_READ_CONCURRENCY) {
+      const batch = collected.files.slice(i, i + SEARCH_READ_CONCURRENCY);
+      const reads = await Promise.all(batch.map((file) => readTextFile(file)));
+      for (const read of reads) {
+        if (!read.ok) {
+          // binary / oversized / vanished files don't abort the whole search
+          skipped++;
+          continue;
+        }
+        scanned++;
+        total += countOccurrences(read.content, check.pattern);
       }
-      scanned++;
-      total += countOccurrences(read.content, check.pattern);
     }
   } else {
     return result("error", `cannot read ${check.path} (${single.reason})`);
@@ -167,7 +177,7 @@ async function runSearchCount(
       : op === "max"
         ? total <= check.expected
         : total >= check.expected;
-  const opLabel = { eq: "==", max: "<=", min: ">=" }[op];
+  const opLabel = SEARCH_OP_LABEL[op];
   const notes = [
     `${total} matches in ${scanned} files (expected ${opLabel} ${check.expected})`,
     ...(skipped > 0 ? [`${skipped} unreadable files skipped`] : []),

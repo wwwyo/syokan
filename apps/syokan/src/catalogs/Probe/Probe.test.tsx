@@ -40,6 +40,25 @@ describe("probeCheckSchema", () => {
       }).success,
     ).toBe(false);
   });
+
+  test("rejects a diff_clean base that could be read as a git option", () => {
+    expect(
+      probeCheckSchema.safeParse({
+        kind: "diff_clean",
+        repo: "/repo",
+        base: "--output=/tmp/x",
+        paths: ["a.ts"],
+      }).success,
+    ).toBe(false);
+    expect(
+      probeCheckSchema.safeParse({
+        kind: "diff_clean",
+        repo: "/repo",
+        base: "origin/main",
+        paths: ["a.ts"],
+      }).success,
+    ).toBe(true);
+  });
 });
 
 describe("probePropsSchema", () => {
