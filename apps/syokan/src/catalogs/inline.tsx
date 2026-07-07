@@ -9,11 +9,16 @@ import { Link, linkPropsSchema } from "./Link";
 import { Text, textPropsSchema } from "./Text";
 import { Time, timePropsSchema } from "./Time";
 
+const textItem = z.object({ type: z.literal("Text"), props: textPropsSchema }).strict();
+const linkItem = z.object({ type: z.literal("Link"), props: linkPropsSchema }).strict();
+const badgeItem = z.object({ type: z.literal("Badge"), props: badgePropsSchema }).strict();
+const timeItem = z.object({ type: z.literal("Time"), props: timePropsSchema }).strict();
+
 export const inlineItemSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("Text"), props: textPropsSchema }).strict(),
-  z.object({ type: z.literal("Link"), props: linkPropsSchema }).strict(),
-  z.object({ type: z.literal("Badge"), props: badgePropsSchema }).strict(),
-  z.object({ type: z.literal("Time"), props: timePropsSchema }).strict(),
+  textItem,
+  linkItem,
+  badgeItem,
+  timeItem,
 ]);
 
 export type InlineItem = z.infer<typeof inlineItemSchema>;
@@ -26,6 +31,23 @@ export const inlineContentSchema = z.union([
 ]);
 
 export type InlineContent = z.infer<typeof inlineContentSchema>;
+
+// Link is excluded: this feeds contexts that render inside a <button> (Collapsible
+// summary, Checklist label), where a nested <a> is invalid interactive nesting and its
+// click would bubble to toggle the control instead of navigating.
+const buttonInlineItemSchema = z.discriminatedUnion("type", [
+  textItem,
+  badgeItem,
+  timeItem,
+]);
+
+export const buttonInlineContentSchema = z.union([
+  z.string(),
+  buttonInlineItemSchema,
+  z.array(buttonInlineItemSchema),
+]);
+
+export type ButtonInlineContent = z.infer<typeof buttonInlineContentSchema>;
 
 function RenderInlineItem({ item }: { item: InlineItem }) {
   switch (item.type) {

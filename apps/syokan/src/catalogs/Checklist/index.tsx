@@ -4,7 +4,7 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { useReveal } from "../../lib/anchor";
 import { cn } from "../../lib/utils";
 import { useNodeUiState } from "../../lib/viewState";
-import { inlineContentSchema, InlineContentView } from "../inline";
+import { buttonInlineContentSchema, InlineContentView } from "../inline";
 
 export const checklistPropsSchema = z
   .object({
@@ -12,7 +12,8 @@ export const checklistPropsSchema = z
       .array(
         z
           .object({
-            label: inlineContentSchema,
+            // a checked item's label becomes a toggle button, so use the link-free inline set
+            label: buttonInlineContentSchema,
             // initial state from the producer; interactions live in device-local UI state
             checked: z.boolean().optional(),
           })

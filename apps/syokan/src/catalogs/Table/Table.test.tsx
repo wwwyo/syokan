@@ -30,6 +30,19 @@ describe("tablePropsSchema", () => {
       false,
     );
   });
+
+  test("accepts shorter rows but rejects rows wider than the header", () => {
+    expect(
+      tablePropsSchema.safeParse({ columns: ["A", "B"], rows: [["only-a"]] })
+        .success,
+    ).toBe(true);
+    expect(
+      tablePropsSchema.safeParse({
+        columns: ["A", "B"],
+        rows: [["a", "b", "c"]],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("Table", () => {

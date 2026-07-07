@@ -145,7 +145,11 @@ async function runSearchCount(
   const single = await readTextFile(check.path);
   let total = 0;
   let scanned = 0;
-  let skipped = 0;
+  let binarySkipped = 0;
+  // files that might contain a text match but couldn't be read (oversized / permission /
+  // vanished). Unlike a binary file, one of these could hide an occurrence, so an
+  // upper-bounded pass over them is not trustworthy.
+  let unscannable = 0;
   let truncated = false;
   if (single.ok) {
     total = countOccurrences(single.content, check.pattern);
@@ -159,8 +163,8 @@ async function runSearchCount(
       const reads = await Promise.all(batch.map((file) => readTextFile(file)));
       for (const read of reads) {
         if (!read.ok) {
-          // binary / oversized / vanished files don't abort the whole search
-          skipped++;
+          if (read.reason === "not_text") binarySkipped++;
+          else unscannable++;
           continue;
         }
         scanned++;
@@ -178,13 +182,19 @@ async function runSearchCount(
         ? total <= check.expected
         : total >= check.expected;
   const opLabel = SEARCH_OP_LABEL[op];
+  const skipped = binarySkipped + unscannable;
   const notes = [
     `${total} matches in ${scanned} files (expected ${opLabel} ${check.expected})`,
     ...(skipped > 0 ? [`${skipped} unreadable files skipped`] : []),
     ...(truncated ? [`scan capped at ${SEARCH_MAX_FILES} files`] : []),
   ];
-  // a capped scan can undercount; never report a green result from partial coverage
-  if (truncated && pass) return result("error", notes.join("; "));
+  // Undercounting can only break an upper-bounded (eq/max) pass — a min pass stays valid.
+  // A capped scan, or files that might hold a match but couldn't be read, make such a pass
+  // untrustworthy; binary files can't hold a source match, so they don't count.
+  const undercountRisk = truncated || unscannable > 0;
+  if (pass && op !== "min" && undercountRisk) {
+    return result("error", notes.join("; "));
+  }
   return result(pass ? "pass" : "fail", notes.join("; "));
 }
 

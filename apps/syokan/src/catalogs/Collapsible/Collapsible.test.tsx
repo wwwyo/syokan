@@ -19,6 +19,14 @@ describe("collapsiblePropsSchema", () => {
       collapsiblePropsSchema.safeParse({ summary: "x", open: true }).success,
     ).toBe(false);
   });
+
+  test("rejects a Link in the summary (it renders inside the toggle button)", () => {
+    expect(
+      collapsiblePropsSchema.safeParse({
+        summary: [{ type: "Link", props: { href: "https://example.com/" } }],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("Collapsible", () => {

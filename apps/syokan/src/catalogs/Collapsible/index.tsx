@@ -4,11 +4,12 @@ import { z } from "zod";
 import { useReveal } from "../../lib/anchor";
 import { cn } from "../../lib/utils";
 import { useNodeUiState } from "../../lib/viewState";
-import { inlineContentSchema, InlineContentView } from "../inline";
+import { buttonInlineContentSchema, InlineContentView } from "../inline";
 
 export const collapsiblePropsSchema = z
   .object({
-    summary: inlineContentSchema,
+    // summary renders inside the toggle button, so it uses the link-free inline set
+    summary: buttonInlineContentSchema,
     defaultOpen: z.boolean().optional(),
   })
   .strict();

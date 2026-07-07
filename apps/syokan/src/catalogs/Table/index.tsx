@@ -13,9 +13,22 @@ export const tablePropsSchema = z
   .object({
     // header cells; the column count follows this array
     columns: z.array(inlineContentSchema).min(1),
+    // shorter rows are padded on render; a row wider than the header would silently drop
+    // its extra cells, so reject it rather than lose data
     rows: z.array(z.array(inlineContentSchema)),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    value.rows.forEach((row, i) => {
+      if (row.length > value.columns.length) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["rows", i],
+          message: `row has ${row.length} cells but there are ${value.columns.length} columns`,
+        });
+      }
+    });
+  });
 
 export type TableProps = z.infer<typeof tablePropsSchema>;
 

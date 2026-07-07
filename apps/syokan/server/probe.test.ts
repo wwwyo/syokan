@@ -140,6 +140,47 @@ describe("runProbe search_count", () => {
     });
     expect(result.status).toBe("error");
   });
+
+  test("binary files are skipped without downgrading a clean upper-bounded pass", async () => {
+    // plainDir contains bin.dat (a binary file); a binary can't hold a source match,
+    // so an eq/max pass over the tree stays green despite the skip
+    const result = await runProbe({
+      kind: "search_count",
+      path: plainDir,
+      pattern: "no-such-token",
+      expected: 0,
+      op: "max",
+    });
+    expect(result.status).toBe("pass");
+    expect(result.detail).toContain("skipped");
+  });
+
+  test("an unreadable text file downgrades an eq/max pass but not a min pass", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "syokan-probe-oversized-"));
+    try {
+      writeFileSync(join(dir, "small.ts"), "clean\n");
+      // over the 2MB read cap → readTextFile returns too_large → could hide a match
+      writeFileSync(join(dir, "big.ts"), `${"x".repeat(2 * 1024 * 1024 + 1)}\nTODO\n`);
+      const max = await runProbe({
+        kind: "search_count",
+        path: dir,
+        pattern: "TODO",
+        expected: 0,
+        op: "max",
+      });
+      expect(max.status).toBe("error");
+      const min = await runProbe({
+        kind: "search_count",
+        path: dir,
+        pattern: "TODO",
+        expected: 0,
+        op: "min",
+      });
+      expect(min.status).toBe("pass");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("runProbe file_exists", () => {

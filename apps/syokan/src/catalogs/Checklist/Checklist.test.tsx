@@ -22,6 +22,16 @@ describe("checklistPropsSchema", () => {
       }).success,
     ).toBe(false);
   });
+
+  test("rejects a Link in a label (a checked label becomes a toggle button)", () => {
+    expect(
+      checklistPropsSchema.safeParse({
+        items: [
+          { label: [{ type: "Link", props: { href: "https://example.com/" } }] },
+        ],
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("Checklist", () => {
