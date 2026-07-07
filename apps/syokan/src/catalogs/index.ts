@@ -58,7 +58,10 @@ function defineViewComponent<
 // can post", and itemSchema / specs / components are derived from it.
 const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Stack", stackPropsSchema, Stack),
-  defineViewComponent("Card", cardPropsSchema, Card),
+  defineViewComponent("Card", cardPropsSchema, Card, {
+    notes:
+      "Optional title fills the header slot; children fill the body. Wrap multiple body elements in a Stack for spacing (the body is a single padded slot with no inter-child gap of its own).",
+  }),
   // leaf components have no children. childrenTypes: [] rejects stray children at
   // ingest time (when unspecified, children are silently dropped).
   defineViewComponent("Heading", headingPropsSchema, Heading, {

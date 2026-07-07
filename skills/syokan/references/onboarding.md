@@ -87,11 +87,16 @@ After approval, write it to `welcome.json` and post it (props conform to `syokan
       { "type": "Text", "props": { "body": "This is your first snapshot. An LLM posts a JSON tree, and syokan renders it with catalog components." } },
       {
         "type": "Card",
-        "props": {},
+        "props": { "title": "What you can do next" },
         "children": [
-          { "type": "Heading", "props": { "text": "What you can do next", "level": 3 } },
-          { "type": "Text", "props": { "body": "Post today's RSS, an in-progress PR review, meeting notes, or your TODOs, and view them as structured UI at a single URL." } },
-          { "type": "Badge", "props": { "text": "ephemeral", "variant": "secondary" } }
+          {
+            "type": "Stack",
+            "props": {},
+            "children": [
+              { "type": "Text", "props": { "body": "Post today's RSS, an in-progress PR review, meeting notes, or your TODOs, and view them as structured UI at a single URL." } },
+              { "type": "Badge", "props": { "text": "ephemeral", "variant": "secondary" } }
+            ]
+          }
         ]
       },
       { "type": "Link", "props": { "href": "https://github.com/wwwyo/syokan", "text": "syokan documentation" } }
