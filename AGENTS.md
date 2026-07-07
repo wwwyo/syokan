@@ -190,6 +190,13 @@ Hit while implementing the file-reference node's change watching (`server/fileSo
 - **Policy**: watch the file itself; on a `rename` event (the signal for inode swap/deletion), re-arm a watch on the same path. If the replacement hasn't appeared yet, retry with a cap. This follows "rename save → subsequent in-place writes".
 - **Remaining limit**: if a file is deleted and re-created at the same path only after a while, live updates stop once the re-arm retry cap is exceeded (the view shows not_found via GET). Accepted for MVP. Details in `.agent/prd/file-source-sync/decision.log` #7.
 
+### `bunfig.toml` is read from cwd only, so the dev server's Tailwind plugin needs a per-package copy
+
+Hit after the monorepo split: the dev server rendered completely unstyled (served CSS had zero utility classes).
+
+- **The pitfall**: the dev server bundles the frontend via the `index.html` import, and the Tailwind expansion comes from `[serve.static] plugins = ["bun-plugin-tailwind"]` in `bunfig.toml`. Bun reads `bunfig.toml` **from `$cwd` only** (it does not walk up to the workspace root, and `bun --config <path>` silently no-ops for `bun run`). The root `dev` script runs each package's dev via `bun --filter`, so the syokan server starts with cwd `apps/syokan/` — where the root `bunfig.toml` is invisible, so the plugin never loads.
+- **Fix**: `apps/syokan/bunfig.toml` is a **symlink to `../../bunfig.toml`** so the same config (plugin + the supply-chain `[install]` settings) resolves from the package cwd without duplication. If the app ever renders unstyled in dev, check that symlink first.
+
 ### Bun dev server serves a stale module bundle after an edit
 
 Hit while wiring the brand `Logo` into `Home.tsx` and the sidebar.
