@@ -1,21 +1,38 @@
 import type { ReactNode } from "react";
 import { z } from "zod";
-import { Card as UICard } from "../../components/ui/card";
+import {
+  Card as UICard,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
 
-export const cardPropsSchema = z.object({}).strict();
+export const cardPropsSchema = z
+  .object({
+    // rendered as the card's heading in the header slot; omit for a plain container
+    title: z.string().min(1).optional(),
+  })
+  .strict();
 
-// z.infer of the empty schema collapses to never when intersected with children, so type only children.
-export type CardProps = {
+export type CardProps = z.infer<typeof cardPropsSchema> & {
   children?: ReactNode;
 };
 
 /**
- * A generic card that wraps children. Domain-agnostic (not tied to articles etc.);
- * the contents are expressed by composing Heading / Text / Link / Stack and the like.
- * shadcn's Card keeps horizontal padding on its slots (CardContent) rather than the
- * root; since this holds arbitrary catalog nodes with no such slot, add the inline
- * padding here so content isn't flush to the edges (the root already supplies py).
+ * A generic card. Domain-agnostic (not tied to articles etc.): an optional title fills
+ * the header slot and children fill the body. Padding comes from the shadcn header/content
+ * slots (the Card root supplies only vertical rhythm), so nothing reaches into its spacing
+ * variables. Lay out multiple body elements by composing a Stack.
  */
-export function Card({ children }: CardProps) {
-  return <UICard className="px-(--card-spacing)">{children}</UICard>;
+export function Card({ title, children }: CardProps) {
+  return (
+    <UICard>
+      {title !== undefined && (
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+      )}
+      <CardContent>{children}</CardContent>
+    </UICard>
+  );
 }

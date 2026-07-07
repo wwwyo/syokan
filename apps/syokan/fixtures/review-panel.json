@@ -111,77 +111,73 @@
           },
           {
             "type": "Card",
-            "props": {},
+            "props": {
+              "title": "share token could reach Worker logs"
+            },
             "id": "risk-token-log",
             "tags": [
               "High"
             ],
             "children": [
               {
-                "type": "Heading",
-                "props": {
-                  "text": "share token could reach Worker logs",
-                  "level": 3
-                }
-              },
-              {
-                "type": "Text",
-                "props": {
-                  "body": "server/share.ts forwards the auth header; confirm the Worker never logs it."
-                }
-              },
-              {
-                "type": "Collapsible",
-                "props": {
-                  "summary": "Evidence (1 hunk)"
-                },
-                "id": "risk-token-log-evidence",
+                "type": "Stack",
+                "props": {},
                 "children": [
                   {
-                    "type": "Diff",
+                    "type": "Text",
                     "props": {
-                      "patch": "diff --git a/apps/syokan/server/share.ts b/apps/syokan/server/share.ts\n--- a/apps/syokan/server/share.ts\n+++ b/apps/syokan/server/share.ts\n@@ -10,6 +10,7 @@\n context\n-old line\n+forwardAuthHeader(req)\n context"
+                      "body": "server/share.ts forwards the auth header; confirm the Worker never logs it."
+                    }
+                  },
+                  {
+                    "type": "Collapsible",
+                    "props": {
+                      "summary": "Evidence (1 hunk)"
                     },
-                    "id": "risk-token-log-hunk"
+                    "id": "risk-token-log-evidence",
+                    "children": [
+                      {
+                        "type": "Diff",
+                        "props": {
+                          "patch": "diff --git a/apps/syokan/server/share.ts b/apps/syokan/server/share.ts\n--- a/apps/syokan/server/share.ts\n+++ b/apps/syokan/server/share.ts\n@@ -10,6 +10,7 @@\n context\n-old line\n+forwardAuthHeader(req)\n context"
+                        },
+                        "id": "risk-token-log-hunk"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "Probe",
+                    "props": {
+                      "label": "no console.log of the auth header",
+                      "check": {
+                        "kind": "search_count",
+                        "path": "/Users/yuito_watanabe/src/github.com/wwwyo/syokan/apps/share",
+                        "pattern": "console.log(auth",
+                        "expected": 0,
+                        "op": "max"
+                      },
+                      "result": {
+                        "status": "pass",
+                        "detail": "0 matches in 9 files (expected <= 0)",
+                        "ranAt": "2026-07-06T09:00:00Z"
+                      }
+                    },
+                    "id": "probe-token-log"
                   }
                 ]
-              },
-              {
-                "type": "Probe",
-                "props": {
-                  "label": "no console.log of the auth header",
-                  "check": {
-                    "kind": "search_count",
-                    "path": "/Users/yuito_watanabe/src/github.com/wwwyo/syokan/apps/share",
-                    "pattern": "console.log(auth",
-                    "expected": 0,
-                    "op": "max"
-                  },
-                  "result": {
-                    "status": "pass",
-                    "detail": "0 matches in 9 files (expected <= 0)",
-                    "ranAt": "2026-07-06T09:00:00Z"
-                  }
-                },
-                "id": "probe-token-log"
               }
             ]
           },
           {
             "type": "Card",
-            "props": {},
+            "props": {
+              "title": "publish retry lacks idempotency"
+            },
             "id": "risk-retry",
             "tags": [
               "Medium"
             ],
             "children": [
-              {
-                "type": "Heading",
-                "props": {
-                  "text": "publish retry lacks idempotency",
-                  "level": 3
-                }
-              },
               {
                 "type": "Text",
                 "props": {

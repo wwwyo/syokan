@@ -35,9 +35,15 @@ Stack Cards with a heading link, fetch time, and summary.
         "type": "Card",
         "props": {},
         "children": [
-          { "type": "Heading", "props": { "text": "Article title", "level": 3, "href": "https://example.com/article" } },
-          { "type": "Time", "props": { "datetime": "2026-06-28T06:30:00Z", "muted": true } },
-          { "type": "Text", "props": { "body": "Put the article summary here.", "clamp": true } }
+          {
+            "type": "Stack",
+            "props": {},
+            "children": [
+              { "type": "Heading", "props": { "text": "Article title", "level": 3, "href": "https://example.com/article" } },
+              { "type": "Time", "props": { "datetime": "2026-06-28T06:30:00Z", "muted": true } },
+              { "type": "Text", "props": { "body": "Put the article summary here.", "clamp": true } }
+            ]
+          }
         ]
       }
     ]
@@ -185,26 +191,31 @@ Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"
           },
           {
             "type": "Card",
-            "props": {},
+            "props": { "title": "token could reach logs" },
             "id": "risk-1",
             "tags": ["High"],
             "children": [
-              { "type": "Heading", "props": { "text": "token could reach logs", "level": 3 } },
               {
-                "type": "Collapsible",
-                "props": { "summary": "Evidence (1 hunk)" },
-                "id": "risk-1-evidence",
+                "type": "Stack",
+                "props": {},
                 "children": [
-                  { "type": "Diff", "props": { "patch": "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new" } }
+                  {
+                    "type": "Collapsible",
+                    "props": { "summary": "Evidence (1 hunk)" },
+                    "id": "risk-1-evidence",
+                    "children": [
+                      { "type": "Diff", "props": { "patch": "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new" } }
+                    ]
+                  },
+                  {
+                    "type": "Probe",
+                    "props": {
+                      "label": "no auth header logged",
+                      "check": { "kind": "search_count", "path": "/abs/path/to/app", "pattern": "console.log(auth", "expected": 0, "op": "max" },
+                      "result": { "status": "pass", "detail": "0 matches", "ranAt": "2026-07-06T09:00:00Z" }
+                    }
+                  }
                 ]
-              },
-              {
-                "type": "Probe",
-                "props": {
-                  "label": "no auth header logged",
-                  "check": { "kind": "search_count", "path": "/abs/path/to/app", "pattern": "console.log(auth", "expected": 0, "op": "max" },
-                  "result": { "status": "pass", "detail": "0 matches", "ranAt": "2026-07-06T09:00:00Z" }
-                }
               }
             ]
           }
