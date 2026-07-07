@@ -93,7 +93,9 @@ function buildUnion(
         children: childrenSchema,
         key: z.string().min(1).optional(),
         id: z.string().min(1).optional(),
-        tags: z.array(z.string().min(1)).optional(),
+        // min(1): an empty tags array opts the node into filtering yet matches no
+        // selection, so it would vanish whenever any filter is active. Omit instead.
+        tags: z.array(z.string().min(1)).min(1).optional(),
       })
       .strict();
   });
