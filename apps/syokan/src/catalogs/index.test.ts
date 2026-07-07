@@ -2,13 +2,20 @@ import { describe, expect, test } from "bun:test";
 import { type ItemComponent, components, itemSchema, specs } from ".";
 import { Badge } from "./Badge";
 import { Card } from "./Card";
+import { Checklist } from "./Checklist";
 import { Code } from "./Code";
+import { Collapsible } from "./Collapsible";
 import { Diff } from "./Diff";
+import { Graph } from "./Graph";
 import { Heading } from "./Heading";
 import { Link } from "./Link";
 import { Mermaid } from "./Mermaid";
 import { PlainText } from "./PlainText";
+import { Probe } from "./Probe";
 import { Stack } from "./Stack";
+import { Stat } from "./Stat";
+import { Table } from "./Table";
+import { TagFilter } from "./TagFilter";
 import { Text } from "./Text";
 import { Time } from "./Time";
 import { TreeDoc } from "./TreeDoc";
@@ -67,9 +74,16 @@ describe("catalog", () => {
     expect(components.get("Badge")).toBe(asItem(Badge));
     expect(components.get("Mermaid")).toBe(asItem(Mermaid));
     expect(components.get("TreeDoc")).toBe(asItem(TreeDoc));
+    expect(components.get("Table")).toBe(asItem(Table));
+    expect(components.get("Stat")).toBe(asItem(Stat));
+    expect(components.get("Checklist")).toBe(asItem(Checklist));
+    expect(components.get("Collapsible")).toBe(asItem(Collapsible));
+    expect(components.get("TagFilter")).toBe(asItem(TagFilter));
+    expect(components.get("Graph")).toBe(asItem(Graph));
+    expect(components.get("Probe")).toBe(asItem(Probe));
     expect(components.get("MarkdownDoc")).toBeUndefined();
     expect(components.get("FileDoc")).toBeUndefined();
-    expect(components.size).toBe(12);
+    expect(components.size).toBe(19);
   });
 
   test("Heading requires text and is strict", () => {

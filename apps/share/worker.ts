@@ -40,6 +40,10 @@ type StructuralItem = {
 	props: Record<string, unknown>;
 	children?: StructuralItem[];
 	key?: string;
+	// cross-cutting node fields: without them a plain z.object strips id/tags on parse,
+	// silently killing anchor nav / TagFilter / UI-state persistence on shared views.
+	id?: string;
+	tags?: string[];
 };
 
 const structuralItemSchema: z.ZodType<StructuralItem> = z.lazy(() =>
@@ -48,6 +52,8 @@ const structuralItemSchema: z.ZodType<StructuralItem> = z.lazy(() =>
 		props: z.record(z.string(), z.unknown()),
 		children: z.array(structuralItemSchema).optional(),
 		key: z.string().min(1).optional(),
+		id: z.string().min(1).optional(),
+		tags: z.array(z.string().min(1)).min(1).optional(),
 	}),
 );
 

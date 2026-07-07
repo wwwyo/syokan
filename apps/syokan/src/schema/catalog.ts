@@ -5,6 +5,10 @@ export type Item = {
   props: Record<string, unknown>;
   children?: Item[];
   key?: string;
+  // cross-cutting mechanisms (available on every node, independent of type):
+  // id anchors the node for in-view navigation; tags opt the node into TagFilter narrowing.
+  id?: string;
+  tags?: string[];
 };
 
 export type ComponentSpec<
@@ -15,6 +19,9 @@ export type ComponentSpec<
   propsSchema: z.ZodType<TProps>;
   // when set, children types are restricted to the allowed list; unset means no restriction
   childrenTypes?: readonly string[];
+  // usage contract not expressible in the props schema (e.g. children pairing rules);
+  // published via the manifest so producers don't rely on hand-copied docs
+  notes?: string;
 };
 
 export function defineComponent<
@@ -85,6 +92,10 @@ function buildUnion(
         props: spec.propsSchema,
         children: childrenSchema,
         key: z.string().min(1).optional(),
+        id: z.string().min(1).optional(),
+        // min(1): an empty tags array opts the node into filtering yet matches no
+        // selection, so it would vanish whenever any filter is active. Omit instead.
+        tags: z.array(z.string().min(1)).min(1).optional(),
       })
       .strict();
   });
@@ -95,6 +106,28 @@ function buildUnion(
     "type",
     variants as unknown as [(typeof variants)[number], ...(typeof variants)[number][]],
   ) as unknown as z.ZodType<Item>;
+}
+
+/**
+ * The first node id that appears more than once in the tree, or null. A cross-cutting
+ * id must be unique tree-wide: anchor lookup takes the first match and UI-state keys on
+ * (scope, id), so a duplicate id causes wrong jumps and colliding state. Checked at
+ * every ingest point (envelope POST/PUT, TreeDoc parse), the same way Graph enforces
+ * uniqueness within a single graph.
+ */
+export function findDuplicateId(root: Item): string | null {
+  const seen = new Set<string>();
+  const stack: Item[] = [root];
+  while (stack.length > 0) {
+    const item = stack.pop();
+    if (item === undefined) break;
+    if (item.id !== undefined) {
+      if (seen.has(item.id)) return item.id;
+      seen.add(item.id);
+    }
+    if (item.children) stack.push(...item.children);
+  }
+  return null;
 }
 
 function findDuplicateTypes(specs: readonly ComponentSpec[]): string[] {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import { createCatalog, defineComponent } from "./catalog";
+import { createCatalog, defineComponent, findDuplicateId } from "./catalog";
 import { formatValidationError } from "./error";
 
 const TextSpec = defineComponent({
@@ -150,5 +150,56 @@ describe("createCatalog", () => {
       key: "",
     });
     expect(result.success).toBe(false);
+  });
+
+  test("accepts cross-cutting id and tags on any node", () => {
+    const { itemSchema } = createCatalog([TextSpec, ContainerSpec]);
+    const parsed = itemSchema.parse({
+      type: "Container",
+      props: {},
+      id: "risk-1",
+      tags: ["high"],
+      children: [
+        { type: "Text", props: { content: "hi" }, id: "risk-1-body" },
+      ],
+    });
+    expect(parsed.id).toBe("risk-1");
+    expect(parsed.tags).toEqual(["high"]);
+    expect(parsed.children?.[0]?.id).toBe("risk-1-body");
+  });
+
+  test("findDuplicateId returns the first id used more than once, else null", () => {
+    const unique = {
+      type: "Stack",
+      props: {},
+      id: "a",
+      children: [
+        { type: "Text", props: { body: "x" }, id: "b" },
+        { type: "Text", props: { body: "y" } },
+      ],
+    };
+    expect(findDuplicateId(unique)).toBeNull();
+    const dup = {
+      type: "Stack",
+      props: {},
+      id: "dup",
+      children: [{ type: "Text", props: { body: "x" }, id: "dup" }],
+    };
+    expect(findDuplicateId(dup)).toBe("dup");
+  });
+
+  test("rejects empty id and empty tag entries", () => {
+    const { itemSchema } = createCatalog([TextSpec]);
+    expect(
+      itemSchema.safeParse({ type: "Text", props: { content: "x" }, id: "" })
+        .success,
+    ).toBe(false);
+    expect(
+      itemSchema.safeParse({
+        type: "Text",
+        props: { content: "x" },
+        tags: [""],
+      }).success,
+    ).toBe(false);
   });
 });

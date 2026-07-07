@@ -15,6 +15,7 @@ import { createFileWatcher } from "./fileSource";
 import {
   createApiHandlers,
   createFileHandlers,
+  createProbeHandlers,
   createSettingHandlers,
   createTemplateHandlers,
   getCatalog,
@@ -58,6 +59,7 @@ export function startServer() {
   const setting = createSettingHandlers(createSettingStore(settingFile()));
   // File watching is connection-scoped runtime state, never persisted. It lives as long as the server.
   const file = createFileHandlers(createFileWatcher());
+  const probe = createProbeHandlers();
   const shareApp = createShareApp({
     store,
     fetch: globalThis.fetch,
@@ -104,6 +106,9 @@ export function startServer() {
       // File-reference node body read (GET) and change watching (SSE).
       "/api/files": { GET: file.readFile },
       "/api/files/watch": { GET: file.watchFile },
+      // Probe: predefined read-only checks (run) and repo HEAD resolution (staleness).
+      "/api/probes/run": { POST: probe.runProbe },
+      "/api/probes/ref": { POST: probe.resolveRef },
       // Evaluated in static > param > wildcard order, so the APIs above take precedence.
       "/api/*": () => Response.json({ error: "not_found" }, { status: 404 }),
       // SPA fallback: non-API requests return the frontend, and the client router branches rendering.

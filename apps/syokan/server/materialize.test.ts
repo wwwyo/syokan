@@ -139,4 +139,84 @@ describe("materializeTree", () => {
     const result = await materializeTree(tree);
     expect(result).toEqual({ ok: true, root: tree });
   });
+
+  test("cross-cutting id and tags survive the copy", async () => {
+    const tree: Item = {
+      type: "Stack",
+      props: {},
+      id: "root",
+      children: [
+        { type: "Text", props: { body: "x" }, id: "risk-1", tags: ["High"] },
+      ],
+    };
+    const result = await materializeTree(tree);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.root.id).toBe("root");
+      expect(result.root.children?.[0]?.id).toBe("risk-1");
+      expect(result.root.children?.[0]?.tags).toEqual(["High"]);
+    }
+  });
+
+  test("publish strips probe check/result unless shareVisible", async () => {
+    const probe: Item = {
+      type: "Probe",
+      props: {
+        label: "no diff",
+        check: {
+          kind: "diff_clean",
+          repo: "/home/me/repo",
+          base: "main",
+          paths: ["src/a.ts"],
+        },
+        result: { status: "pass", ranAt: "2026-07-06T00:00:00Z" },
+      },
+    };
+    const result = await materializeTree(probe);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.root.props).toEqual({ label: "no diff" });
+    }
+  });
+
+  test("shareVisible probes keep check/result on publish", async () => {
+    const probe: Item = {
+      type: "Probe",
+      props: {
+        check: { kind: "file_exists", path: "/repo/README.md" },
+        result: { status: "pass", ranAt: "2026-07-06T00:00:00Z" },
+        shareVisible: true,
+      },
+    };
+    const result = await materializeTree(probe);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.root.props.check).toBeDefined();
+      expect(result.root.props.result).toBeDefined();
+    }
+  });
+
+  test("probes inside a synced TreeDoc subtree are also redacted", async () => {
+    const path = join(dir, "with-probe.json");
+    await writeFile(
+      path,
+      JSON.stringify({
+        type: "Stack",
+        props: {},
+        children: [
+          {
+            type: "Probe",
+            props: {
+              check: { kind: "file_exists", path: "/secret/place" },
+            },
+          },
+        ],
+      }),
+    );
+    const result = await materializeTree({ type: "TreeDoc", props: { path } });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.root.children?.[0]?.props).toEqual({});
+    }
+  });
 });

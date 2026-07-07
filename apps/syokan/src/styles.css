@@ -91,6 +91,21 @@
   }
 }
 
+/* In-view anchor navigation target: a fading ring so the reader sees where they landed
+   (lib/anchor adds/removes .anchor-flash). */
+@keyframes anchor-flash {
+  from {
+    box-shadow: 0 0 0 3px var(--ring);
+  }
+  to {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+.anchor-flash {
+  animation: anchor-flash 1.6s ease-out both;
+  border-radius: var(--radius);
+}
+
 /* Logo "summon" reveal: trace the two braces on (the incantation), then pop the spark in
    (the view materializing). pathLength=100 normalizes the brace strokes so one dash fits. */
 @keyframes syokan-summon {

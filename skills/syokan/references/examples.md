@@ -35,9 +35,15 @@ Stack Cards with a heading link, fetch time, and summary.
         "type": "Card",
         "props": {},
         "children": [
-          { "type": "Heading", "props": { "text": "Article title", "level": 3, "href": "https://example.com/article" } },
-          { "type": "Time", "props": { "datetime": "2026-06-28T06:30:00Z", "muted": true } },
-          { "type": "Text", "props": { "body": "Put the article summary here.", "clamp": true } }
+          {
+            "type": "Stack",
+            "props": {},
+            "children": [
+              { "type": "Heading", "props": { "text": "Article title", "level": 3, "href": "https://example.com/article" } },
+              { "type": "Time", "props": { "datetime": "2026-06-28T06:30:00Z", "muted": true } },
+              { "type": "Text", "props": { "body": "Put the article summary here.", "clamp": true } }
+            ]
+          }
         ]
       }
     ]
@@ -144,3 +150,85 @@ To embed a synced subtree inside a larger static view, place the node yourself (
   }
 }
 ```
+
+## Example 5: review risk panel (interactive primitives)
+
+Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"#<id>"`) → findings narrowed by `TagFilter` (cards carry `tags`) → evidence folded in `Collapsible` → "no findings" claims backed by re-runnable `Probe`s → reviewer `Checklist`. Interaction state stays in the viewer's browser; post only the initial state.
+
+```json
+{
+  "title": "Review risk panel — PR #27",
+  "idempotencyKey": "review-pr-27",
+  "root": {
+    "type": "Stack",
+    "props": {},
+    "children": [
+      {
+        "type": "Stack",
+        "props": { "direction": "horizontal" },
+        "children": [
+          { "type": "Stat", "props": { "label": "High", "value": 1 } },
+          { "type": "Stat", "props": { "label": "None (verified)", "value": 2 } }
+        ]
+      },
+      {
+        "type": "TagFilter",
+        "props": { "tags": ["High", "None"], "label": "Severity" },
+        "id": "severity-filter",
+        "children": [
+          {
+            "type": "Table",
+            "props": {
+              "columns": ["Finding", "Severity", "Jump"],
+              "rows": [
+                [
+                  "token could reach logs",
+                  { "type": "Badge", "props": { "text": "High", "variant": "destructive" } },
+                  { "type": "Link", "props": { "href": "#risk-1", "text": "→ details" } }
+                ]
+              ]
+            }
+          },
+          {
+            "type": "Card",
+            "props": { "title": "token could reach logs" },
+            "id": "risk-1",
+            "tags": ["High"],
+            "children": [
+              {
+                "type": "Stack",
+                "props": {},
+                "children": [
+                  {
+                    "type": "Collapsible",
+                    "props": { "summary": "Evidence (1 hunk)" },
+                    "id": "risk-1-evidence",
+                    "children": [
+                      { "type": "Diff", "props": { "patch": "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new" } }
+                    ]
+                  },
+                  {
+                    "type": "Probe",
+                    "props": {
+                      "label": "no auth header logged",
+                      "check": { "kind": "search_count", "path": "/abs/path/to/app", "pattern": "console.log(auth", "expected": 0, "op": "max" },
+                      "result": { "status": "pass", "detail": "0 matches", "ranAt": "2026-07-06T09:00:00Z" }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Checklist",
+        "props": { "items": [{ "label": "probe re-run after new commits" }] },
+        "id": "review-checklist"
+      }
+    ]
+  }
+}
+```
+
+Graph pairs (`role`: `added` / `removed` / `hotspot` / `neutral`; colors fixed by the renderer) go in a horizontal `Stack` for before/after dependency contrasts — see `syokan catalog` for props.

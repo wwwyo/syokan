@@ -10,6 +10,10 @@ syokan dashboard.json   # syokan your dashboard
 
 An LLM speaks a JSON incantation, and a rich, living interface materializes — no JSX written, no build step. Scattered data — today's RSS, an in-flight PR review, shared meeting notes, a live status board — appears as structured UI only when you need it. Views are ephemeral: summoned when needed, they fade; nothing is hoarded. And anything can chant: Claude Code, a scheduled agent, a CLI one-liner, a webhook.
 
+**▶ [Watch the 30-second demo](apps/demo-video/demo.mp4)** — Claude Code chants; a diff-and-graph PR review view is summoned. ([re-shootable source](apps/demo-video))
+
+> **Summon your own** — `mise use -g github:wwwyo/syokan@latest`, then chant. See [Getting started](#getting-started).
+
 日本語版: [README.ja.md](./README.ja.md)
 
 Design rationale, directory layout, and development conventions live in [AGENTS.md](./AGENTS.md). This README covers **usage**.
@@ -86,10 +90,12 @@ A snapshot **envelope** (**JSON** only; markdown is not rendered — structure p
 The SSOT for `type` is the catalog (`apps/syokan/src/catalogs`). Fetch the manifest to get the props contract:
 
 ```
-GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes }] }
+GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], mechanisms: { node, uiState, probe } }
 ```
 
-Current types — containers: `Stack` `Card` / leaves: `Heading` `Link` `Text` `Time` `PlainText` `Diff` `Code` `Badge` `Mermaid` `TreeDoc`. Review them visually with Storybook (`bun run storybook`).
+Current types — containers: `Stack` `Card` `Checklist` `Collapsible` `TagFilter` / leaves: `Heading` `Link` `Text` `Time` `PlainText` `Diff` `Code` `Badge` `Mermaid` `TreeDoc` `Table` `Stat` `Graph` `Probe`. Review them visually with Storybook (`bun run storybook`).
+
+Every node also accepts the cross-cutting fields `id` (in-view anchor via `Link href:"#<id>"`, and the identity that lets interactive nodes persist their viewer-local state) and `tags` (narrowing by an ancestor `TagFilter`). Interaction state (checks, folds, filter selections, probe re-runs) stays in the viewer's browser — snapshots remain immutable. `Probe` runs only the predefined read-only checks published under `mechanisms.probe.kinds` (`POST /api/probes/run`); on public shares, re-run is disabled and probe args/results are stripped at publish unless `shareVisible: true`.
 
 `TreeDoc` (props: `path`, **absolute paths only**, no URLs) is a catalog node that references a catalog-tree JSON file. The server reads the content, the client validates it and renders it as a live subtree, and the view stays in sync with file changes (forward sync). A mid-write invalid save never blanks the view: the last valid render is kept with an unobtrusive error until the file is valid again. A `TreeDoc` cannot appear inside a synced tree (nesting is rejected, which rules out cycles). The server binds to localhost only, and watching is transient state that lives only while a view is open (never persisted). Publishing a view freezes each `TreeDoc` into its subtree at that moment — public payloads never reference files.
 

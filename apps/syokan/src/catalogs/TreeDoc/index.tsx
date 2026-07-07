@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { t } from "../../lib/i18n";
+import { absoluteLocalPath } from "../../lib/path";
 import { parseTreeContent } from "../../lib/treeSource";
 import { Render } from "../../Render";
 import type { Item } from "../../schema";
@@ -8,12 +9,8 @@ import type { Item } from "../../schema";
 export const treeDocPropsSchema = z
   .object({
     // The CLI resolves this to an absolute local path before passing it. The server reads and
-    // watches this path as-is; relative paths and URLs are rejected at ingest. The pattern also
-    // lands in the JSON Schema manifest, so LLMs see the constraint (a regex stays representable
-    // where a .refine would be dropped).
-    path: z
-      .string()
-      .regex(/^(\/|[A-Za-z]:[\\/])/, "path must be an absolute local path"),
+    // watches this path as-is; relative paths and URLs are rejected at ingest.
+    path: absoluteLocalPath,
   })
   .strict();
 
