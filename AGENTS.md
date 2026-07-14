@@ -88,6 +88,8 @@ Benefits: fewer LLM tokens, generation speed, type safety, design consistency, e
 
 The catalog's type and props definitions have **`src/catalogs` as the single SSOT**. `manifest.ts` turns them into JSON Schema and exposes them at `GET /api/catalog`; the LLM (skill) pulls the props contract from this API rather than from a transcription in md. Copying into md drifts on every catalog change, so the SSOT is kept in exactly one place.
 
+**When you add / remove / rename a catalog type (or change the envelope, CLI, or a cross-cutting mechanism), update the in-repo skill `skills/syokan/` in the same change.** Props are pulled live from `GET /api/catalog`, so they never need transcribing — but the skill's `SKILL.md` still hand-carries the *type-name roster* (in its `description` for triggering) and the prose describing each mechanism / posting flow, and those do not auto-follow the catalog. `skills/syokan/` is the SSOT of the skill (the dotfiles `.agents/skills/` copy is downstream and out of scope here). This is exactly what drifted when markdown support was removed and the primitive types were added.
+
 **Templates** — for "making a favorite view reproducible" — follow the same philosophy, with syokan as the SSOT. A template is "a saved envelope as-is"; syokan does not interpret its contents, it only stores and lists them (`~/.local/share/syokan/templates/`, `GET/POST/DELETE /api/templates`). There is no placeholder render engine. Assembling from a template (placeholder substitution, expanding variable-length lists) is the LLM's (skill's) job; syokan stays a vault. Unlike snapshots (ephemeral), templates are meant to be kept.
 
 ### Interface-free
