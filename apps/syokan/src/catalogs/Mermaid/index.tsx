@@ -1,5 +1,12 @@
+import { Maximize2 } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { z } from "zod";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "../../components/ui/dialog";
+import { t } from "../../lib/i18n";
 import { useColorScheme } from "../../lib/useColorScheme";
 
 export const mermaidPropsSchema = z
@@ -26,6 +33,7 @@ export function Mermaid({ code }: MermaidProps) {
   const id = useId().replace(/[^a-zA-Z0-9-]/g, "");
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,12 +80,32 @@ export function Mermaid({ code }: MermaidProps) {
   }
 
   return (
-    <div
-      data-slot="mermaid"
-      data-state="ready"
-      className="my-4 flex justify-center overflow-x-auto [&_svg]:max-w-full [&_svg]:h-auto"
-      // embed the SVG mermaid generates as-is (labels are already sanitized by the default securityLevel 'strict')
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    <div data-slot="mermaid" data-state="ready" className="group relative my-4">
+      <button
+        type="button"
+        data-slot="mermaid-zoom"
+        aria-label={t.mermaid.expand}
+        onClick={() => setZoomed(true)}
+        className="absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+      >
+        <Maximize2 className="size-4" aria-hidden />
+      </button>
+      <div
+        className="flex justify-center overflow-x-auto [&_svg]:max-w-full [&_svg]:h-auto"
+        // embed the SVG mermaid generates as-is (labels are already sanitized by the default securityLevel 'strict')
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      <Dialog open={zoomed} onOpenChange={setZoomed}>
+        <DialogContent className="h-[90dvh] max-w-[calc(100%-2rem)] p-4 sm:max-w-[calc(100%-2rem)]">
+          <DialogTitle className="sr-only">{t.mermaid.expand}</DialogTitle>
+          <div
+            data-slot="mermaid-zoom-body"
+            // ! beats mermaid's inline max-width so the diagram can grow past its natural size
+            className="h-full w-full overflow-auto [&_svg]:h-auto [&_svg]:w-full [&_svg]:max-w-none!"
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

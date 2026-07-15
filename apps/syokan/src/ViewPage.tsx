@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { t } from "./lib/i18n";
 import type { SnapshotEnvelope } from "./schema";
+import { CodeSnippet } from "./components/CodeSnippet";
 import { PageLayout } from "./components/PageLayout";
 import { ViewHeader } from "./components/ViewHeader";
 import { ViewStateProvider } from "./lib/viewState";
@@ -22,6 +24,10 @@ export type ViewPageProps = {
 
 export function ViewPage({ envelope, onDelete }: ViewPageProps) {
   const fullBleed = isFullBleed(envelope);
+  // Source view for eyeballing the posted envelope against the rendered result.
+  // CodeSnippet (bare <pre>) instead of catalog Code: toggling remounts, which is
+  // exactly the StrictMode-collapse-prone pattern for pierre File in dev.
+  const [showSource, setShowSource] = useState(false);
   return (
     <PageLayout
       fullBleed={fullBleed}
@@ -31,12 +37,18 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
           onDelete={onDelete}
           snapshotId={envelope.id}
           fullBleed={fullBleed}
+          sourceShown={showSource}
+          onToggleSource={() => setShowSource((v) => !v)}
         />
       }
     >
-      <ViewStateProvider scopeKey={envelope.id}>
-        <Render item={envelope.root} />
-      </ViewStateProvider>
+      {showSource ? (
+        <CodeSnippet code={JSON.stringify(envelope, null, 2)} />
+      ) : (
+        <ViewStateProvider scopeKey={envelope.id}>
+          <Render item={envelope.root} />
+        </ViewStateProvider>
+      )}
     </PageLayout>
   );
 }
