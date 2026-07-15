@@ -192,6 +192,15 @@ describe("POST /api/v1/auth/token", () => {
 		expect(kv.ttl.get(key as string)).toBe(SHARE_TOKEN_TTL_SECONDS);
 	});
 
+	test("a throwing rate limiter fails open (damping must not take auth down)", async () => {
+		const { env, authRateLimit } = createEnv();
+		authRateLimit.limit = async () => {
+			throw new Error("binding unavailable");
+		};
+		const { login: ghLogin } = await login(env);
+		expect(ghLogin).toBe("octocat");
+	});
+
 	test("over the rate limit is 429 rate_limited, keyed by client IP", async () => {
 		const { env, authRateLimit } = createEnv();
 		authRateLimit.success = false;

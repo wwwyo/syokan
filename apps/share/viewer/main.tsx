@@ -14,7 +14,7 @@ function reportUrl(shareId: string): string {
   const params = new URLSearchParams({
     template: "report-share.yml",
     // Prefills the issue form's `share-url` field
-    "share-url": `${location.origin}/shares/${shareId}`,
+    "share-url": `${location.origin}/shares/${encodeURIComponent(shareId)}`,
   });
   return `${GITHUB_URL}/issues/new?${params}`;
 }

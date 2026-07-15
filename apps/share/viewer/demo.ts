@@ -1,8 +1,8 @@
 import type { Item } from "@syokan/app/schema";
 
 /**
- * The landing demo: one small envelope shown as the JSON incantation next to what it
- * summons. Kept to a handful of nodes so the JSON stays readable at a glance.
+ * The landing demo: one small catalog tree shown as the JSON incantation next to what
+ * it summons. Kept to a handful of nodes so the JSON stays readable at a glance.
  */
 export const DEMO_TREE: Item = {
   type: "Stack",

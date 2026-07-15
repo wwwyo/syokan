@@ -101,14 +101,22 @@ function shareUrl(reqUrl: string, id: string): string {
 	return `${new URL(reqUrl).origin}/shares/${id}`;
 }
 
+// Rate limiting is abuse damping, not a security boundary — a binding failure must not
+// take the endpoint down, so fail open instead of bubbling a 5xx.
+async function allowedBy(limiter: RateLimit, key: string): Promise<boolean> {
+	try {
+		return (await limiter.limit({ key })).success;
+	} catch {
+		return true;
+	}
+}
+
 // IP-keyed: damps token-minting spam and brute-forcing stolen GitHub tokens through us.
 // Cloudflare always sets cf-connecting-ip in production; without it (dev/tests) all
 // callers share the empty-key bucket, which is accepted.
 const authRateLimit = createMiddleware<Env>(async (c, next) => {
-	const { success } = await c.env.AUTH_RATE_LIMIT.limit({
-		key: c.req.header("cf-connecting-ip") ?? "",
-	});
-	if (!success) {
+	const key = c.req.header("cf-connecting-ip") ?? "";
+	if (!(await allowedBy(c.env.AUTH_RATE_LIMIT, key))) {
 		return c.json({ error: "rate_limited" } satisfies ShareErrorResponse, 429);
 	}
 	await next();
@@ -117,10 +125,8 @@ const authRateLimit = createMiddleware<Env>(async (c, next) => {
 // ownerId-keyed: caps write bursts even for valid users (quota caps the total).
 // Must run after requireAuth (reads the auth variable).
 const writeRateLimit = createMiddleware<Env>(async (c, next) => {
-	const { success } = await c.env.WRITE_RATE_LIMIT.limit({
-		key: String(c.get("auth").ownerId),
-	});
-	if (!success) {
+	const key = String(c.get("auth").ownerId);
+	if (!(await allowedBy(c.env.WRITE_RATE_LIMIT, key))) {
 		return c.json({ error: "rate_limited" } satisfies ShareErrorResponse, 429);
 	}
 	await next();
