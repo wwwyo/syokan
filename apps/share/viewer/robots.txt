@@ -1,2 +1,5 @@
+# Nothing is disallowed: share pages carry X-Robots-Tag: noindex, and crawlers only
+# see that header if they are allowed to fetch the page. A Disallow would hide the
+# header and let externally-linked share URLs be indexed URL-only.
 User-agent: *
-Disallow: /shares/
+Disallow:

@@ -101,10 +101,30 @@ function shareUrl(reqUrl: string, id: string): string {
 	return `${new URL(reqUrl).origin}/shares/${id}`;
 }
 
-async function rateLimited(limiter: RateLimit, key: string): Promise<boolean> {
-	const { success } = await limiter.limit({ key });
-	return !success;
-}
+// IP-keyed: damps token-minting spam and brute-forcing stolen GitHub tokens through us.
+// Cloudflare always sets cf-connecting-ip in production; without it (dev/tests) all
+// callers share the empty-key bucket, which is accepted.
+const authRateLimit = createMiddleware<Env>(async (c, next) => {
+	const { success } = await c.env.AUTH_RATE_LIMIT.limit({
+		key: c.req.header("cf-connecting-ip") ?? "",
+	});
+	if (!success) {
+		return c.json({ error: "rate_limited" } satisfies ShareErrorResponse, 429);
+	}
+	await next();
+});
+
+// ownerId-keyed: caps write bursts even for valid users (quota caps the total).
+// Must run after requireAuth (reads the auth variable).
+const writeRateLimit = createMiddleware<Env>(async (c, next) => {
+	const { success } = await c.env.WRITE_RATE_LIMIT.limit({
+		key: String(c.get("auth").ownerId),
+	});
+	if (!success) {
+		return c.json({ error: "rate_limited" } satisfies ShareErrorResponse, 429);
+	}
+	await next();
+});
 
 const requireAuth = createMiddleware<Env>(async (c, next) => {
 	const header = c.req.header("authorization");
@@ -128,6 +148,7 @@ const CSP = `default-src 'self'; script-src 'self' ${VIEWER_INLINE_SCRIPT_HASHES
 const app = new Hono<Env>()
 	.post(
 		"/api/v1/auth/token",
+		authRateLimit,
 		zValidator("json", authTokenSchema, (result, c) => {
 			if (!result.success) {
 				return c.json(
@@ -137,14 +158,6 @@ const app = new Hono<Env>()
 			}
 		}),
 		async (c) => {
-			// IP-keyed: damps token-minting spam and brute-forcing stolen GitHub tokens through us
-			const ip = c.req.header("cf-connecting-ip") ?? "";
-			if (await rateLimited(c.env.AUTH_RATE_LIMIT, ip)) {
-				return c.json(
-					{ error: "rate_limited" } satisfies ShareErrorResponse,
-					429,
-				);
-			}
 			const { githubAccessToken } = c.req.valid("json");
 			const base = c.env.GITHUB_API_BASE ?? "https://api.github.com";
 			const res = await fetch(`${base}/user`, {
@@ -187,6 +200,7 @@ const app = new Hono<Env>()
 	.post(
 		"/api/v1/shares",
 		requireAuth,
+		writeRateLimit,
 		zValidator("json", createShareSchema, (result, c) => {
 			if (!result.success) {
 				return c.json(
@@ -202,13 +216,6 @@ const app = new Hono<Env>()
 		}),
 		async (c) => {
 			const auth = c.get("auth");
-			// ownerId-keyed: caps write bursts even for valid users (quota caps the total)
-			if (await rateLimited(c.env.WRITE_RATE_LIMIT, String(auth.ownerId))) {
-				return c.json(
-					{ error: "rate_limited" } satisfies ShareErrorResponse,
-					429,
-				);
-			}
 			const { envelope, sourceSnapshotId, expiresIn } = c.req.valid("json");
 			// The local server freezes TreeDoc at publish time (the primary defense); this is the last
 			// line of defense so a file-referencing node can never land in a public payload.
@@ -321,11 +328,8 @@ const app = new Hono<Env>()
 		}
 		return c.json({ shares } satisfies ListSharesResponse);
 	})
-	.delete("/api/v1/shares/:id", requireAuth, async (c) => {
+	.delete("/api/v1/shares/:id", requireAuth, writeRateLimit, async (c) => {
 		const auth = c.get("auth");
-		if (await rateLimited(c.env.WRITE_RATE_LIMIT, String(auth.ownerId))) {
-			return c.json({ error: "rate_limited" } satisfies ShareErrorResponse, 429);
-		}
 		const id = c.req.param("id");
 		const record = await c.env.SHARES.get<ShareRecord>(`share:${id}`, "json");
 		// Don't leak the existence of someone else's share (owner mismatch also returns 404)
@@ -343,11 +347,12 @@ const app = new Hono<Env>()
 		// /shares/* is the SPA fallback (the viewer resolves :id client-side)
 		const isSharePage =
 			url.pathname === "/shares" || url.pathname.startsWith("/shares/");
-		// /terms is a static SPA route with no matching asset, so it also falls back.
+		// /terms is a static SPA route with no matching asset, so it also falls back
+		// (trailing slash tolerated, matching the share routes).
 		// Rewrite to "/" (not "/index.html"): the assets layer's auto-trailing-slash
 		// handling 307s /index.html back to /, which would swallow the fallback.
 		const assetRequest =
-			isSharePage || url.pathname === "/terms"
+			isSharePage || url.pathname === "/terms" || url.pathname === "/terms/"
 				? new Request(new URL("/", url.origin), c.req.raw)
 				: c.req.raw;
 		// workers-types' Request/Response differ slightly in shape from lib.dom, so cast at the boundary

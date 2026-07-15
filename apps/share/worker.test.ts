@@ -548,4 +548,10 @@ describe("asset fallback", () => {
 		expect(assetUrls).toEqual(["http://localhost/"]);
 		expect(res.headers.get("x-robots-tag")).toBeNull();
 	});
+
+	test("/terms/ (trailing slash) also falls back", async () => {
+		const { env, assetUrls } = createEnv();
+		await app.request("/terms/", {}, env);
+		expect(assetUrls).toEqual(["http://localhost/"]);
+	});
 });

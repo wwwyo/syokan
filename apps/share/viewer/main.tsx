@@ -406,13 +406,22 @@ function NotFoundPage() {
   );
 }
 
+// Malformed percent-encoding (e.g. /shares/%) throws — treat it as a bad URL, not a crash
+function safeDecode(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
 function App() {
   const path = location.pathname;
   if (path === "/") return <Landing />;
-  if (path === "/terms") return <TermsPage />;
+  if (path === "/terms" || path === "/terms/") return <TermsPage />;
   const match = path.match(/^\/shares\/([^/]+)\/?$/);
-  const id = match?.[1];
-  if (id) return <ShareView id={decodeURIComponent(id)} />;
+  const id = match?.[1] !== undefined ? safeDecode(match[1]) : null;
+  if (id !== null && id !== "") return <ShareView id={id} />;
   return <NotFoundPage />;
 }
 
