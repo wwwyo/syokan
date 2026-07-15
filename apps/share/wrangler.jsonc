@@ -16,18 +16,20 @@
 		}
 	],
 	// Per-colo counters — coarse but sufficient as abuse damping (quota caps the total).
+	// namespace_id is account-wide: any binding with the same ID shares counters across
+	// Workers, so use syokan-specific values, not the documentation samples (1001/1002).
 	"ratelimits": [
 		{
 			// POST /api/v1/auth/token, keyed by client IP: damps token-minting spam and
 			// brute-forcing stolen GitHub tokens through us
 			"name": "AUTH_RATE_LIMIT",
-			"namespace_id": "1001",
+			"namespace_id": "73520461",
 			"simple": { "limit": 5, "period": 60 }
 		},
 		{
 			// Authenticated writes (POST/DELETE shares), keyed by ownerId: caps burst even for valid users
 			"name": "WRITE_RATE_LIMIT",
-			"namespace_id": "1002",
+			"namespace_id": "73520462",
 			"simple": { "limit": 10, "period": 60 }
 		}
 	],
