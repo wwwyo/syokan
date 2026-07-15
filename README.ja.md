@@ -103,6 +103,22 @@ GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes
 
 気に入った layout は **テンプレート**（保存した envelope + `title`）として `~/.local/share/syokan/templates/` に残せる。snapshot と違い永続する。syokan は保管・一覧するだけで中身は解釈しない（`GET/POST/DELETE /api/templates`）。
 
+## Share（公開共有）
+
+snapshot は [syokan.dev](https://syokan.dev) の公開 URL に publish できる。閲覧はリンクを知っていれば誰でも可能で、アカウント不要:
+
+```bash
+syokan login                       # GitHub でサインイン（device flow、ワンタイムコード方式）
+syokan publish <id>                # → https://syokan.dev/shares/<uuid>
+syokan publish <id> --expires 30d  # 最大 30 日
+syokan shares                      # 自分の公開一覧
+syokan unpublish <shareId>
+```
+
+share も他と同じく ephemeral: **既定 7 日、最大 30 日**で消える。無期限保存はない。1 ユーザーが同時に持てる share は 100 まで。publish はその時点の view を凍結する（`TreeDoc` はサブツリーに焼き込まれ、ローカルの編集が公開 URL に漏れることはない）。再 publish は新しい URL になる。view の Share ボタンも同じ動作。
+
+publish は[利用規約](https://syokan.dev/terms)への同意を意味する。問題のある share は各 share ページの "Report abuse" リンクから報告できる。
+
 ## 設定
 
 テーマ・フォントの表示設定は singleton リソースとして `~/.config/syokan/settings.json` に永続する（snapshot と違い残す）。ブラウザの localStorage が即時反映用キャッシュ、サーバーが正本で、起動時に同期するので複数ブラウザ間で設定を共有できる。

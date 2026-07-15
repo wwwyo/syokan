@@ -1,4 +1,4 @@
-import type { Fetcher, KVNamespace } from "@cloudflare/workers-types";
+import type { Fetcher, KVNamespace, RateLimit } from "@cloudflare/workers-types";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
@@ -22,6 +22,8 @@ type Bindings = {
 	SHARES: KVNamespace;
 	GITHUB_API_BASE?: string;
 	ASSETS: Fetcher;
+	AUTH_RATE_LIMIT: RateLimit;
+	WRITE_RATE_LIMIT: RateLimit;
 };
 
 /** Value for KV `token:<sha256hex>`. The GitHub token itself is not stored */
@@ -99,6 +101,37 @@ function shareUrl(reqUrl: string, id: string): string {
 	return `${new URL(reqUrl).origin}/shares/${id}`;
 }
 
+// Rate limiting is abuse damping, not a security boundary — a binding failure must not
+// take the endpoint down, so fail open instead of bubbling a 5xx.
+async function allowedBy(limiter: RateLimit, key: string): Promise<boolean> {
+	try {
+		return (await limiter.limit({ key })).success;
+	} catch {
+		return true;
+	}
+}
+
+// IP-keyed: damps token-minting spam and brute-forcing stolen GitHub tokens through us.
+// Cloudflare always sets cf-connecting-ip in production; without it (dev/tests) all
+// callers share the empty-key bucket, which is accepted.
+const authRateLimit = createMiddleware<Env>(async (c, next) => {
+	const key = c.req.header("cf-connecting-ip") ?? "";
+	if (!(await allowedBy(c.env.AUTH_RATE_LIMIT, key))) {
+		return c.json({ error: "rate_limited" } satisfies ShareErrorResponse, 429);
+	}
+	await next();
+});
+
+// ownerId-keyed: caps write bursts even for valid users (quota caps the total).
+// Must run after requireAuth (reads the auth variable).
+const writeRateLimit = createMiddleware<Env>(async (c, next) => {
+	const key = String(c.get("auth").ownerId);
+	if (!(await allowedBy(c.env.WRITE_RATE_LIMIT, key))) {
+		return c.json({ error: "rate_limited" } satisfies ShareErrorResponse, 429);
+	}
+	await next();
+});
+
 const requireAuth = createMiddleware<Env>(async (c, next) => {
 	const header = c.req.header("authorization");
 	const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
@@ -121,6 +154,7 @@ const CSP = `default-src 'self'; script-src 'self' ${VIEWER_INLINE_SCRIPT_HASHES
 const app = new Hono<Env>()
 	.post(
 		"/api/v1/auth/token",
+		authRateLimit,
 		zValidator("json", authTokenSchema, (result, c) => {
 			if (!result.success) {
 				return c.json(
@@ -172,6 +206,7 @@ const app = new Hono<Env>()
 	.post(
 		"/api/v1/shares",
 		requireAuth,
+		writeRateLimit,
 		zValidator("json", createShareSchema, (result, c) => {
 			if (!result.success) {
 				return c.json(
@@ -299,7 +334,7 @@ const app = new Hono<Env>()
 		}
 		return c.json({ shares } satisfies ListSharesResponse);
 	})
-	.delete("/api/v1/shares/:id", requireAuth, async (c) => {
+	.delete("/api/v1/shares/:id", requireAuth, writeRateLimit, async (c) => {
 		const auth = c.get("auth");
 		const id = c.req.param("id");
 		const record = await c.env.SHARES.get<ShareRecord>(`share:${id}`, "json");
@@ -318,9 +353,14 @@ const app = new Hono<Env>()
 		// /shares/* is the SPA fallback (the viewer resolves :id client-side)
 		const isSharePage =
 			url.pathname === "/shares" || url.pathname.startsWith("/shares/");
-		const assetRequest = isSharePage
-			? new Request(new URL("/index.html", url.origin), c.req.raw)
-			: c.req.raw;
+		// /terms is a static SPA route with no matching asset, so it also falls back
+		// (trailing slash tolerated, matching the share routes).
+		// Rewrite to "/" (not "/index.html"): the assets layer's auto-trailing-slash
+		// handling 307s /index.html back to /, which would swallow the fallback.
+		const assetRequest =
+			isSharePage || url.pathname === "/terms" || url.pathname === "/terms/"
+				? new Request(new URL("/", url.origin), c.req.raw)
+				: c.req.raw;
 		// workers-types' Request/Response differ slightly in shape from lib.dom, so cast at the boundary
 		const res = (await c.env.ASSETS.fetch(
 			assetRequest as unknown as Parameters<Fetcher["fetch"]>[0],
@@ -328,7 +368,9 @@ const app = new Hono<Env>()
 		const contentType = res.headers.get("content-type") ?? "";
 		if (!contentType.includes("text/html")) return res;
 		const headers = new Headers(res.headers);
-		headers.set("X-Robots-Tag", "noindex");
+		// Only share pages are noindex; the landing and /terms are the distribution surface
+		// and should be indexable
+		if (isSharePage) headers.set("X-Robots-Tag", "noindex");
 		headers.set("Content-Security-Policy", CSP);
 		return new Response(res.body, {
 			status: res.status,

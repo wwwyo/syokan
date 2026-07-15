@@ -5,9 +5,19 @@ import { Render } from "@syokan/app/render";
 import type { Item } from "@syokan/app/schema";
 import { ViewStateProvider } from "@syokan/app/viewState";
 import type { PublicShareResponse } from "../types";
+import { DEMO_JSON, DEMO_TREE } from "./demo";
 
 const GITHUB_URL = "https://github.com/wwwyo/syokan";
 const INSTALL_COMMAND = "mise use -g github:wwwyo/syokan@latest";
+
+function reportUrl(shareId: string): string {
+  const params = new URLSearchParams({
+    template: "report-share.yml",
+    // Prefills the issue form's `share-url` field
+    "share-url": `${location.origin}/shares/${encodeURIComponent(shareId)}`,
+  });
+  return `${GITHUB_URL}/issues/new?${params}`;
+}
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -55,6 +65,25 @@ function SummonedBadge() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="flex min-h-dvh flex-col">{children}</div>;
+}
+
+/** Share-page footer: the badge plus the trust links (report abuse / terms). */
+function ShareFooter({ shareId }: { shareId?: string }) {
+  return (
+    <footer className="flex flex-col items-center gap-3 py-6">
+      <SummonedBadge />
+      <div className="flex gap-4 text-xs text-muted-foreground">
+        {shareId && (
+          <a href={reportUrl(shareId)} className="hover:text-foreground">
+            Report abuse
+          </a>
+        )}
+        <a href="/terms" className="hover:text-foreground">
+          Terms
+        </a>
+      </div>
+    </footer>
+  );
 }
 
 function CenteredNotice({
@@ -141,9 +170,7 @@ function ShareView({ id }: { id: string }) {
             What is syokan?
           </a>
         </CenteredNotice>
-        <footer className="flex justify-center py-6">
-          <SummonedBadge />
-        </footer>
+        <ShareFooter />
       </Shell>
     );
   }
@@ -174,9 +201,7 @@ function ShareView({ id }: { id: string }) {
           <Render item={envelope.root} />
         </ViewStateProvider>
       </main>
-      <footer className="flex justify-center py-6">
-        <SummonedBadge />
-      </footer>
+      <ShareFooter shareId={id} />
     </Shell>
   );
 }
@@ -184,19 +209,44 @@ function ShareView({ id }: { id: string }) {
 function Landing() {
   return (
     <Shell>
-      <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center px-6 py-16">
+      <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-16">
         <h1 className="text-4xl font-bold tracking-tight">syokan</h1>
         <p className="mt-3 text-lg text-muted-foreground">
           LLMs summon rich UI.
         </p>
-        <p className="mt-6 leading-relaxed">
+        <p className="mt-6 max-w-xl leading-relaxed">
           An LLM speaks a JSON incantation, and a rich, living interface appears
           — no JSX written, no build step. Views are ephemeral: summoned when
           needed, they fade; nothing is hoarded.
         </p>
+
+        <div className="mt-10 grid gap-4 md:grid-cols-2">
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              The incantation
+            </p>
+            <CodeSnippet
+              code={DEMO_JSON}
+              className="mt-2 max-h-96 overflow-y-auto"
+              labels={{ copy: "Copy", copied: "Copied" }}
+            />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              What it summons
+            </p>
+            {/* overflow guard: catalog nodes assume view width; the demo column is narrower */}
+            <div className="mt-2 overflow-x-auto rounded-xl border border-border bg-card p-4 shadow-sm">
+              <ViewStateProvider scopeKey="landing-demo" shared>
+                <Render item={DEMO_TREE} />
+              </ViewStateProvider>
+            </div>
+          </div>
+        </div>
+
         <CodeSnippet
           code={INSTALL_COMMAND}
-          className="mt-8"
+          className="mt-10"
           // The public surface is English-first. Don't ride the app i18n's locale auto-switch
           labels={{ copy: "Copy", copied: "Copied" }}
         />
@@ -215,10 +265,126 @@ function Landing() {
           >
             Releases
           </a>
-          .
+          . Publish any view with <code className="font-mono text-xs">syokan publish</code> and
+          it lives at a URL here — for 30 days at most, then it fades.
         </p>
       </main>
+      <footer className="mx-auto flex w-full max-w-3xl items-center gap-4 px-6 py-6 text-xs text-muted-foreground">
+        <a href={GITHUB_URL} className="hover:text-foreground">
+          GitHub
+        </a>
+        <a href="/terms" className="hover:text-foreground">
+          Terms
+        </a>
+      </footer>
+    </Shell>
+  );
+}
+
+function TermsSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-8">
+      <h2 className="text-base font-semibold">{title}</h2>
+      <div className="mt-2 space-y-2 text-sm leading-relaxed text-muted-foreground">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function TermsPage() {
+  return (
+    <Shell>
+      <main className="mx-auto w-full max-w-xl flex-1 px-6 py-16">
+        <h1 className="text-2xl font-bold tracking-tight">Terms of Service</h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          By publishing to or viewing shares on syokan.dev, you agree to these
+          terms.
+        </p>
+
+        <TermsSection title="What this is">
+          <p>
+            syokan.dev hosts <strong>shares</strong> — snapshots published from
+            the syokan app. A share is readable by anyone who has its URL, with
+            no authentication. Publishing requires signing in with GitHub.
+          </p>
+        </TermsSection>
+
+        <TermsSection title="Shares are ephemeral">
+          <p>
+            Every share expires — 7 days by default, 30 days at most — and is
+            then deleted automatically. There is no permanent hosting and no
+            backup; do not use shares as storage.
+          </p>
+        </TermsSection>
+
+        <TermsSection title="Acceptable use">
+          <p>Do not publish:</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>content that is illegal or infringes someone's rights</li>
+            <li>phishing, impersonation, malware, or links to them</li>
+            <li>other people's personal data without their consent</li>
+            <li>spam or content published primarily to abuse the service</li>
+          </ul>
+        </TermsSection>
+
+        <TermsSection title="Content and removal">
+          <p>
+            You are responsible for what you publish. We may remove any share
+            and suspend any account at our discretion, without notice — this
+            service's reputation is what keeps it usable for everyone. To flag
+            a share, use the "Report abuse" link in its footer.
+          </p>
+        </TermsSection>
+
+        <TermsSection title="Data and privacy">
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              Publishing stores your GitHub login and user id as the share's
+              owner. Your GitHub access token is verified once and never
+              stored.
+            </li>
+            <li>API tokens are stored as hashes only.</li>
+            <li>
+              Share content is public to anyone with the URL until it expires.
+            </li>
+            <li>
+              Request metadata (such as IP addresses) is used for rate limiting
+              and abuse prevention.
+            </li>
+          </ul>
+        </TermsSection>
+
+        <TermsSection title="No warranty">
+          <p>
+            This is a free service provided as-is, with no guarantee of
+            availability. It may change or shut down at any time.
+          </p>
+        </TermsSection>
+
+        <TermsSection title="Contact">
+          <p>
+            Questions or removal requests:{" "}
+            <a
+              href={`${GITHUB_URL}/issues`}
+              className="underline underline-offset-4 hover:text-foreground"
+            >
+              GitHub issues
+            </a>
+            .
+          </p>
+        </TermsSection>
+      </main>
       <footer className="mx-auto flex w-full max-w-xl items-center gap-4 px-6 py-6 text-xs text-muted-foreground">
+        <a href="/" className="hover:text-foreground">
+          Home
+        </a>
         <a href={GITHUB_URL} className="hover:text-foreground">
           GitHub
         </a>
@@ -235,19 +401,27 @@ function NotFoundPage() {
           What is syokan?
         </a>
       </CenteredNotice>
-      <footer className="flex justify-center py-6">
-        <SummonedBadge />
-      </footer>
+      <ShareFooter />
     </Shell>
   );
+}
+
+// Malformed percent-encoding (e.g. /shares/%) throws — treat it as a bad URL, not a crash
+function safeDecode(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 function App() {
   const path = location.pathname;
   if (path === "/") return <Landing />;
+  if (path === "/terms" || path === "/terms/") return <TermsPage />;
   const match = path.match(/^\/shares\/([^/]+)\/?$/);
-  const id = match?.[1];
-  if (id) return <ShareView id={decodeURIComponent(id)} />;
+  const id = match?.[1] !== undefined ? safeDecode(match[1]) : null;
+  if (id !== null && id !== "") return <ShareView id={id} />;
   return <NotFoundPage />;
 }
 

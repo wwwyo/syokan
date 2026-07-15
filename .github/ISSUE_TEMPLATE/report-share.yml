@@ -1,0 +1,19 @@
+name: Report a share
+description: Report an abusive share on syokan.dev
+title: "[report] "
+labels: ["abuse-report"]
+body:
+  - type: input
+    id: share-url
+    attributes:
+      label: Share URL
+      placeholder: https://syokan.dev/shares/...
+    validations:
+      required: true
+  - type: textarea
+    id: reason
+    attributes:
+      label: What's wrong with it?
+      description: e.g. phishing, malware, someone's personal data, illegal content
+    validations:
+      required: true

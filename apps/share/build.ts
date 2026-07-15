@@ -85,7 +85,8 @@ await Bun.write(fileURLToPath(new URL("./csp.generated.ts", import.meta.url)), g
 //   og-image.jpg        — link unfurl card (/og-image.jpg)
 //   apple-touch-icon.png — iOS home screen (opaque, iOS rounds the corners)
 //   favicon.ico          — legacy / bare /favicon.ico request fallback
-for (const name of ["og-image.jpg", "apple-touch-icon.png", "favicon.ico"]) {
+//   robots.txt           — allow-all; share pages rely on X-Robots-Tag (see the file)
+for (const name of ["og-image.jpg", "apple-touch-icon.png", "favicon.ico", "robots.txt"]) {
   await Bun.write(
     `${outdir}/${name}`,
     Bun.file(fileURLToPath(new URL(`./viewer/${name}`, import.meta.url))),
