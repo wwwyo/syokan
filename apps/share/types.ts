@@ -48,6 +48,7 @@ export type ShareErrorCode =
 	| "treedoc_not_allowed"
 	| "payload_too_large"
 	| "quota_exceeded"
+	| "rate_limited"
 	| "not_found"
 	| "materialize_failed"
 	| "share_api_unreachable"

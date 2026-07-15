@@ -103,6 +103,22 @@ Every node also accepts the cross-cutting fields `id` (in-view anchor via `Link 
 
 A layout you like can be kept as a **template** (a saved envelope + `title`) under `~/.local/share/syokan/templates/`. Unlike snapshots, templates persist. syokan only stores and lists them and never interprets their contents (`GET/POST/DELETE /api/templates`).
 
+## Share (public)
+
+Any snapshot can be published to a public URL on [syokan.dev](https://syokan.dev) — viewable by anyone with the link, no account needed to read:
+
+```bash
+syokan login                       # sign in with GitHub (device flow, opens a one-time code)
+syokan publish <id>                # → https://syokan.dev/shares/<uuid>
+syokan publish <id> --expires 30d  # up to 30 days
+syokan shares                      # your published shares
+syokan unpublish <shareId>
+```
+
+Shares are as ephemeral as everything else: they expire after **7 days by default, 30 days at most**, then vanish — there is no permanent hosting. Each user can hold up to 100 live shares. Publishing freezes the view at that moment (`TreeDoc` subtrees are baked in; local edits never leak to the public URL); republishing mints a new URL. The UI's Share button on a view does the same thing.
+
+By publishing you agree to the [terms](https://syokan.dev/terms). Abusive shares can be reported via the "Report abuse" link on any share page.
+
 ## Settings
 
 Display settings (theme / font) persist as a singleton resource at `~/.config/syokan/settings.json` (unlike snapshots, they are kept). The browser's localStorage is a cache for instant application; the server is the source of truth, synced on startup, so settings are shared across browsers.

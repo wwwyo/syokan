@@ -1,4 +1,4 @@
-import type { Fetcher, KVNamespace } from "@cloudflare/workers-types";
+import type { Fetcher, KVNamespace, RateLimit } from "@cloudflare/workers-types";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
@@ -22,6 +22,8 @@ type Bindings = {
 	SHARES: KVNamespace;
 	GITHUB_API_BASE?: string;
 	ASSETS: Fetcher;
+	AUTH_RATE_LIMIT: RateLimit;
+	WRITE_RATE_LIMIT: RateLimit;
 };
 
 /** Value for KV `token:<sha256hex>`. The GitHub token itself is not stored */
@@ -99,6 +101,11 @@ function shareUrl(reqUrl: string, id: string): string {
 	return `${new URL(reqUrl).origin}/shares/${id}`;
 }
 
+async function rateLimited(limiter: RateLimit, key: string): Promise<boolean> {
+	const { success } = await limiter.limit({ key });
+	return !success;
+}
+
 const requireAuth = createMiddleware<Env>(async (c, next) => {
 	const header = c.req.header("authorization");
 	const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined;
@@ -130,6 +137,14 @@ const app = new Hono<Env>()
 			}
 		}),
 		async (c) => {
+			// IP-keyed: damps token-minting spam and brute-forcing stolen GitHub tokens through us
+			const ip = c.req.header("cf-connecting-ip") ?? "";
+			if (await rateLimited(c.env.AUTH_RATE_LIMIT, ip)) {
+				return c.json(
+					{ error: "rate_limited" } satisfies ShareErrorResponse,
+					429,
+				);
+			}
 			const { githubAccessToken } = c.req.valid("json");
 			const base = c.env.GITHUB_API_BASE ?? "https://api.github.com";
 			const res = await fetch(`${base}/user`, {
@@ -187,6 +202,13 @@ const app = new Hono<Env>()
 		}),
 		async (c) => {
 			const auth = c.get("auth");
+			// ownerId-keyed: caps write bursts even for valid users (quota caps the total)
+			if (await rateLimited(c.env.WRITE_RATE_LIMIT, String(auth.ownerId))) {
+				return c.json(
+					{ error: "rate_limited" } satisfies ShareErrorResponse,
+					429,
+				);
+			}
 			const { envelope, sourceSnapshotId, expiresIn } = c.req.valid("json");
 			// The local server freezes TreeDoc at publish time (the primary defense); this is the last
 			// line of defense so a file-referencing node can never land in a public payload.
@@ -301,6 +323,9 @@ const app = new Hono<Env>()
 	})
 	.delete("/api/v1/shares/:id", requireAuth, async (c) => {
 		const auth = c.get("auth");
+		if (await rateLimited(c.env.WRITE_RATE_LIMIT, String(auth.ownerId))) {
+			return c.json({ error: "rate_limited" } satisfies ShareErrorResponse, 429);
+		}
 		const id = c.req.param("id");
 		const record = await c.env.SHARES.get<ShareRecord>(`share:${id}`, "json");
 		// Don't leak the existence of someone else's share (owner mismatch also returns 404)
@@ -318,9 +343,13 @@ const app = new Hono<Env>()
 		// /shares/* is the SPA fallback (the viewer resolves :id client-side)
 		const isSharePage =
 			url.pathname === "/shares" || url.pathname.startsWith("/shares/");
-		const assetRequest = isSharePage
-			? new Request(new URL("/index.html", url.origin), c.req.raw)
-			: c.req.raw;
+		// /terms is a static SPA route with no matching asset, so it also falls back.
+		// Rewrite to "/" (not "/index.html"): the assets layer's auto-trailing-slash
+		// handling 307s /index.html back to /, which would swallow the fallback.
+		const assetRequest =
+			isSharePage || url.pathname === "/terms"
+				? new Request(new URL("/", url.origin), c.req.raw)
+				: c.req.raw;
 		// workers-types' Request/Response differ slightly in shape from lib.dom, so cast at the boundary
 		const res = (await c.env.ASSETS.fetch(
 			assetRequest as unknown as Parameters<Fetcher["fetch"]>[0],
@@ -328,7 +357,9 @@ const app = new Hono<Env>()
 		const contentType = res.headers.get("content-type") ?? "";
 		if (!contentType.includes("text/html")) return res;
 		const headers = new Headers(res.headers);
-		headers.set("X-Robots-Tag", "noindex");
+		// Only share pages are noindex; the landing and /terms are the distribution surface
+		// and should be indexable
+		if (isSharePage) headers.set("X-Robots-Tag", "noindex");
 		headers.set("Content-Security-Policy", CSP);
 		return new Response(res.body, {
 			status: res.status,

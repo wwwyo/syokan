@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import type { Fetcher, KVNamespace } from "@cloudflare/workers-types";
+import type { Fetcher, KVNamespace, RateLimit } from "@cloudflare/workers-types";
 import {
 	SHARE_DEFAULT_TTL_SECONDS,
 	SHARE_MAX_BYTES,
@@ -60,6 +60,16 @@ class MemoryKV {
 	}
 }
 
+class StubRateLimit {
+	keys: string[] = [];
+	success = true;
+
+	async limit({ key }: { key: string }) {
+		this.keys.push(key);
+		return { success: this.success };
+	}
+}
+
 function createEnv() {
 	const kv = new MemoryKV();
 	const assetUrls: string[] = [];
@@ -71,12 +81,16 @@ function createEnv() {
 			});
 		},
 	};
+	const authRateLimit = new StubRateLimit();
+	const writeRateLimit = new StubRateLimit();
 	const env = {
 		SHARES: kv as unknown as KVNamespace,
 		GITHUB_API_BASE: `http://127.0.0.1:${github.port}`,
 		ASSETS: assets as unknown as Fetcher,
+		AUTH_RATE_LIMIT: authRateLimit as unknown as RateLimit,
+		WRITE_RATE_LIMIT: writeRateLimit as unknown as RateLimit,
 	};
-	return { env, kv, assetUrls };
+	return { env, kv, assetUrls, authRateLimit, writeRateLimit };
 }
 
 // ---- helpers ----
@@ -176,6 +190,23 @@ describe("POST /api/v1/auth/token", () => {
 		await login(env);
 		const key = [...kv.store.keys()].find((k) => k.startsWith("token:"));
 		expect(kv.ttl.get(key as string)).toBe(SHARE_TOKEN_TTL_SECONDS);
+	});
+
+	test("over the rate limit is 429 rate_limited, keyed by client IP", async () => {
+		const { env, authRateLimit } = createEnv();
+		authRateLimit.success = false;
+		const init = jsonInit({ githubAccessToken: "gh-token-octocat" });
+		const res = await app.request(
+			"/api/v1/auth/token",
+			{
+				...init,
+				headers: { ...(init.headers as Record<string, string>), "cf-connecting-ip": "203.0.113.9" },
+			},
+			env,
+		);
+		expect(res.status).toBe(429);
+		expect(((await res.json()) as { error: string }).error).toBe("rate_limited");
+		expect(authRateLimit.keys).toEqual(["203.0.113.9"]);
 	});
 
 	test("DELETE /api/v1/auth/token revokes your own token", async () => {
@@ -333,6 +364,18 @@ describe("POST /api/v1/shares", () => {
 		);
 	});
 
+	test("over the write rate limit is 429 rate_limited, keyed by ownerId", async () => {
+		const { env, kv, writeRateLimit } = createEnv();
+		const { token } = await login(env);
+		writeRateLimit.success = false;
+		const res = await publish(env, token);
+		expect(res.status).toBe(429);
+		expect(((await res.json()) as { error: string }).error).toBe("rate_limited");
+		// octocat's ownerId is 1; nothing is stored when limited
+		expect(writeRateLimit.keys).toEqual(["1"]);
+		expect([...kv.store.keys()].some((k) => k.startsWith("share:"))).toBe(false);
+	});
+
 	test("429 when the owner's share count has reached the quota", async () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
@@ -438,6 +481,24 @@ describe("DELETE /api/v1/shares/:id", () => {
 		expect(getRes.status).toBe(404);
 	});
 
+	test("over the write rate limit is 429 and the share survives", async () => {
+		const { env, kv, writeRateLimit } = createEnv();
+		const { token } = await login(env);
+		const { id } = (await (await publish(env, token)).json()) as {
+			id: string;
+		};
+		writeRateLimit.success = false;
+
+		const res = await app.request(
+			`/api/v1/shares/${id}`,
+			{ method: "DELETE", headers: { authorization: `Bearer ${token}` } },
+			env,
+		);
+		expect(res.status).toBe(429);
+		expect(((await res.json()) as { error: string }).error).toBe("rate_limited");
+		expect(kv.store.has(`share:${id}`)).toBe(true);
+	});
+
 	test("someone else's share is 404 and isn't deleted", async () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
@@ -460,12 +521,13 @@ describe("DELETE /api/v1/shares/:id", () => {
 });
 
 describe("asset fallback", () => {
-	test("/shares/* is rewritten to /index.html with noindex and CSP", async () => {
+	test("/shares/* is rewritten to / (index.html) with noindex and CSP", async () => {
 		const { env, assetUrls } = createEnv();
 		const res = await app.request("/shares/some-id", {}, env);
 		expect(res.status).toBe(200);
+		// Rewritten to "/" not "/index.html": the assets layer 307s /index.html → /.
 		// app.request's default origin is http://localhost
-		expect(assetUrls).toEqual(["http://localhost/index.html"]);
+		expect(assetUrls).toEqual(["http://localhost/"]);
 		expect(res.headers.get("x-robots-tag")).toBe("noindex");
 		const csp = res.headers.get("content-security-policy") ?? "";
 		expect(csp).toContain("script-src 'self'");
@@ -473,9 +535,17 @@ describe("asset fallback", () => {
 		expect(csp).toMatch(/script-src 'self' 'sha256-[A-Za-z0-9+/]+=*'/);
 	});
 
-	test("/ is not rewritten", async () => {
+	test("/ is not rewritten and is indexable", async () => {
 		const { env, assetUrls } = createEnv();
-		await app.request("/", {}, env);
+		const res = await app.request("/", {}, env);
 		expect(assetUrls).toEqual(["http://localhost/"]);
+		expect(res.headers.get("x-robots-tag")).toBeNull();
+	});
+
+	test("/terms is rewritten to / (index.html) and is indexable", async () => {
+		const { env, assetUrls } = createEnv();
+		const res = await app.request("/terms", {}, env);
+		expect(assetUrls).toEqual(["http://localhost/"]);
+		expect(res.headers.get("x-robots-tag")).toBeNull();
 	});
 });
