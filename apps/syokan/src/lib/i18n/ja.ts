@@ -69,6 +69,7 @@ export const ja: Messages = {
     moreActions: "その他の操作",
     deleteFailed: "削除に失敗しました",
     renderError: "このコンテンツは表示できませんでした。",
+    showJson: "JSON ソースを表示",
   },
   themeSelect: {
     label: "テーマ",
@@ -97,6 +98,9 @@ export const ja: Messages = {
       nested_treedoc: "sync 対象の tree の中に TreeDoc は置けません。",
     },
     staleNotice: "最後に正常だった内容を表示しています。",
+  },
+  mermaid: {
+    expand: "図を拡大",
   },
   diff: {
     unparsable: "diff を表示できませんでした (patch を解釈できません)。",

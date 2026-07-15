@@ -46,7 +46,15 @@ describe("ViewPage", () => {
 
   test("omits source label when absent", () => {
     const html = render(envelope);
-    expect(html).not.toContain("view-source");
+    expect(html).not.toContain('data-slot="view-source"');
+  });
+
+  test("shows the source-JSON toggle (rendered view by default)", () => {
+    const html = render(envelope);
+    expect(html).toContain('data-slot="view-source-toggle"');
+    expect(html).toContain('aria-pressed="false"');
+    // the rendered tree, not the JSON dump
+    expect(html).not.toContain('data-slot="code-snippet"');
   });
 
   test("shows the actions-menu trigger when onDelete is provided", () => {

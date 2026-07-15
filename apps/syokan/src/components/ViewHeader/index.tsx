@@ -1,6 +1,7 @@
-import { Ellipsis, Trash2 } from "lucide-react";
+import { Braces, Ellipsis, Trash2 } from "lucide-react";
 import { SidebarToggle } from "../AppSidebar/SidebarToggle";
 import { ShareControls } from "../ShareControls";
+import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +18,8 @@ export type ViewHeaderProps = {
   snapshotId?: string;
   /** When the body is fullBleed, drop the width constraint inside the bar too so they align */
   fullBleed?: boolean;
+  /** When provided, shows the source-JSON toggle */
+  sourceToggle?: { shown: boolean; onToggle: () => void };
 };
 
 // The viewer header that surfaces a snapshot's meta info (source / publish / delete action).
@@ -28,6 +31,7 @@ export function ViewHeader({
   onDelete,
   snapshotId,
   fullBleed = false,
+  sourceToggle,
 }: ViewHeaderProps) {
   return (
     <header
@@ -52,6 +56,23 @@ export function ViewHeader({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
+          {sourceToggle ? (
+            <Button
+              data-slot="view-source-toggle"
+              size="sm"
+              variant="ghost"
+              aria-pressed={sourceToggle.shown}
+              aria-label={t.view.showJson}
+              onClick={sourceToggle.onToggle}
+              className={cn(
+                "font-mono text-muted-foreground hover:text-foreground",
+                sourceToggle.shown && "bg-muted text-foreground",
+              )}
+            >
+              <Braces aria-hidden />
+              JSON
+            </Button>
+          ) : null}
           {snapshotId ? <ShareControls snapshotId={snapshotId} /> : null}
           {onDelete ? (
             <DropdownMenu>

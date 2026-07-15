@@ -68,6 +68,7 @@ export const en = {
     moreActions: "More actions",
     deleteFailed: "Failed to delete the snapshot",
     renderError: "This content could not be displayed.",
+    showJson: "Show source JSON",
   },
   themeSelect: {
     label: "Theme",
@@ -96,6 +97,9 @@ export const en = {
       nested_treedoc: "TreeDoc cannot be nested inside a synced tree.",
     },
     staleNotice: "Showing the last valid content.",
+  },
+  mermaid: {
+    expand: "Expand diagram",
   },
   diff: {
     unparsable: "The diff could not be displayed (the patch could not be parsed).",

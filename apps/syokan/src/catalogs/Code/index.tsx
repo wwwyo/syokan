@@ -33,7 +33,6 @@ const FILE_OPTIONS = {
   // The github theme, kept consistent across all code display in the app. dark/light switches via themeType
   theme: { dark: "github-dark", light: "github-light" },
   disableFileHeader: true,
-  disableLineNumbers: true,
   overflow: "scroll",
 } as const;
 
