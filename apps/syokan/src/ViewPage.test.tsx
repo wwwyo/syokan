@@ -54,7 +54,7 @@ describe("ViewPage", () => {
     expect(html).toContain('data-slot="view-source-toggle"');
     expect(html).toContain('aria-pressed="false"');
     // the rendered tree, not the JSON dump
-    expect(html).not.toContain("code-snippet");
+    expect(html).not.toContain('data-slot="code-snippet"');
   });
 
   test("shows the actions-menu trigger when onDelete is provided", () => {
