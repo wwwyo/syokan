@@ -70,7 +70,6 @@ export const ja: Messages = {
     deleteFailed: "削除に失敗しました",
     renderError: "このコンテンツは表示できませんでした。",
     showJson: "JSON ソースを表示",
-    showRendered: "レンダー表示に戻す",
   },
   themeSelect: {
     label: "テーマ",

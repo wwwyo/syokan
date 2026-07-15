@@ -69,7 +69,6 @@ export const en = {
     deleteFailed: "Failed to delete the snapshot",
     renderError: "This content could not be displayed.",
     showJson: "Show source JSON",
-    showRendered: "Back to rendered view",
   },
   themeSelect: {
     label: "Theme",

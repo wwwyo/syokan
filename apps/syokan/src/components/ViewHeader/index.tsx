@@ -1,6 +1,7 @@
 import { Braces, Ellipsis, Trash2 } from "lucide-react";
 import { SidebarToggle } from "../AppSidebar/SidebarToggle";
 import { ShareControls } from "../ShareControls";
+import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,8 +19,7 @@ export type ViewHeaderProps = {
   /** When the body is fullBleed, drop the width constraint inside the bar too so they align */
   fullBleed?: boolean;
   /** When provided, shows the source-JSON toggle */
-  sourceShown?: boolean;
-  onToggleSource?: () => void;
+  sourceToggle?: { shown: boolean; onToggle: () => void };
 };
 
 // The viewer header that surfaces a snapshot's meta info (source / publish / delete action).
@@ -31,8 +31,7 @@ export function ViewHeader({
   onDelete,
   snapshotId,
   fullBleed = false,
-  sourceShown = false,
-  onToggleSource,
+  sourceToggle,
 }: ViewHeaderProps) {
   return (
     <header
@@ -57,21 +56,22 @@ export function ViewHeader({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          {onToggleSource ? (
-            <button
-              type="button"
+          {sourceToggle ? (
+            <Button
               data-slot="view-source-toggle"
-              aria-pressed={sourceShown}
-              aria-label={sourceShown ? t.view.showRendered : t.view.showJson}
-              onClick={onToggleSource}
+              size="sm"
+              variant="ghost"
+              aria-pressed={sourceToggle.shown}
+              aria-label={t.view.showJson}
+              onClick={sourceToggle.onToggle}
               className={cn(
-                "flex h-7 items-center gap-1.5 rounded-md px-2 font-mono outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-                sourceShown && "bg-muted text-foreground",
+                "font-mono text-muted-foreground hover:text-foreground",
+                sourceToggle.shown && "bg-muted text-foreground",
               )}
             >
-              <Braces className="size-3.5" aria-hidden />
+              <Braces aria-hidden />
               JSON
-            </button>
+            </Button>
           ) : null}
           {snapshotId ? <ShareControls snapshotId={snapshotId} /> : null}
           {onDelete ? (

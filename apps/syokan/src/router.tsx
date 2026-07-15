@@ -98,6 +98,8 @@ function ViewRouteComponent() {
   const del = useDeleteSnapshot();
   return (
     <ViewPage
+      // remount per snapshot so per-view state (source toggle etc.) never leaks across navigations
+      key={envelope.id}
       envelope={envelope}
       onDelete={() => del(envelope.id, { isCurrent: true })}
     />

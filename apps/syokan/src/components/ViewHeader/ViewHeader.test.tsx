@@ -31,9 +31,11 @@ describe("ViewHeader", () => {
     expect(without).not.toContain("view-delete");
   });
 
-  test("shows the source toggle only when onToggleSource is provided", () => {
+  test("shows the source toggle only when sourceToggle is provided", () => {
     const withToggle = renderToString(
-      createElement(ViewHeader, { onToggleSource: () => {}, sourceShown: true }),
+      createElement(ViewHeader, {
+        sourceToggle: { shown: true, onToggle: () => {} },
+      }),
     );
     expect(withToggle).toContain("data-slot=\"view-source-toggle\"");
     expect(withToggle).toContain("aria-pressed=\"true\"");
