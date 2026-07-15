@@ -126,7 +126,12 @@ export function Mermaid({ code }: MermaidProps) {
   }
 
   return (
-    <div data-slot="mermaid" data-state="ready" className="group relative my-4">
+    <div
+      data-slot="mermaid"
+      data-state="ready"
+      // the same card surface as Code, so diagrams and code read as one family
+      className="group relative my-4 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
+    >
       {/* hidden while not hovered — also drop pointer events so the invisible button never
           hijacks taps; on coarse pointers (no hover) it stays visible instead */}
       <button
@@ -139,7 +144,7 @@ export function Mermaid({ code }: MermaidProps) {
         <Maximize2 className="size-4" aria-hidden />
       </button>
       <div
-        className="flex justify-center overflow-x-auto [&_svg]:max-w-full [&_svg]:h-auto"
+        className="flex justify-center overflow-x-auto p-4 [&_svg]:max-w-full [&_svg]:h-auto"
         // embed the SVG mermaid generates as-is (labels are already sanitized by the default securityLevel 'strict')
         dangerouslySetInnerHTML={{ __html: svg }}
       />
