@@ -31,7 +31,6 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
       fullBleed={fullBleed}
       header={
         <ViewHeader
-          sourceLabel={envelope.metadata?.source?.label}
           onDelete={onDelete}
           snapshotId={envelope.id}
           fullBleed={fullBleed}

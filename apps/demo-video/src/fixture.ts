@@ -38,7 +38,6 @@ export const prs: DemoPr[] = [
 ];
 
 export const viewTitle = "PR review queue — Jul 7";
-export const sourceLabel = "gh-review-queue";
 
 /** Diff shown inside the first PR card (catalog `Diff`, unified). */
 export const diff = {
@@ -81,7 +80,6 @@ export const graph = {
 export const envelopeLines: string[] = [
   `{`,
   `  "title": "${viewTitle}",`,
-  `  "metadata": { "source": { "label": "${sourceLabel}" } },`,
   `  "root": {`,
   `    "type": "Stack",`,
   `    "children": [`,

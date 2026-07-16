@@ -5,7 +5,6 @@ import {
   CURRENT_SCHEMA_VERSION,
   type Item,
   type SnapshotEnvelope,
-  type SnapshotMetadata,
   type SnapshotSummary,
 } from "../src/schema";
 
@@ -17,7 +16,6 @@ type StoreFile = {
 export type CreateInput = {
   title?: string;
   root: Item;
-  metadata?: SnapshotMetadata;
   // When set, registers key→id separately from id/url and makes it the target of later updates.
   // Passing an already-registered key returns the existing one as-is instead of creating (dedup) —
   // even if the CLI's PUT→404→POST fallback runs concurrently, this dedup takes effect inside the
@@ -28,7 +26,6 @@ export type CreateInput = {
 export type UpdateInput = {
   title?: string;
   root: Item;
-  metadata?: SnapshotMetadata;
   idempotencyKey: string;
 };
 
@@ -182,15 +179,14 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     return run;
   }
 
-  // Build the envelope from id/createdAt/title/metadata (shared by create/update).
-  // Falling back title/metadata to base (undefined on create, the existing value on update)
+  // Build the envelope from id/createdAt/title (shared by create/update).
+  // Falling back title to base (undefined on create, the existing value on update)
   // keeps update from clearing fields that were omitted.
   function buildEnvelope(
     id: string,
     createdAt: string,
     root: Item,
     title: string | undefined,
-    metadata: SnapshotMetadata | undefined,
   ): SnapshotEnvelope {
     return {
       schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -198,7 +194,6 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
       root,
       createdAt,
       ...(title !== undefined ? { title } : {}),
-      ...(metadata !== undefined ? { metadata } : {}),
     };
   }
 
@@ -217,7 +212,6 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
           new Date().toISOString(),
           input.root,
           input.title,
-          input.metadata,
         );
         data.snapshots[id] = envelope;
         if (input.idempotencyKey) {
@@ -236,14 +230,13 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         const existingId = data.idempotency[input.idempotencyKey];
         const existing = existingId ? data.snapshots[existingId] : undefined;
         if (!existing) return { ok: false, error: "not_found" };
-        // Replace while keeping the same id/url/createdAt. If title/metadata are
-        // omitted, keep the existing values (updating only root via PUT doesn't clear them).
+        // Replace while keeping the same id/url/createdAt. If title is
+        // omitted, keep the existing value (updating only root via PUT doesn't clear it).
         const envelope = buildEnvelope(
           existing.id,
           existing.createdAt,
           input.root,
           input.title ?? existing.title,
-          input.metadata ?? existing.metadata,
         );
         data.snapshots[envelope.id] = envelope;
         await write(data);
@@ -265,8 +258,6 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         createdAt: env.createdAt,
       };
       if (env.title !== undefined) summary.title = env.title;
-      const label = env.metadata?.source?.label;
-      if (label) summary.source = { label };
       return summary;
     });
     // Newest first. Stabilize ties with a total-order comparison (localeCompare) that returns 0 for equal values.

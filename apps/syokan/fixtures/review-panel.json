@@ -1,11 +1,5 @@
 {
   "title": "Review risk panel — share service split",
-  "metadata": {
-    "source": {
-      "label": "review-guide",
-      "url": "https://github.com/wwwyo/syokan/pull/27"
-    }
-  },
   "idempotencyKey": "review-pr-27",
   "root": {
     "type": "Stack",

@@ -25,10 +25,9 @@ describe("snapshot envelope", () => {
       title: "Sample",
       root: baseRoot,
       createdAt: "2026-05-10T12:00:00Z",
-      metadata: { source: { label: "manual-cli" } },
     });
     expect(parsed.id).toBe("abc-123");
-    expect(parsed.metadata?.source?.label).toBe("manual-cli");
+    expect(parsed.title).toBe("Sample");
   });
 
   test("accepts envelope without optional fields", () => {
@@ -39,7 +38,6 @@ describe("snapshot envelope", () => {
       createdAt: "2026-05-10T12:00:00Z",
     });
     expect(parsed.title).toBeUndefined();
-    expect(parsed.metadata).toBeUndefined();
   });
 
   test("rejects mismatched schemaVersion", () => {
@@ -77,40 +75,6 @@ describe("snapshot envelope", () => {
     if (!result.success) {
       const issues = formatValidationError(result.error);
       expect(issues.some((i) => i.path[0] === "createdAt")).toBe(true);
-    }
-  });
-
-  test("rejects unknown metadata fields (strict)", () => {
-    const result = envelopeSchema.safeParse({
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      id: "abc",
-      root: baseRoot,
-      createdAt: "2026-05-10T12:00:00Z",
-      metadata: { unknown: "field" },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  test("preserves unknown fields under metadata.source (loose for future expansion)", () => {
-    const result = envelopeSchema.safeParse({
-      schemaVersion: CURRENT_SCHEMA_VERSION,
-      id: "abc",
-      root: baseRoot,
-      createdAt: "2026-05-10T12:00:00Z",
-      metadata: {
-        source: {
-          label: "rss-daily",
-          url: "https://example.com/feed",
-          fetchedAt: "2026-05-10T11:00:00Z",
-        },
-      },
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      // loose, so it's preserved rather than stripped (not silently dropped)
-      const source = result.data.metadata?.source as Record<string, unknown>;
-      expect(source?.url).toBe("https://example.com/feed");
-      expect(source?.fetchedAt).toBe("2026-05-10T11:00:00Z");
     }
   });
 

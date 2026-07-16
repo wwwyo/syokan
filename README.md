@@ -12,7 +12,7 @@ An LLM speaks a JSON incantation, and a rich, living interface materializes — 
 
 **▶ [Watch the 30-second demo](apps/demo-video/demo.mp4)** — Claude Code chants; a diff-and-graph PR review view is summoned. ([re-shootable source](apps/demo-video))
 
-> **Summon your own** — `mise use -g github:wwwyo/syokan@latest`, then chant. See [Getting started](#getting-started).
+> **Summon your own** — `brew install wwwyo/tap/syokan`, then chant. See [Getting started](#getting-started).
 
 日本語版: [README.ja.md](./README.ja.md)
 
@@ -32,14 +32,21 @@ It is a CSR app with client-side routing (TanStack Router). `/` is home, `/snaps
 
 ## Getting started
 
-For everyday use, `syokan` is a **single binary** (no Bun/Node required; the server lazy-spawns automatically).
+For everyday use, `syokan` is a **single binary** (no Bun/Node required; the server lazy-spawns automatically). Supported OS: **macOS and Linux** — Windows is not supported.
 
 ```bash
-mise use -g github:wwwyo/syokan@latest   # install via the github backend
-syokan --help                         # list commands (machine-readable: --help --json)
+# macOS (Homebrew)
+brew install wwwyo/tap/syokan
+
+# Linux, or macOS without Homebrew
+curl -fsSL https://raw.githubusercontent.com/wwwyo/syokan/main/install.sh | sh
+
+syokan --help   # list commands (machine-readable: --help --json)
 ```
 
-> Other install options: download `syokan-<os>-<arch>` directly from [Releases](https://github.com/wwwyo/syokan/releases), or build from source ([Build](#build-single-binary)). If macOS Gatekeeper blocks the binary, run `codesign --sign - <path>`.
+The installer detects OS/arch, verifies the download against the release's `checksums.txt`, installs to `~/.local/bin` (no sudo; override with `SYOKAN_INSTALL_DIR`), and takes a version to pin (`... | sh -s -- v0.2.0`).
+
+> Other install options: `mise use -g github:wwwyo/syokan@latest` (mise github backend), download `syokan-<os>-<arch>` directly from [Releases](https://github.com/wwwyo/syokan/releases), or build from source ([Build](#build-single-binary)). brew / curl / mise installs carry no quarantine attribute; only a browser-downloaded binary can be blocked by macOS Gatekeeper — if so, run `codesign --sign - <path>`.
 
 Your first summon (the server starts automatically and a view URL is returned):
 
@@ -78,12 +85,11 @@ A snapshot **envelope** (**JSON** only; markdown is not rendered — structure p
 {
   "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // required: view tree
   "title": "Today's RSS",                              // optional
-  "metadata": { "source": { "label": "daily-rss" } }, // optional: origin label, shown in the sidebar and header
   "idempotencyKey": "rss-2026-06-20"                   // optional on POST, required on PUT: names a view so it can be targeted again later
 }
 ```
 
-`POST` always creates a fresh snapshot (`201`); an `idempotencyKey` just tags it for later `PUT`s. `PUT` requires `idempotencyKey` and targets an existing view by it: a match replaces `root`/`title`/`metadata` in place (same id/url; `createdAt` is kept) and returns `200`; no match returns `404` (`not_found`) — `PUT` never creates (there is no "create if missing" escape hatch; use `POST` for that). Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
+`POST` always creates a fresh snapshot (`201`); an `idempotencyKey` just tags it for later `PUT`s. `PUT` requires `idempotencyKey` and targets an existing view by it: a match replaces `root`/`title` in place (same id/url; `createdAt` is kept) and returns `200`; no match returns `404` (`not_found`) — `PUT` never creates (there is no "create if missing" escape hatch; use `POST` for that). Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
 
 ## Catalog
 
@@ -137,7 +143,7 @@ bun run compile       # → apps/syokan/dist/syokan (CLI + server + frontend in 
 bun run compile:all   # → apps/syokan/dist/syokan-<os>-<arch> (cross-compile, for Release distribution)
 ```
 
-Dual-mode ([entry.ts](./apps/syokan/entry.ts)): a normal launch is the CLI; the server re-execs the binary itself with `SYOKAN_SERVE=1`. The global binary uses port `5173`, and persistence follows the XDG base directories (settings = `~/.config/syokan/`, templates = `~/.local/share/syokan/`, snapshots + runtime/log = `~/.local/state/syokan/`). Override locations with `XDG_{CONFIG,DATA,STATE}_HOME` (absolute paths only; relative values are ignored). When upgrading from the old layout, templates are migrated to the new location automatically on startup. To distribute, upload the assets to a Release and install with `mise use -g github:wwwyo/syokan@latest`.
+Dual-mode ([entry.ts](./apps/syokan/entry.ts)): a normal launch is the CLI; the server re-execs the binary itself with `SYOKAN_SERVE=1`. The global binary uses port `5173`, and persistence follows the XDG base directories (settings = `~/.config/syokan/`, templates = `~/.local/share/syokan/`, snapshots + runtime/log = `~/.local/state/syokan/`). Override locations with `XDG_{CONFIG,DATA,STATE}_HOME` (absolute paths only; relative values are ignored). When upgrading from the old layout, templates are migrated to the new location automatically on startup. To distribute, push a version tag (`bun run release`): CI cross-compiles, gates on a smoke test of the compiled binaries (Linux + macOS), publishes the Release with `checksums.txt`, and bumps the Homebrew formula.
 
 ## More
 

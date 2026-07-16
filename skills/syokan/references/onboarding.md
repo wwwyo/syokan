@@ -78,7 +78,6 @@ After approval, write it to `welcome.json` and post it (props conform to `syokan
 ```json
 {
   "title": "Welcome to syokan",
-  "metadata": { "source": { "label": "onboarding" } },
   "root": {
     "type": "Stack",
     "props": { "direction": "vertical" },

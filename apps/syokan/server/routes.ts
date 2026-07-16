@@ -13,7 +13,6 @@ import {
   type Item,
   settingPatchSchema,
   type SnapshotEnvelope,
-  snapshotMetadataSchema,
 } from "../src/schema";
 import {
   type FileWatcher,
@@ -45,7 +44,6 @@ const inputBaseSchema = z
     schemaVersion: z.literal(CURRENT_SCHEMA_VERSION).optional(),
     title: z.string().min(1).optional(),
     root: itemSchema,
-    metadata: snapshotMetadataSchema.optional(),
     idempotencyKey: z.string().min(1).optional(),
   })
   .strict();

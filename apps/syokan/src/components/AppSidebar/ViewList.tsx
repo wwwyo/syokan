@@ -6,6 +6,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "../ui/context-menu";
+import { formatDateTime } from "../../lib/date";
 import { t } from "../../lib/i18n";
 import { cn } from "../../lib/utils";
 import type { SnapshotSummary } from "../../schema";
@@ -78,13 +79,12 @@ export function ViewList({
               <span className="block truncate font-medium">
                 {item.title ?? "(untitled)"}
               </span>
-              {item.source ? (
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  <span className="rounded-full border border-border px-1.5 py-0.5 whitespace-nowrap">
-                    {item.source.label}
-                  </span>
-                </span>
-              ) : null}
+              <time
+                dateTime={item.createdAt}
+                className="mt-0.5 block text-xs text-muted-foreground"
+              >
+                {formatDateTime(item.createdAt)}
+              </time>
             </>
           ),
         });

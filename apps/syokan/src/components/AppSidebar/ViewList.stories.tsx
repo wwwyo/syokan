@@ -24,13 +24,11 @@ const items = [
     id: "b",
     title: "PR review: view-layer",
     createdAt: "2026-06-16T00:10:00Z",
-    source: { label: "gh" },
   },
   {
     id: "c",
     title: "Daily Feed — an example of a long title truncated to a single line",
     createdAt: "2026-06-14T23:49:00Z",
-    source: { label: "rss-daily" },
   },
   { id: "d", createdAt: "2026-06-07T14:20:00Z" },
 ];

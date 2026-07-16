@@ -2,7 +2,7 @@
 
 **syokan (召喚, "summon") is a verb.** An LLM speaks a JSON incantation, and a rich, living interface appears — no JSX written, no build step. Typing `syokan dashboard.json` reads literally as "syokan dashboard.json": the command itself is the incantation. Views are ephemeral — summoned when needed, they fade; nothing is hoarded. Under the hood this is a schema-driven renderer: data pulled from multiple repositories, external APIs, and the filesystem is rendered for humans through predefined React components. LLMs (Claude Code / scheduled agents / CLI) **post a JSON tree only** — no per-view JSX is ever generated.
 
-> **Setup and usage (the `POST /api/snapshots` envelope schema / source.label spec / catalog type list) live in [README.md](./README.md); CLI commands live in `syokan --help` (machine-readable via `--help --json`) — those are the SSOT.** This AGENTS.md covers design judgments (why) and development conventions (how to change things).
+> **Setup and usage (the `POST /api/snapshots` envelope schema / catalog type list) live in [README.md](./README.md); CLI commands live in `syokan --help` (machine-readable via `--help --json`) — those are the SSOT.** This AGENTS.md covers design judgments (why) and development conventions (how to change things).
 
 ## Repo learning skills
 
@@ -151,7 +151,7 @@ Implement a component at `<Name>/index.tsx` and colocate its test (`<Name>.test.
 
 ## Setup / usage
 
-Setup steps (mise / bun / portless), the `POST /api/snapshots` envelope schema, the source.label spec, and the catalog type list have [README.md](./README.md) as SSOT. CLI commands, in the same spirit as the catalog, have `syokan --help` (machine-readable via `--help --json`) as SSOT — transcribing into md drifts, so the README doesn't carry the list either. To avoid duplication, none of it is written here.
+Setup steps (mise / bun / portless), the `POST /api/snapshots` envelope schema, and the catalog type list have [README.md](./README.md) as SSOT. CLI commands, in the same spirit as the catalog, have `syokan --help` (machine-readable via `--help --json`) as SSOT — transcribing into md drifts, so the README doesn't carry the list either. To avoid duplication, none of it is written here.
 
 Storybook is the visual review base for catalog components. `<Name>/<Name>.stories.tsx` enumerates prop variants, edge cases, and dark/light; `.storybook/preview.tsx` loads `src/styles.css`. The toolbar's `.dark` toggle verifies theme adherence. `storybook` is registered in `.claude/launch.json`, so it can also be started via preview. See the README for the launch command.
 
@@ -193,8 +193,9 @@ The global tool is **a single executable** (`bun run compile` → `apps/syokan/d
 Hit while implementing the file-reference node's change watching (`server/fileSource.ts`; then `FileDoc`, now `TreeDoc`).
 
 - **The pitfall**: a "write temp → rename" save (editors' common atomic save) swaps the target file's inode, so a naive `fs.watch(path)` loses track of changes after the swap. The textbook fix is "watch the parent directory and filter by basename", but on **Bun (macOS), `fs.watch(dir)` does not fire on content changes of files inside it** — verified on a real machine (dir watch is unusable).
-- **Policy**: watch the file itself; on a `rename` event (the signal for inode swap/deletion), re-arm a watch on the same path. If the replacement hasn't appeared yet, retry with a cap. This follows "rename save → subsequent in-place writes".
-- **Remaining limit**: if a file is deleted and re-created at the same path only after a while, live updates stop once the re-arm retry cap is exceeded (the view shows not_found via GET). Accepted for MVP. Details in `.agent/prd/file-source-sync/decision.log` #7.
+- **Policy (macOS)**: watch the file itself; on a `rename` event (the signal for inode swap/deletion), re-arm a watch on the same path. If the replacement hasn't appeared yet, retry with a cap. This follows "rename save → subsequent in-place writes".
+- **Remaining limit (macOS)**: if a file is deleted and re-created at the same path only after a while, live updates stop once the re-arm retry cap is exceeded (the view shows not_found via GET). Accepted for MVP. Details in `.agent/prd/file-source-sync/decision.log` #7.
+- **Linux is the mirror image** (verified in an oven/bun container, Bun 1.3.12): watching the file itself is *silent* on an inode swap (rename-over never fires, and the re-arm never triggers), while watching the parent directory works. So `fileSource.ts` branches per platform: Linux watches the parent dir, macOS watches the file. Two extra Linux traps: (1) events in a burst (create tmp → write → rename) are coalesced down to as little as **one** event, and the survivor may carry the *temp file's* name — so do not filter dir events by basename, or atomic saves get dropped; (2) a freshly armed watcher exhibits this most reliably, so "arm then immediately rename" tests fail under a basename filter even though spaced-out events look fine.
 
 ### `bunfig.toml` is read from cwd only, so the dev server's Tailwind plugin needs a per-package copy
 

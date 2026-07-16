@@ -24,7 +24,6 @@ export const en = {
   -H "content-type: application/json" \\
   -d '{
     "title": "Daily RSS",
-    "metadata": { "source": { "label": "rss" } },
     "root": {
       "type": "Stack",
       "props": {},
