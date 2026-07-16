@@ -12,7 +12,7 @@ LLM が JSON の呪文を唱えると、rich で生きた interface が立ち現
 
 **▶ [30秒デモを見る](apps/demo-video/demo.mp4)** — Claude Code が唱えると、diff とグラフを含む PR review の view が召喚される。([撮り直し用の素材](apps/demo-video))
 
-> **自分のデータを召喚する** — `mise use -g github:wwwyo/syokan@latest` を入れて唱える。[Getting started](./README.md#getting-started) 参照。
+> **自分のデータを召喚する** — `brew install wwwyo/tap/syokan` を入れて唱える。[はじめに](#はじめに) 参照。
 
 English: [README.md](./README.md)
 
@@ -32,14 +32,21 @@ client-side routing（TanStack Router）の CSR app。`/` が home、`/snapshots
 
 ## はじめに
 
-普段使いの `syokan` は **単体バイナリ**（Bun/Node 不要、server も自動 lazy-spawn）。
+普段使いの `syokan` は **単体バイナリ**（Bun/Node 不要、server も自動 lazy-spawn）。対応 OS は **macOS と Linux** — Windows は未対応。
 
 ```bash
-mise use -g github:wwwyo/syokan@latest   # github backend で install
-syokan --help                         # コマンド確認（機械可読は --help --json）
+# macOS (Homebrew)
+brew install wwwyo/tap/syokan
+
+# Linux、または Homebrew を使わない macOS
+curl -fsSL https://raw.githubusercontent.com/wwwyo/syokan/main/install.sh | sh
+
+syokan --help   # コマンド確認（機械可読は --help --json）
 ```
 
-> 他の install: [Releases](https://github.com/wwwyo/syokan/releases) から `syokan-<os>-<arch>` を直接 download、または source build（[ビルド](#ビルド-単体バイナリ)）。macOS で Gatekeeper に弾かれたら `codesign --sign - <path>`。
+インストーラは OS/arch を判別し、release の `checksums.txt` と照合して `~/.local/bin` に配置する（sudo 不要、`SYOKAN_INSTALL_DIR` で変更可）。バージョン固定は `... | sh -s -- v0.2.0`。
+
+> 他の install: `mise use -g github:wwwyo/syokan@latest`（mise github backend）、[Releases](https://github.com/wwwyo/syokan/releases) から `syokan-<os>-<arch>` を直接 download、または source build（[ビルド](#ビルド-単体バイナリ)）。brew / curl / mise 経由は quarantine 属性が付かない — ブラウザで直接 download したバイナリだけが macOS Gatekeeper に弾かれうるので、その場合は `codesign --sign - <path>`。
 
 最初の召喚（server は自動で立ち上がり、view URL が返る）:
 
@@ -78,12 +85,11 @@ snapshot **envelope**（**JSON** のみ。markdown は描画されない — 文
 {
   "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // 必須: view tree
   "title": "Today's RSS",                              // 任意
-  "metadata": { "source": { "label": "daily-rss" } }, // 任意: 出所ラベル。sidebar と header に出る
   "idempotencyKey": "rss-2026-06-20"                   // POST では任意・PUT では必須: view に名前を付け、後から狙い撃てるようにする
 }
 ```
 
-`POST` は常に新規作成(`201`)し、`idempotencyKey` は以後の `PUT` の的として登録するだけ。`PUT` は `idempotencyKey` 必須で既存の view を狙い撃つ: 一致すれば `root`/`title`/`metadata` をその場で置き換え(id/url は同じ、`createdAt` は初回のまま)`200`、一致が無ければ `404`(`not_found`)——`PUT` は新規作成しない(`allowMissing` のような逃げ道は無い。作りたいときは `POST` を使う)。検証エラーは `400`（`invalid_json` / `validation_failed`）。CLI コマンドは `syokan --help`。
+`POST` は常に新規作成(`201`)し、`idempotencyKey` は以後の `PUT` の的として登録するだけ。`PUT` は `idempotencyKey` 必須で既存の view を狙い撃つ: 一致すれば `root`/`title` をその場で置き換え(id/url は同じ、`createdAt` は初回のまま)`200`、一致が無ければ `404`(`not_found`)——`PUT` は新規作成しない(`allowMissing` のような逃げ道は無い。作りたいときは `POST` を使う)。検証エラーは `400`（`invalid_json` / `validation_failed`）。CLI コマンドは `syokan --help`。
 
 ## catalog
 
@@ -137,7 +143,7 @@ bun run compile       # → apps/syokan/dist/syokan（CLI+server+frontend を 1 
 bun run compile:all   # → apps/syokan/dist/syokan-<os>-<arch>（cross-compile、Release 配布用）
 ```
 
-dual-mode（[entry.ts](./apps/syokan/entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173`、永続先は XDG base directory に従い分散する（settings=`~/.config/syokan/`、templates=`~/.local/share/syokan/`、snapshot+runtime/log=`~/.local/state/syokan/`。場所の上書きは `XDG_{CONFIG,DATA,STATE}_HOME` で行う（絶対パスのみ、相対値は無視）。旧レイアウトからの upgrade では templates を起動時に新 location へ自動移行する）。配布は Release に asset を上げて `mise use -g github:wwwyo/syokan@latest`。
+dual-mode（[entry.ts](./apps/syokan/entry.ts)）: 通常起動は CLI、server は `SYOKAN_SERVE=1` で自分自身を re-exec する。global バイナリは port `5173`、永続先は XDG base directory に従い分散する（settings=`~/.config/syokan/`、templates=`~/.local/share/syokan/`、snapshot+runtime/log=`~/.local/state/syokan/`。場所の上書きは `XDG_{CONFIG,DATA,STATE}_HOME` で行う（絶対パスのみ、相対値は無視）。旧レイアウトからの upgrade では templates を起動時に新 location へ自動移行する）。配布は version tag を push するだけ（`bun run release`）: CI が cross-compile → compile 済みバイナリの smoke test（Linux + macOS）を gate に Release を公開（`checksums.txt` 付き）→ Homebrew formula を自動 bump する。
 
 ## その他
 

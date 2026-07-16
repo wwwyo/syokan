@@ -25,7 +25,6 @@ export const ja: Messages = {
   -H "content-type: application/json" \\
   -d '{
     "title": "今日のRSS",
-    "metadata": { "source": { "label": "rss" } },
     "root": {
       "type": "Stack",
       "props": {},

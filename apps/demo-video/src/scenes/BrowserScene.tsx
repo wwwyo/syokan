@@ -7,7 +7,7 @@ import {
   useCurrentFrame,
 } from "remotion";
 import type { DemoPr } from "../fixture";
-import { diff, graph, prs, sourceLabel, viewTitle, viewUrl } from "../fixture";
+import { diff, graph, prs, viewTitle, viewUrl } from "../fixture";
 import { color, font, logoPaths, radius } from "../theme";
 
 const EASE = Easing.bezier(0.16, 1, 0.3, 1);
@@ -219,19 +219,7 @@ const ViewHeader = () => (
       alignItems: "center",
       padding: "0 32px",
     }}
-  >
-    <span
-      style={{
-        border: `1px solid ${color.border}`,
-        borderRadius: 9999,
-        padding: "4px 14px",
-        fontSize: 16,
-        color: color.mutedForeground,
-      }}
-    >
-      {sourceLabel}
-    </span>
-  </div>
+  />
 );
 
 type DiffLine = (typeof diff.lines)[number];

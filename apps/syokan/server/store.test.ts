@@ -40,6 +40,33 @@ describe("SnapshotStore", () => {
     expect(got).toBeUndefined();
   });
 
+  test("strips since-removed fields (metadata) from snapshots persisted by older versions", async () => {
+    const legacy = {
+      schemaVersion: 1,
+      id: "legacy-1",
+      title: "Legacy",
+      root: sampleRoot,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      metadata: { source: { label: "rss" } },
+    };
+    await Bun.write(
+      join(dir, "snapshots.json"),
+      JSON.stringify({
+        snapshots: { "legacy-1": legacy },
+        idempotency: { "legacy-key": "legacy-1" },
+      }),
+    );
+    const got = await store.get("legacy-1");
+    expect(got?.title).toBe("Legacy");
+    expect(got && "metadata" in got).toBe(false);
+    const deduped = await store.create({
+      root: sampleRoot,
+      idempotencyKey: "legacy-key",
+    });
+    expect(deduped.id).toBe("legacy-1");
+    expect("metadata" in deduped).toBe(false);
+  });
+
   test("survives a 'restart' (fresh store instance over the same file)", async () => {
     const env = await store.create({ root: sampleRoot });
     const next = createSnapshotStore(dir);
@@ -47,17 +74,14 @@ describe("SnapshotStore", () => {
     expect(got?.id).toBe(env.id);
   });
 
-  test("list returns id/title/createdAt and optional source.label", async () => {
+  test("list returns id/title/createdAt", async () => {
     const a = await store.create({ root: sampleRoot, title: "A" });
-    const b = await store.create({
-      root: sampleRoot,
-      title: "B",
-      metadata: { source: { label: "rss-daily" } },
-    });
+    const b = await store.create({ root: sampleRoot, title: "B" });
     const items = await store.list();
     expect(items.length).toBe(2);
     const found = items.find((i) => i.id === b.id);
-    expect(found?.source?.label).toBe("rss-daily");
+    expect(found?.title).toBe("B");
+    expect(found?.createdAt).toBe(b.createdAt);
     expect(items.some((i) => i.id === a.id)).toBe(true);
   });
 
@@ -136,11 +160,10 @@ describe("SnapshotStore", () => {
     expect(items[0]?.title).toBe("Day 2");
   });
 
-  test("update omitting title/metadata preserves the existing values instead of clearing them", async () => {
+  test("update omitting title preserves the existing value instead of clearing it", async () => {
     await store.create({
       root: sampleRoot,
       title: "Day 1",
-      metadata: { source: { label: "rss" } },
       idempotencyKey: "recurring-partial",
     });
     const updatedRoot: Item = { type: "Stack", props: { direction: "horizontal" } };
@@ -151,7 +174,6 @@ describe("SnapshotStore", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.envelope.title).toBe("Day 1");
-      expect(result.envelope.metadata?.source?.label).toBe("rss");
       expect(result.envelope.root).toEqual(updatedRoot);
     }
   });

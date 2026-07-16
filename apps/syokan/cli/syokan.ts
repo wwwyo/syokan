@@ -196,7 +196,7 @@ async function postWithServer(
 }
 
 // Input is JSON envelope only. To display plain text too, express it inside the envelope via the
-// PlainText catalog. Metadata such as source.label also goes in the envelope (the CLI never adds any).
+// PlainText catalog.
 async function postText(text: string, deps: CliDeps): Promise<CliResult> {
   let payload: unknown;
   try {
@@ -242,15 +242,13 @@ function looksLikeTree(value: unknown): boolean {
   );
 }
 
-// Wrap a tree file into an envelope of a single TreeDoc node. title / source.label are the
+// Wrap a tree file into an envelope of a single TreeDoc node. title is the
 // basename; so a re-post of the same file points at the same id/url, the dedup identifier
 // (idempotencyKey) is the absolute path.
 function wrapTreeDoc(absPath: string): unknown {
-  const name = basename(absPath);
   return {
-    title: name,
+    title: basename(absPath),
     root: { type: "TreeDoc", props: { path: absPath } },
-    metadata: { source: { label: name } },
     idempotencyKey: `treedoc:${absPath}`,
   };
 }

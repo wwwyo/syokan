@@ -36,19 +36,6 @@ describe("ViewPage", () => {
     expect(html).toContain("Intro");
   });
 
-  test("displays metadata.source.label when present", () => {
-    const html = render({
-      ...envelope,
-      metadata: { source: { label: "rss-daily" } },
-    });
-    expect(html).toContain("rss-daily");
-  });
-
-  test("omits source label when absent", () => {
-    const html = render(envelope);
-    expect(html).not.toContain('data-slot="view-source"');
-  });
-
   test("shows the source-JSON toggle (rendered view by default)", () => {
     const html = render(envelope);
     expect(html).toContain('data-slot="view-source-toggle"');

@@ -21,9 +21,7 @@ export {
 } from "./setting";
 export {
   type SnapshotEnvelope,
-  type SnapshotMetadata,
   type SnapshotSummary,
   CURRENT_SCHEMA_VERSION,
   createSnapshotEnvelopeSchema,
-  snapshotMetadataSchema,
 } from "./snapshot";

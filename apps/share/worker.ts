@@ -65,7 +65,6 @@ const envelopeSchema = z.object({
 	title: z.string().min(1).optional(),
 	root: structuralItemSchema,
 	createdAt: z.iso.datetime(),
-	metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const createShareSchema = z.object({

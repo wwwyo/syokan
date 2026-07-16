@@ -161,7 +161,7 @@ describe("cli main: post (default action)", () => {
     expect(body.root.props.text).toBe("piped");
   });
 
-  test("does not inject any source label (envelope owns metadata)", async () => {
+  test("posts the envelope verbatim without injecting extra fields", async () => {
     const tree = JSON.stringify({
       root: { type: "PlainText", props: { body: "hi" } },
     });
@@ -171,24 +171,7 @@ describe("cli main: post (default action)", () => {
     });
     const result = await main(["doc.json"], deps);
     expect(result.exitCode).toBe(0);
-    const body = calls[0]?.body as { metadata?: unknown };
-    expect(body.metadata).toBeUndefined();
-  });
-
-  test("passes through metadata.source.label written in the envelope", async () => {
-    const tree = JSON.stringify({
-      root: { type: "PlainText", props: { body: "hi" } },
-      metadata: { source: { label: "daily-rss" } },
-    });
-    const { deps, calls } = makeDeps({
-      files: { "doc.json": tree },
-      respond: () => okResponse(),
-    });
-    await main(["doc.json"], deps);
-    const body = calls[0]?.body as {
-      metadata: { source: { label: string } };
-    };
-    expect(body.metadata.source.label).toBe("daily-rss");
+    expect(Object.keys(calls[0]?.body as object)).toEqual(["root"]);
   });
 
   test("invalid JSON via stdin: invalid_json error to stderr, exit non-zero", async () => {
@@ -202,7 +185,7 @@ describe("cli main: post (default action)", () => {
     expect(parsed.error).toBe("invalid_json");
   });
 
-  test("bare catalog tree file is wrapped as a live TreeDoc (title/label/key = basename/abs path)", async () => {
+  test("bare catalog tree file is wrapped as a live TreeDoc (title/key = basename/abs path)", async () => {
     const { deps, out, calls } = makeDeps({
       files: {
         "dashboard.json": JSON.stringify({
@@ -218,13 +201,11 @@ describe("cli main: post (default action)", () => {
     const body = calls[0]?.body as {
       title: string;
       root: { type: string; props: { path: string } };
-      metadata: { source: { label: string } };
       idempotencyKey: string;
     };
     expect(body.root.type).toBe("TreeDoc");
     expect(body.root.props.path).toBe("/abs/dashboard.json");
     expect(body.title).toBe("dashboard.json");
-    expect(body.metadata.source.label).toBe("dashboard.json");
     expect(body.idempotencyKey).toBe("treedoc:/abs/dashboard.json");
     // A payload with an idempotencyKey tries PUT (update) first.
     expect(calls[0]?.method).toBe("PUT");

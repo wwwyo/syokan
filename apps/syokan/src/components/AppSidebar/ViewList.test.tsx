@@ -9,7 +9,6 @@ const sample = [
     id: "def",
     title: "PR review",
     createdAt: "2026-05-20T10:00:00Z",
-    source: { label: "gh" },
   },
 ];
 
@@ -31,11 +30,13 @@ describe("ViewList", () => {
     expect(html.match(/aria-current="page"/g)?.length).toBe(1);
   });
 
-  test("shows the source label when present", () => {
+  test("shows the creation date as a <time> bound to createdAt", () => {
     const html = renderToString(
       createElement(ViewList, { items: sample, currentId: null }),
     );
-    expect(html).toContain("gh");
+    expect(html).toContain('dateTime="2026-05-21T03:04:00Z"');
+    // Human-readable text is TZ-dependent, so assert only the machine-readable side plus the date prefix
+    expect(html).toMatch(/<time[^>]*>2026-05-2\d \d{2}:\d{2}<\/time>/);
   });
 
   test("renders an empty state when there are no snapshots", () => {

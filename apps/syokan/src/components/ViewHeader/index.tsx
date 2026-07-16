@@ -12,7 +12,6 @@ import { t } from "../../lib/i18n";
 import { cn } from "../../lib/utils";
 
 export type ViewHeaderProps = {
-  sourceLabel?: string;
   onDelete?: () => void;
   /** When provided, shows the publish (Share) action */
   snapshotId?: string;
@@ -22,12 +21,11 @@ export type ViewHeaderProps = {
   sourceToggle?: { shown: boolean; onToggle: () => void };
 };
 
-// The viewer header that surfaces a snapshot's meta info (source / publish / delete action).
+// The viewer header that surfaces a snapshot's actions (publish / delete / source-JSON toggle).
 // It is chrome outside the catalog render (env.root) and is not part of the schema-driven render tree.
 // Delete is hidden inside the ellipsis menu rather than placed directly, to avoid accidental clicks.
 // Publish (Share) is placed flat so it is discoverable.
 export function ViewHeader({
-  sourceLabel,
   onDelete,
   snapshotId,
   fullBleed = false,
@@ -44,17 +42,7 @@ export function ViewHeader({
           fullBleed ? "px-4" : "mx-auto max-w-4xl px-6",
         )}
       >
-        <div className="flex items-center gap-3">
-          <SidebarToggle />
-          {sourceLabel ? (
-            <span
-              data-slot="view-source"
-              className="rounded-full border border-border px-2 py-0.5"
-            >
-              {sourceLabel}
-            </span>
-          ) : null}
-        </div>
+        <SidebarToggle />
         <div className="flex items-center gap-2">
           {sourceToggle ? (
             <Button

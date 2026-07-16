@@ -4,19 +4,6 @@ import { renderToString } from "react-dom/server";
 import { ViewHeader } from ".";
 
 describe("ViewHeader", () => {
-  test("shows the source label when given", () => {
-    const html = renderToString(
-      createElement(ViewHeader, { sourceLabel: "rss-daily" }),
-    );
-    expect(html).toContain("data-slot=\"view-source\"");
-    expect(html).toContain("rss-daily");
-  });
-
-  test("omits the source label when absent", () => {
-    const html = renderToString(createElement(ViewHeader, {}));
-    expect(html).not.toContain("view-source");
-  });
-
   test("shows the actions-menu trigger only when onDelete is provided", () => {
     const withDelete = renderToString(
       createElement(ViewHeader, { onDelete: () => {} }),

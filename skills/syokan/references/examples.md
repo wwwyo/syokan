@@ -19,12 +19,10 @@ Each element of `Diff`'s `comments[]` takes this shape.
 ## Example 1: RSS or article list
 
 Stack Cards with a heading link, fetch time, and summary.
-`source` piggybacks a `url`.
 
 ```json
 {
   "title": "Today's RSS",
-  "metadata": { "source": { "label": "daily-rss", "fetchedAt": "2026-06-28T08:00:00Z" } },
   "idempotencyKey": "daily-rss-2026-06-28",
   "root": {
     "type": "Stack",
@@ -58,7 +56,6 @@ Show state with a `Badge`, and put a unified patch plus line comments on a `Diff
 ```json
 {
   "title": "review: feature branch",
-  "metadata": { "source": { "label": "gh-review", "url": "https://example.com/owner/repo/pull/42" } },
   "root": {
     "type": "Stack",
     "props": { "direction": "vertical" },
@@ -94,7 +91,6 @@ Headings become `Heading`, paragraphs `Text`, enumerations `PlainText` (whitespa
 ```json
 {
   "title": "1on1 notes 2026-06-28",
-  "metadata": { "source": { "label": "meeting" } },
   "root": {
     "type": "Stack",
     "props": {},
