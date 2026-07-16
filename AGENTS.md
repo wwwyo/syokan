@@ -7,6 +7,7 @@
 ## Repo learning skills
 
 - Brand/logo/OGP changes should load `.agents/skills/brand-assets/` for repo-specific asset pitfalls maintained by session-retro.
+- Snapshot store / envelope / API compatibility changes should load `.agents/skills/coding/` for repo-specific migration pitfalls maintained by session-retro.
 
 ## Why build this
 
