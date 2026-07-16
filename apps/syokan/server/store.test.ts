@@ -40,6 +40,33 @@ describe("SnapshotStore", () => {
     expect(got).toBeUndefined();
   });
 
+  test("strips since-removed fields (metadata) from snapshots persisted by older versions", async () => {
+    const legacy = {
+      schemaVersion: 1,
+      id: "legacy-1",
+      title: "Legacy",
+      root: sampleRoot,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      metadata: { source: { label: "rss" } },
+    };
+    await Bun.write(
+      join(dir, "snapshots.json"),
+      JSON.stringify({
+        snapshots: { "legacy-1": legacy },
+        idempotency: { "legacy-key": "legacy-1" },
+      }),
+    );
+    const got = await store.get("legacy-1");
+    expect(got?.title).toBe("Legacy");
+    expect(got && "metadata" in got).toBe(false);
+    const deduped = await store.create({
+      root: sampleRoot,
+      idempotencyKey: "legacy-key",
+    });
+    expect(deduped.id).toBe("legacy-1");
+    expect("metadata" in deduped).toBe(false);
+  });
+
   test("survives a 'restart' (fresh store instance over the same file)", async () => {
     const env = await store.create({ root: sampleRoot });
     const next = createSnapshotStore(dir);

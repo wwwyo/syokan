@@ -204,7 +204,16 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         if (input.idempotencyKey) {
           const existingId = data.idempotency[input.idempotencyKey];
           const existing = existingId ? data.snapshots[existingId] : undefined;
-          if (existing) return existing;
+          // Re-project through buildEnvelope: snapshots persisted by older versions may
+          // carry since-removed fields (e.g. metadata), which must not leak into responses.
+          if (existing) {
+            return buildEnvelope(
+              existing.id,
+              existing.createdAt,
+              existing.root,
+              existing.title,
+            );
+          }
         }
         const id = crypto.randomUUID();
         const envelope = buildEnvelope(
@@ -247,7 +256,10 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
 
   async function get(id: string): Promise<SnapshotEnvelope | undefined> {
     const data = await read();
-    return data.snapshots[id];
+    const env = data.snapshots[id];
+    if (!env) return undefined;
+    // Same projection as the dedup path: strip fields removed from the envelope schema.
+    return buildEnvelope(env.id, env.createdAt, env.root, env.title);
   }
 
   async function list(): Promise<SnapshotSummary[]> {
