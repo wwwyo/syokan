@@ -1,6 +1,6 @@
 {
   "name": "@syokan/app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "syokan — LLMs summon rich UI: post a JSON tree and predefined React components render an ephemeral view.",
   "type": "module",
   "private": true,
