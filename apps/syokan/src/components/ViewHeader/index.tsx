@@ -42,9 +42,7 @@ export function ViewHeader({
           fullBleed ? "px-4" : "mx-auto max-w-4xl px-6",
         )}
       >
-        <div className="flex items-center gap-3">
-          <SidebarToggle />
-        </div>
+        <SidebarToggle />
         <div className="flex items-center gap-2">
           {sourceToggle ? (
             <Button
