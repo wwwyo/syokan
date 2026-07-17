@@ -39,7 +39,7 @@ Stack Cards with a heading link, fetch time, and summary.
             "children": [
               { "type": "Heading", "props": { "text": "Article title", "level": 3, "href": "https://example.com/article" } },
               { "type": "Time", "props": { "datetime": "2026-06-28T06:30:00Z", "muted": true } },
-              { "type": "Text", "props": { "body": "Put the article summary here.", "clamp": true } }
+              { "type": "Text", "props": { "body": "Put the article summary here." } }
             ]
           }
         ]
@@ -110,7 +110,7 @@ Post it.
 syokan meeting.json
 ```
 
-`PlainText` is still the right choice for content that must render verbatim (raw logs, ASCII tables) rather than be parsed as markdown.
+`Code` with no `lang` is still the right choice for content that must render verbatim (raw logs, ASCII tables) rather than be parsed as markdown.
 
 ## Example 4: live-synced view (TreeDoc)
 

@@ -49,7 +49,7 @@ export const en = {
       step3Code: "syokan ./dashboard.json",
       typesTitle: "Available types",
       typesBody:
-        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / PlainText / Mermaid / TreeDoc. Each type's props are listed by syokan catalog (GET /api/catalog). Trees that do not match the schema are rejected with 400.",
+        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / Mermaid / TreeDoc. Each type's props are listed by syokan catalog (GET /api/catalog). Trees that do not match the schema are rejected with 400.",
     },
   },
   shell: {

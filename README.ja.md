@@ -79,7 +79,7 @@ dev では syokan サーバーの `SYOKAN_SHARE_API` がローカル Worker（`h
 
 ## envelope
 
-snapshot **envelope**（**JSON** のみ。markdown は描画されない — 文章は catalog ノードに構造化するか、生テキストは `PlainText` に包む）は `POST /api/snapshots` で作成し、`PUT /api/snapshots` でその場を更新する:
+snapshot **envelope**（**JSON** のみ。markdown は描画されない — 文章は catalog ノードに構造化するか、生テキストは `lang` 無しの `Code` に包む）は `POST /api/snapshots` で作成し、`PUT /api/snapshots` でその場を更新する:
 
 ```jsonc
 {
@@ -99,7 +99,7 @@ snapshot **envelope**（**JSON** のみ。markdown は描画されない — 文
 GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], mechanisms: { node, uiState, probe } }
 ```
 
-現在の type — container: `Stack` `Card` `Checklist` `Collapsible` `TagFilter` / leaf: `Heading` `Link` `Text` `Time` `PlainText` `Diff` `Code` `Badge` `Mermaid` `TreeDoc` `Table` `Stat` `Graph` `Probe`。Storybook（`bun run storybook`）で視覚的に確認できる。
+現在の type — container: `Stack` `Card` `Checklist` `Collapsible` `TagFilter` / leaf: `Heading` `Link` `Text` `Time` `Diff` `Code` `Badge` `Mermaid` `TreeDoc` `Table` `Stat` `Graph` `Probe`。Storybook（`bun run storybook`）で視覚的に確認できる。
 
 すべての node は横断フィールド `id`（view 内 anchor。`Link href:"#<id>"` で移動でき、操作を持つ node が閲覧端末ローカルの状態を保持するための identity にもなる）と `tags`（祖先 `TagFilter` による絞り込み対象化）を受け付ける。操作状態（チェック・開閉・絞り込み選択・Probe 再実行）は閲覧側ブラウザに留まり、snapshot 本体は不変のまま。`Probe` は `mechanisms.probe.kinds` に公開された事前定義の読み取り専用 check だけを実行でき（`POST /api/probes/run`）、公開共有では再実行が無効化され、`shareVisible: true` を指定しない限り publish 時に引数と結果が envelope から削除される。
 

@@ -79,7 +79,7 @@ In dev the syokan server points `SYOKAN_SHARE_API` at the local Worker (`http://
 
 ## Envelope
 
-A snapshot **envelope** (**JSON** only; markdown is not rendered — structure prose into catalog nodes, or wrap raw text in `PlainText`) is created with `POST /api/snapshots` and refreshed in place with `PUT /api/snapshots`:
+A snapshot **envelope** (**JSON** only; markdown is not rendered — structure prose into catalog nodes, or wrap raw text in `Code` with no `lang`) is created with `POST /api/snapshots` and refreshed in place with `PUT /api/snapshots`:
 
 ```jsonc
 {
@@ -99,7 +99,7 @@ The SSOT for `type` is the catalog (`apps/syokan/src/catalogs`). Fetch the manif
 GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], mechanisms: { node, uiState, probe } }
 ```
 
-Current types — containers: `Stack` `Card` `Checklist` `Collapsible` `TagFilter` / leaves: `Heading` `Link` `Text` `Time` `PlainText` `Diff` `Code` `Badge` `Mermaid` `TreeDoc` `Table` `Stat` `Graph` `Probe`. Review them visually with Storybook (`bun run storybook`).
+Current types — containers: `Stack` `Card` `Checklist` `Collapsible` `TagFilter` / leaves: `Heading` `Link` `Text` `Time` `Diff` `Code` `Badge` `Mermaid` `TreeDoc` `Table` `Stat` `Graph` `Probe`. Review them visually with Storybook (`bun run storybook`).
 
 Every node also accepts the cross-cutting fields `id` (in-view anchor via `Link href:"#<id>"`, and the identity that lets interactive nodes persist their viewer-local state) and `tags` (narrowing by an ancestor `TagFilter`). Interaction state (checks, folds, filter selections, probe re-runs) stays in the viewer's browser — snapshots remain immutable. `Probe` runs only the predefined read-only checks published under `mechanisms.probe.kinds` (`POST /api/probes/run`); on public shares, re-run is disabled and probe args/results are stripped at publish unless `shareVisible: true`.
 

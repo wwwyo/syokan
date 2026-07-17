@@ -12,7 +12,6 @@ import { Heading, headingPropsSchema } from "./Heading";
 import { Link, linkPropsSchema } from "./Link";
 import { Markdown, markdownPropsSchema } from "./Markdown";
 import { Mermaid, mermaidPropsSchema } from "./Mermaid";
-import { PlainText, plainTextPropsSchema } from "./PlainText";
 import { Probe, probePropsSchema } from "./Probe";
 import { Stack, stackPropsSchema } from "./Stack";
 import { Stat, statPropsSchema } from "./Stat";
@@ -71,9 +70,6 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Link", linkPropsSchema, Link, { childrenTypes: [] }),
   defineViewComponent("Text", textPropsSchema, Text, { childrenTypes: [] }),
   defineViewComponent("Time", timePropsSchema, Time, { childrenTypes: [] }),
-  defineViewComponent("PlainText", plainTextPropsSchema, PlainText, {
-    childrenTypes: [],
-  }),
   defineViewComponent("Diff", diffPropsSchema, Diff, { childrenTypes: [] }),
   defineViewComponent("Code", codePropsSchema, Code, { childrenTypes: [] }),
   defineViewComponent("Badge", badgePropsSchema, Badge, { childrenTypes: [] }),
@@ -105,7 +101,7 @@ const entries: readonly ViewComponentEntry[] = [
   }),
   defineViewComponent("Collapsible", collapsiblePropsSchema, Collapsible, {
     notes:
-      "children are the folded body. Open/closed is viewer-local UI state; give the node an id to persist it. Anchor navigation opens closed ancestors automatically.",
+      "children are the folded body. Open/closed is viewer-local UI state; give the node an id to persist it. Anchor navigation opens closed ancestors automatically. Fold data drill-downs (per-item detail, long payloads), never prose — prose belongs in a visible Markdown node, not behind a fold.",
   }),
   defineViewComponent("TagFilter", tagFilterPropsSchema, TagFilter, {
     notes:

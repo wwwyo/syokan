@@ -50,7 +50,7 @@ export const ja: Messages = {
       step3Code: "syokan ./dashboard.json",
       typesTitle: "投げられる type",
       typesBody:
-        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / PlainText / Mermaid / TreeDoc。各 type の props は syokan catalog（GET /api/catalog）で確認できる。schema に合わない tree は 400 で弾かれる。",
+        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / Mermaid / TreeDoc。各 type の props は syokan catalog（GET /api/catalog）で確認できる。schema に合わない tree は 400 で弾かれる。",
     },
   },
   shell: {
