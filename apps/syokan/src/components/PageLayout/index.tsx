@@ -46,7 +46,13 @@ export function PageLayout({
 
   return (
     <div data-slot="page-layout" className="flex flex-1 flex-col">
-      {header ? <div className="sticky top-0 z-20">{header}</div> : null}
+      {header ? (
+        // data-slot="page-header" is the contract useResizeScrollAnchor reads its reference
+        // line from; DOM order alone is not relied on.
+        <div data-slot="page-header" className="sticky top-0 z-20">
+          {header}
+        </div>
+      ) : null}
       <main data-slot="page-main" className="flex-1">
         <div className="mx-auto w-full max-w-4xl px-6 py-12">{children}</div>
       </main>

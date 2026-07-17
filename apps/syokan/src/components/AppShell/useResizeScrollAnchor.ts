@@ -6,23 +6,26 @@ type Anchor = {
   offset: number;
 };
 
-// x candidates as fractions of viewport width, tried in order until one lands inside page-main
-// (a straight elementFromPoint(50%) can miss into the gap between two block-level siblings).
+// x candidates as fractions of page-main's own horizontal span, tried in order until one lands
+// inside it (a single midpoint probe can miss into the gap between two block-level siblings).
+// Viewport-based x would fall into the push sidebar on narrow viewports.
 const X_FRACTIONS = [0.5, 0.25, 0.75];
 
 // The reference line must clear the sticky header, otherwise elementFromPoint keeps hitting
-// header content instead of the body. Derived from DOM structure (page-main's previous sibling)
-// rather than a fixed pixel guess, since header height differs per route (ViewHeader vs none).
+// header content instead of the body. Read from the header's actual rect rather than a fixed
+// pixel guess, since header height differs per route (ViewHeader vs none).
 function referenceY(): number {
-  const main = document.querySelector('[data-slot="page-main"]');
-  const header = main?.previousElementSibling;
+  const header = document.querySelector('[data-slot="page-header"]');
   return (header?.getBoundingClientRect().bottom ?? 0) + 1;
 }
 
 function findAnchor(): Anchor | null {
+  const main = document.querySelector('[data-slot="page-main"]');
+  if (!main) return null;
   const refY = referenceY();
+  const { left, width } = main.getBoundingClientRect();
   for (const fraction of X_FRACTIONS) {
-    const el = document.elementFromPoint(window.innerWidth * fraction, refY);
+    const el = document.elementFromPoint(left + width * fraction, refY);
     if (!el || el === document.documentElement || el === document.body) {
       continue;
     }
@@ -41,9 +44,13 @@ function findAnchor(): Anchor | null {
  * width — not the window — covers window resize and the sidebar toggle in one path (the toggle
  * reflows the column without changing window.innerWidth, so a resize listener would miss it).
  * The sidebar animates its width, so the observer fires per frame during the transition and the
- * anchor is corrected continuously. Height-only observer callbacks (content growth, mobile URL
- * bar) are ignored — only width changes reflow this layout's single-column content. scrollBy
- * never resizes the observed element, so no observer feedback loop is possible.
+ * anchor is corrected continuously. Height-only observer callbacks (e.g. mobile URL bar) are
+ * ignored — only width changes reflow this layout's single-column content. scrollBy never
+ * resizes the observed element, so no observer feedback loop is possible.
+ *
+ * Native CSS scroll anchoring can't cover this: the spec suppresses anchoring when elements on
+ * the anchor-to-scroller path change width/height computed values — exactly what a width reflow
+ * does.
  */
 export function useResizeScrollAnchor(): RefObject<HTMLDivElement | null> {
   const targetRef = useRef<HTMLDivElement | null>(null);
@@ -81,7 +88,12 @@ export function useResizeScrollAnchor(): RefObject<HTMLDivElement | null> {
       if (isInitial) return;
 
       const anchor = anchorRef.current;
-      if (!anchor || !anchor.el.isConnected) return;
+      if (!anchor || !anchor.el.isConnected) {
+        // The anchor can vanish without a scroll event (route transition at the same scrollY,
+        // TreeDoc re-sync swapping the DOM). Re-arm here so the next width change corrects.
+        anchorRef.current = findAnchor();
+        return;
+      }
       const refY = referenceY();
       const before = window.scrollY;
       window.scrollBy(
