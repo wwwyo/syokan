@@ -85,8 +85,7 @@ Show state with a `Badge`, and put a unified patch plus line comments on a `Diff
 
 ## Example 3: meeting notes or article body (structured prose)
 
-There is no markdown node — structure prose into catalog nodes.
-Headings become `Heading`, paragraphs `Text`, enumerations `PlainText` (whitespace preserved), diagrams `Mermaid`.
+There is no free-form markdown ingest. Pull headings out into `Heading` and diagrams into `Mermaid` first; the remaining prose (paragraphs, lists, links, blockquotes, fenced code) goes straight into a `Markdown` node's `body` instead of being decomposed further. `Markdown` 400s if a heading, GFM table, task-list item, raw HTML, image, or non-http(s) link is still in the body — pull those out into `Heading` / `Table` / `Checklist` / `Link` respectively.
 
 ```json
 {
@@ -96,9 +95,9 @@ Headings become `Heading`, paragraphs `Text`, enumerations `PlainText` (whitespa
     "props": {},
     "children": [
       { "type": "Heading", "props": { "text": "Agenda", "level": 2 } },
-      { "type": "PlainText", "props": { "body": "- Priorities this quarter\n- Next moves" } },
+      { "type": "Markdown", "props": { "body": "- Priorities this quarter\n- Next moves" } },
       { "type": "Heading", "props": { "text": "Decisions", "level": 2 } },
-      { "type": "PlainText", "props": { "body": "1. Proceed with A\n2. B on hold" } },
+      { "type": "Markdown", "props": { "body": "1. Proceed with A, since [the doc](https://example.com/rfc) already covers the tradeoffs\n2. B on hold" } },
       { "type": "Mermaid", "props": { "code": "graph LR\n  A[Proposal] --> B[Decision]" } }
     ]
   }
@@ -110,6 +109,8 @@ Post it.
 ```bash
 syokan meeting.json
 ```
+
+`PlainText` is still the right choice for content that must render verbatim (raw logs, ASCII tables) rather than be parsed as markdown.
 
 ## Example 4: live-synced view (TreeDoc)
 

@@ -9,6 +9,7 @@ import { Diff } from "./Diff";
 import { Graph } from "./Graph";
 import { Heading } from "./Heading";
 import { Link } from "./Link";
+import { Markdown } from "./Markdown";
 import { Mermaid } from "./Mermaid";
 import { PlainText } from "./PlainText";
 import { Probe } from "./Probe";
@@ -38,6 +39,7 @@ describe("catalog", () => {
     expect(specs.get("Badge")?.type).toBe("Badge");
     expect(specs.get("Mermaid")?.type).toBe("Mermaid");
     expect(specs.get("TreeDoc")?.type).toBe("TreeDoc");
+    expect(specs.get("Markdown")?.type).toBe("Markdown");
   });
 
   test("itemSchema parses a Card containing Heading/Text children", () => {
@@ -81,9 +83,10 @@ describe("catalog", () => {
     expect(components.get("TagFilter")).toBe(asItem(TagFilter));
     expect(components.get("Graph")).toBe(asItem(Graph));
     expect(components.get("Probe")).toBe(asItem(Probe));
+    expect(components.get("Markdown")).toBe(asItem(Markdown));
     expect(components.get("MarkdownDoc")).toBeUndefined();
     expect(components.get("FileDoc")).toBeUndefined();
-    expect(components.size).toBe(19);
+    expect(components.size).toBe(20);
   });
 
   test("Heading requires text and is strict", () => {
@@ -271,6 +274,21 @@ describe("catalog", () => {
     expect(withChild("Badge", { text: "x" })).toBe(false);
     expect(withChild("Mermaid", { code: "graph TD; A-->B" })).toBe(false);
     expect(withChild("TreeDoc", { path: "/a/tree.json" })).toBe(false);
+    expect(withChild("Markdown", { body: "x" })).toBe(false);
+  });
+
+  test("Markdown requires a body and rejects overlapping block syntax", () => {
+    expect(
+      itemSchema.safeParse({ type: "Markdown", props: { body: "plain prose" } })
+        .success,
+    ).toBe(true);
+    expect(itemSchema.safeParse({ type: "Markdown", props: {} }).success).toBe(
+      false,
+    );
+    expect(
+      itemSchema.safeParse({ type: "Markdown", props: { body: "# heading" } })
+        .success,
+    ).toBe(false);
   });
 
   test("Badge requires text, is strict, and constrains variant", () => {
