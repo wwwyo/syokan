@@ -2,6 +2,7 @@ import { Outlet, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "../AppSidebar";
 import { SidebarProvider } from "../PageLayout/sidebarContext";
+import { useResizeScrollAnchor } from "./useResizeScrollAnchor";
 
 // During client transitions the open/closed state lives in memory (the resident shell);
 // only what needs to survive a hard reload is spilled to localStorage (guarded, since
@@ -24,12 +25,16 @@ function readPersistedOpen(): boolean {
  * open/closed state, scroll position, and already-fetched list alive across transitions.
  *
  * The body defers to document(window) scrolling; the sidebar is pinned to the viewport via
- * sticky. Restoring the reading position in the body is the router's scrollRestoration job
- * (there is no bespoke helper code of our own).
+ * sticky. Restoring the reading position across history navigation is the router's
+ * scrollRestoration job (untouched here); useResizeScrollAnchor covers the separate case of the
+ * content column changing width (window resize / sidebar toggle) and reflowing the current
+ * page's content under a fixed pixel scroll position.
  */
 export function AppShell() {
   const router = useRouter();
   const [open, setOpen] = useState(readPersistedOpen);
+
+  const pageColumnRef = useResizeScrollAnchor();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -71,7 +76,11 @@ export function AppShell() {
         className="flex min-h-svh w-full bg-background text-foreground"
       >
         <AppSidebar />
-        <div data-slot="page-column" className="flex min-w-0 flex-1 flex-col">
+        <div
+          ref={pageColumnRef}
+          data-slot="page-column"
+          className="flex min-w-0 flex-1 flex-col"
+        >
           <Outlet />
         </div>
       </div>
