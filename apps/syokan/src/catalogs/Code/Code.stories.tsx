@@ -47,7 +47,7 @@ export const WithFilename: Story = {
 };
 
 // An unspecified lang renders as plain text (no markdown interpretation)
-export const PlainTextLike: Story = {
+export const NoLangIsPlain: Story = {
   args: { code: "plain text without highlighting\n  indented line" },
 };
 

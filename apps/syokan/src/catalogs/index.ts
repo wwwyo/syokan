@@ -10,8 +10,8 @@ import { Diff, diffPropsSchema } from "./Diff";
 import { Graph, graphPropsSchema } from "./Graph";
 import { Heading, headingPropsSchema } from "./Heading";
 import { Link, linkPropsSchema } from "./Link";
+import { Markdown, markdownPropsSchema } from "./Markdown";
 import { Mermaid, mermaidPropsSchema } from "./Mermaid";
-import { PlainText, plainTextPropsSchema } from "./PlainText";
 import { Probe, probePropsSchema } from "./Probe";
 import { Stack, stackPropsSchema } from "./Stack";
 import { Stat, statPropsSchema } from "./Stat";
@@ -70,14 +70,16 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Link", linkPropsSchema, Link, { childrenTypes: [] }),
   defineViewComponent("Text", textPropsSchema, Text, { childrenTypes: [] }),
   defineViewComponent("Time", timePropsSchema, Time, { childrenTypes: [] }),
-  defineViewComponent("PlainText", plainTextPropsSchema, PlainText, {
-    childrenTypes: [],
-  }),
   defineViewComponent("Diff", diffPropsSchema, Diff, { childrenTypes: [] }),
   defineViewComponent("Code", codePropsSchema, Code, { childrenTypes: [] }),
   defineViewComponent("Badge", badgePropsSchema, Badge, { childrenTypes: [] }),
   defineViewComponent("Mermaid", mermaidPropsSchema, Mermaid, {
     childrenTypes: [],
+  }),
+  defineViewComponent("Markdown", markdownPropsSchema, Markdown, {
+    childrenTypes: [],
+    notes:
+      "Prose flow only. Block structure/data belongs to catalog nodes: headings, GFM tables, task-list items, raw HTML, images, and non-http(s) links are rejected — use Heading/Table/Checklist instead, or Link for a single external link.",
   }),
   defineViewComponent("TreeDoc", treeDocPropsSchema, TreeDoc, {
     childrenTypes: [],
@@ -99,7 +101,7 @@ const entries: readonly ViewComponentEntry[] = [
   }),
   defineViewComponent("Collapsible", collapsiblePropsSchema, Collapsible, {
     notes:
-      "children are the folded body. Open/closed is viewer-local UI state; give the node an id to persist it. Anchor navigation opens closed ancestors automatically.",
+      "children are the folded body. Open/closed is viewer-local UI state; give the node an id to persist it. Anchor navigation opens closed ancestors automatically. Fold data drill-downs (per-item detail, long payloads), never prose — prose belongs in a visible Markdown node, not behind a fold.",
   }),
   defineViewComponent("TagFilter", tagFilterPropsSchema, TagFilter, {
     notes:

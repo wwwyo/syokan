@@ -196,7 +196,7 @@ async function postWithServer(
 }
 
 // Input is JSON envelope only. To display plain text too, express it inside the envelope via the
-// PlainText catalog.
+// Code catalog (no lang).
 async function postText(text: string, deps: CliDeps): Promise<CliResult> {
   let payload: unknown;
   try {

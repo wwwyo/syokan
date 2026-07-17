@@ -9,8 +9,8 @@ import { Diff } from "./Diff";
 import { Graph } from "./Graph";
 import { Heading } from "./Heading";
 import { Link } from "./Link";
+import { Markdown } from "./Markdown";
 import { Mermaid } from "./Mermaid";
-import { PlainText } from "./PlainText";
 import { Probe } from "./Probe";
 import { Stack } from "./Stack";
 import { Stat } from "./Stat";
@@ -32,12 +32,12 @@ describe("catalog", () => {
     expect(specs.get("Link")?.type).toBe("Link");
     expect(specs.get("Text")?.type).toBe("Text");
     expect(specs.get("Time")?.type).toBe("Time");
-    expect(specs.get("PlainText")?.type).toBe("PlainText");
     expect(specs.get("Diff")?.type).toBe("Diff");
     expect(specs.get("Code")?.type).toBe("Code");
     expect(specs.get("Badge")?.type).toBe("Badge");
     expect(specs.get("Mermaid")?.type).toBe("Mermaid");
     expect(specs.get("TreeDoc")?.type).toBe("TreeDoc");
+    expect(specs.get("Markdown")?.type).toBe("Markdown");
   });
 
   test("itemSchema parses a Card containing Heading/Text children", () => {
@@ -49,7 +49,7 @@ describe("catalog", () => {
           type: "Heading",
           props: { text: "Title", level: 3, href: "https://example.com/" },
         },
-        { type: "Text", props: { body: "summary", muted: true, clamp: true } },
+        { type: "Text", props: { body: "summary", muted: true } },
       ],
     });
     expect(parsed.type).toBe("Card");
@@ -68,7 +68,6 @@ describe("catalog", () => {
     expect(components.get("Link")).toBe(asItem(Link));
     expect(components.get("Text")).toBe(asItem(Text));
     expect(components.get("Time")).toBe(asItem(Time));
-    expect(components.get("PlainText")).toBe(asItem(PlainText));
     expect(components.get("Diff")).toBe(asItem(Diff));
     expect(components.get("Code")).toBe(asItem(Code));
     expect(components.get("Badge")).toBe(asItem(Badge));
@@ -81,6 +80,7 @@ describe("catalog", () => {
     expect(components.get("TagFilter")).toBe(asItem(TagFilter));
     expect(components.get("Graph")).toBe(asItem(Graph));
     expect(components.get("Probe")).toBe(asItem(Probe));
+    expect(components.get("Markdown")).toBe(asItem(Markdown));
     expect(components.get("MarkdownDoc")).toBeUndefined();
     expect(components.get("FileDoc")).toBeUndefined();
     expect(components.size).toBe(19);
@@ -199,22 +199,6 @@ describe("catalog", () => {
     );
   });
 
-  test("PlainText requires a body string and is strict", () => {
-    expect(
-      itemSchema.safeParse({ type: "PlainText", props: { body: "raw" } })
-        .success,
-    ).toBe(true);
-    expect(itemSchema.safeParse({ type: "PlainText", props: {} }).success).toBe(
-      false,
-    );
-    expect(
-      itemSchema.safeParse({
-        type: "PlainText",
-        props: { body: "x", lang: "ts" },
-      }).success,
-    ).toBe(false);
-  });
-
   test("Diff requires a patch string and is strict", () => {
     expect(
       itemSchema.safeParse({ type: "Diff", props: { patch: "diff --git" } })
@@ -265,12 +249,26 @@ describe("catalog", () => {
     expect(withChild("Text", { body: "x" })).toBe(false);
     expect(withChild("Time", { datetime: "2026-05-21T03:04:00Z" })).toBe(false);
     expect(withChild("Link", { href: "https://example.com/" })).toBe(false);
-    expect(withChild("PlainText", { body: "x" })).toBe(false);
     expect(withChild("Diff", { patch: "diff" })).toBe(false);
     expect(withChild("Code", { code: "x" })).toBe(false);
     expect(withChild("Badge", { text: "x" })).toBe(false);
     expect(withChild("Mermaid", { code: "graph TD; A-->B" })).toBe(false);
     expect(withChild("TreeDoc", { path: "/a/tree.json" })).toBe(false);
+    expect(withChild("Markdown", { body: "x" })).toBe(false);
+  });
+
+  test("Markdown requires a body and rejects overlapping block syntax", () => {
+    expect(
+      itemSchema.safeParse({ type: "Markdown", props: { body: "plain prose" } })
+        .success,
+    ).toBe(true);
+    expect(itemSchema.safeParse({ type: "Markdown", props: {} }).success).toBe(
+      false,
+    );
+    expect(
+      itemSchema.safeParse({ type: "Markdown", props: { body: "# heading" } })
+        .success,
+    ).toBe(false);
   });
 
   test("Badge requires text, is strict, and constrains variant", () => {

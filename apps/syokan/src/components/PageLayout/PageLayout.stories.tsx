@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Card } from "../../catalogs/Card";
+import { Code } from "../../catalogs/Code";
 import { Heading } from "../../catalogs/Heading";
-import { PlainText } from "../../catalogs/PlainText";
 import { Stack } from "../../catalogs/Stack";
 import { Text } from "../../catalogs/Text";
 import { PageLayout } from ".";
@@ -31,7 +31,7 @@ export const Dashboard: Story = {
               level={3}
               href="https://bun.sh/blog/bun-v1.3"
             />
-            <Text body="Stabilized HTML import and dev server improvements." muted clamp />
+            <Text body="Stabilized HTML import and dev server improvements." muted />
           </Card>
           <Card>
             <Heading
@@ -42,9 +42,7 @@ export const Dashboard: Story = {
           </Card>
         </Stack>
         <Heading text="Meeting notes" level={2} />
-        <PlainText
-          body={"Decisions\n- Restructure the catalog into composable primitives"}
-        />
+        <Code code={"Decisions\n- Restructure the catalog into composable primitives"} />
       </Stack>
     </PageLayout>
   ),

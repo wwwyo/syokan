@@ -163,7 +163,7 @@ describe("cli main: post (default action)", () => {
 
   test("posts the envelope verbatim without injecting extra fields", async () => {
     const tree = JSON.stringify({
-      root: { type: "PlainText", props: { body: "hi" } },
+      root: { type: "Code", props: { code: "hi" } },
     });
     const { deps, calls } = makeDeps({
       files: { "doc.json": tree },
