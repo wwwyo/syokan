@@ -14,3 +14,8 @@ export const Plain: Story = { args: { body: "A regular short line of text." } };
 export const Muted: Story = {
   args: { body: "Dimmed supplementary text.", muted: true },
 };
+export const LineBreaks: Story = {
+  args: {
+    body: "First paragraph, with a\nsoft line break in the middle.\n\nSecond paragraph, on its own.",
+  },
+};
