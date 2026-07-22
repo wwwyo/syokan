@@ -7,6 +7,7 @@
 ## Repo learning skills
 
 - Brand/logo/OGP changes should load `.agents/skills/brand-assets/` for repo-specific asset pitfalls maintained by session-retro.
+- Code, build, dev-server, and filesystem-watcher changes should load `.agents/skills/coding/` for repo-specific pitfalls maintained by session-retro.
 
 ## Why build this
 
@@ -182,47 +183,6 @@ The global tool is **a single executable** (`bun run compile` → `apps/syokan/d
 - **dev / global separation**: global = `5173`; dev = `5273` with the repo-local `.syokan-dev/` (gitignored). The ports differ, so the two lazy-spawned servers never collide. Persistence locations are consolidated in `src/lib/paths.ts` and split across XDG base directories by lifecycle: **settings** (keep; tracked in dotfiles) at `~/.config/syokan/settings.json`; **templates** (keep; user data) at `~/.local/share/syokan/templates/`; **snapshots + runtime pid/port + logs** (machine-local; survive restarts but need no backup) at `~/.local/state/syokan/`. Everything used to be consolidated under config, but machine-local data mixed into the dotfiles-tracked tree (`~/.config`) invited accidentally committing it to git, so they were separated (respecting `XDG_{CONFIG,DATA,STATE}_HOME`). Snapshots go in state, not cache: cache's contract is "a third party may purge without notice", but syokan does not regenerate snapshots automatically (the producer must re-post), so losing them mid-use is unrecoverable. Location overrides carry no bespoke `SYOKAN_*` envs — they are consolidated on `XDG_*_HOME` alone. In dev, the `dev` script in `package.json` points `XDG_{CONFIG,DATA,STATE}_HOME` at `$PWD/.syokan-dev/{config,data,state}` so global settings stay clean. XDG envs affect the whole process, so they are scoped via `env` to the server process (bun) only, to avoid dragging in other pipeline tools like `portless`. To check renderer changes against a local snapshot, post to the dev server with `syokan snapshot.json`: inside this repo the mise `[shell_alias]` remaps `syokan` to the local-source CLI pinned to `SYOKAN_BASE_URL=http://localhost:5273` (= the dev server), so in-repo `syokan` never posts to the production instance by accident. Outside the repo the alias is unset and `syokan` is the global binary (= 5173, production). Trade-off: while cd'd in the repo you can't reach the production instance via bare `syokan` (rare; production use happens outside the repo).
 - Gatekeeper may block unsigned binaries on macOS. Local builds run as-is, but if a distributed/copied binary is rejected: `codesign --sign - apps/syokan/dist/syokan`.
 - **Distribution**: `bun run compile:all` (= `build.ts --release`) cross-compiles each OS/arch and emits `apps/syokan/dist/syokan-<os>-<arch>` (names in a form mise's `github` backend can use to detect OS/arch). Upload to a GitHub Release and install with `mise use -g github:wwwyo/syokan@latest`. Cross-compilation downloads the target bun runtime each time.
-
-## Known pitfalls
-
-### Catalog `Code` / `Diff` collapse in dev (StrictMode)
-
-`@pierre/diffs`' `File` (the catalog's `Code` / `Diff`) **collapses to height 0 on first render in `bun run dev` (React StrictMode) when the grammar is cold**. Easy to hit inside tabs or on client transitions (ViewPage is intermittent; the home "usage" tab used to be deterministic before it moved to `CodeSnippet`).
-
-- **Cause**: on a cold first render, File emits an empty placeholder (height 0) and swaps in the body via a re-render callback when async highlighting completes. Under StrictMode's mount→unmount→remount, that callback lands on the old instance, already `cleanUp`'d (`enabled=false`) at unmount, becoming a no-op — so it stays collapsed.
-- **Dev-only impact**. Warm (grammar cached) renders and production builds (StrictMode disabled) render fine. `disableWorkerPool` / delayed mount / removing the ResizeObserver patch / changing the default tab all fail (the core is async callback × lifecycle).
-- **Policy**: for static code fragments that need no highlighting, use `components/CodeSnippet` (a bare `<pre>`; independent of initial measurement, never collapses). Docs that need highlighting stay on catalog `Code` (accept the dev-time appearance; it renders in production). Details in the comment in `src/catalogs/Code/index.tsx`.
-- **Upstream**: a robustness bug on pierre's side — after a StrictMode remount, the async highlight completion callback is not re-attached to the new instance. Candidate for an upstream issue.
-
-### Bun (macOS) `fs.watch`: watching a parent directory does not fire on content changes inside it
-
-Hit while implementing the file-reference node's change watching (`server/fileSource.ts`; then `FileDoc`, now `TreeDoc`).
-
-- **The pitfall**: a "write temp → rename" save (editors' common atomic save) swaps the target file's inode, so a naive `fs.watch(path)` loses track of changes after the swap. The textbook fix is "watch the parent directory and filter by basename", but on **Bun (macOS), `fs.watch(dir)` does not fire on content changes of files inside it** — verified on a real machine (dir watch is unusable).
-- **Policy (macOS)**: watch the file itself; on a `rename` event (the signal for inode swap/deletion), re-arm a watch on the same path. If the replacement hasn't appeared yet, retry with a cap. This follows "rename save → subsequent in-place writes".
-- **Remaining limit (macOS)**: if a file is deleted and re-created at the same path only after a while, live updates stop once the re-arm retry cap is exceeded (the view shows not_found via GET). Accepted for MVP. Details in `.agent/prd/file-source-sync/decision.log` #7.
-- **Linux is the mirror image** (verified in an oven/bun container, Bun 1.3.12): watching the file itself is *silent* on an inode swap (rename-over never fires, and the re-arm never triggers), while watching the parent directory works. So `fileSource.ts` branches per platform: Linux watches the parent dir, macOS watches the file. Two extra Linux traps: (1) events in a burst (create tmp → write → rename) are coalesced down to as little as **one** event, and the survivor may carry the *temp file's* name — so do not filter dir events by basename, or atomic saves get dropped; (2) a freshly armed watcher exhibits this most reliably, so "arm then immediately rename" tests fail under a basename filter even though spaced-out events look fine.
-
-### `bunfig.toml` is read from cwd only, so the dev server's Tailwind plugin needs a per-package copy
-
-Hit after the monorepo split: the dev server rendered completely unstyled (served CSS had zero utility classes).
-
-- **The pitfall**: the dev server bundles the frontend via the `index.html` import, and the Tailwind expansion comes from `[serve.static] plugins = ["bun-plugin-tailwind"]` in `bunfig.toml`. Bun reads `bunfig.toml` **from `$cwd` only** (it does not walk up to the workspace root, and `bun --config <path>` silently no-ops for `bun run`). The root `dev` script runs each package's dev via `bun --filter`, so the syokan server starts with cwd `apps/syokan/` — where the root `bunfig.toml` is invisible, so the plugin never loads.
-- **Fix**: `apps/syokan/bunfig.toml` is a **symlink to `../../bunfig.toml`** so the same config (plugin + the supply-chain `[install]` settings) resolves from the package cwd without duplication. If the app ever renders unstyled in dev, check that symlink first.
-
-### Bun dev server serves a stale module bundle after an edit
-
-Hit while wiring the brand `Logo` into `Home.tsx` and the sidebar.
-
-- **The pitfall**: after editing a source file, `bun run dev` (the HTML-import bundler + HMR) can keep serving the *previous* bundle of the edited module — the DOM still shows the old code — even though an unrelated sibling edited in the same batch reloads fine. `touch`-ing the file and reloading the browser do **not** clear it.
-- **Policy**: when an edit doesn't appear in the preview, restart the dev server (stop → start) for a clean bundle instead of chasing HMR. `tsc` stays green regardless, so a source-vs-DOM mismatch (not the type checker) is the signal.
-
-### Favicon / OG live in two HTML heads, and `<meta>`-only assets aren't bundled
-
-Hit while adding the brand favicon + OG image.
-
-- **Two entrypoints**: `apps/syokan/index.html` (main app) and `apps/share/viewer/index.html` (public share) are independent heads. The shared favicon (`<link rel="icon">` SVG data URI) must be added to **both** and kept in sync by hand. OG/Twitter `<meta>` and the raster icon fallbacks (`.ico` / apple-touch) live on the **public share head only** — the main app is a localhost bind, never unfurled or home-screened, so it stays SVG-favicon-only.
-- **Bundler blind spot**: Bun's HTML-entry build (`apps/share/build.ts`) only follows `<script>` / `<link rel=stylesheet>` imports. A static file referenced *only* from `<meta property="og:image">` is **not** copied into `dist` — `build.ts` must copy it explicitly. It also tries to *resolve* file-path `<link href>` (favicon `.ico` / apple-touch), which fails the build, so those links are injected post-build instead of living in the source HTML. Inline `data:` URIs (the SVG favicon) survive minify, so they need no copy.
 
 ## Communication policy
 
