@@ -52,7 +52,9 @@ export type ButtonInlineContent = z.infer<typeof buttonInlineContentSchema>;
 function RenderInlineItem({ item }: { item: InlineItem }) {
   switch (item.type) {
     case "Text":
-      return <Text {...item.props} />;
+      // inline: this run sits inside a horizontal inline flow (and sometimes a <button>
+      // — Collapsible summary, Checklist label), so Text must not emit block markup.
+      return <Text {...item.props} inline />;
     case "Link":
       return <Link {...item.props} />;
     case "Badge":
