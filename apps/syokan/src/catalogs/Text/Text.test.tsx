@@ -71,4 +71,38 @@ describe("Text", () => {
       ),
     ).toBe(true);
   });
+
+  test("a lone newline renders a single empty p, not a <br>", () => {
+    const el = Text({ body: "\n" });
+    expect(el.type).toBe("p");
+    expect((el.props as { children: unknown }).children).toBe("");
+  });
+
+  test("two newlines (\\n\\n) with nothing else render a single empty p, not a <br>", () => {
+    const el = Text({ body: "\n\n" });
+    expect(el.type).toBe("p");
+    expect((el.props as { children: unknown }).children).toBe("");
+  });
+
+  test("CRLF soft break renders one <br>, same as LF", () => {
+    const el = Text({ body: "a\r\nb" });
+    expect(el.type).toBe("p");
+    const children = (el.props as { children: unknown[] }).children;
+    expect(children).toEqual([
+      "a",
+      expect.objectContaining({ type: "br" }),
+      "b",
+    ]);
+  });
+
+  test("CRLF paragraph break splits into two p elements, same as LF", () => {
+    const el = Text({ body: "a\r\n\r\nb" });
+    expect(el.type).toBe("div");
+    const paragraphs = (el.props as { children: unknown[] }).children;
+    expect(
+      (paragraphs as { props: { children: string } }[]).map(
+        (p) => p.props.children,
+      ),
+    ).toEqual(["a", "b"]);
+  });
 });
