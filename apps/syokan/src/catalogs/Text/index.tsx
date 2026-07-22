@@ -52,9 +52,47 @@ function paragraphElement(text: string, className: string, key?: number) {
   );
 }
 
+/**
+ * Inline rendering collapses every newline run (`\n` or `\n\n`+) to a single `<br>` —
+ * there is no paragraph concept inside a run of inline content, so a "paragraph break"
+ * degrades to the same soft break rather than being dropped silently.
+ */
+function renderInlineBody(body: string): ReactNode {
+  const normalized = body.replace(/\r\n?/g, "\n").replace(/^\n+|\n+$/g, "");
+  const lines = normalized.split(/\n+/);
+  if (lines.length === 1) {
+    return lines[0] ?? "";
+  }
+  return lines.flatMap((line, i) =>
+    i === 0
+      ? [line]
+      : // biome-ignore lint/suspicious/noArrayIndexKey: static content, order never changes
+        [<br key={i} />, line],
+  );
+}
+
+/**
+ * `inline` is deliberately not part of `textPropsSchema` (the public LLM-facing props
+ * contract): it is an internal rendering mode selected by the embedding container
+ * (`InlineContentView`), not something a producer chooses per-node.
+ */
+type TextRenderProps = TextProps & { inline?: boolean };
+
 /** Short or supplementary text (single line or a few lines), supporting soft line breaks (`\n`) and paragraph breaks (`\n\n`). */
-export function Text({ body, muted }: TextProps) {
+export function Text({ body, muted, inline }: TextRenderProps) {
   const className = cn("text-sm leading-6", muted && "text-muted-foreground");
+
+  if (inline) {
+    // A block-level <p> (or <div> wrapping several <p>s) inside a <button> (Collapsible
+    // summary, Checklist label) is invalid HTML — button content must be phrasing content —
+    // so the inline path never emits <p>/<div>, only a <span>.
+    return (
+      <span data-slot="text" className={className}>
+        {renderInlineBody(body)}
+      </span>
+    );
+  }
+
   const paragraphs = splitParagraphs(body);
   // A body that is only newlines (or empty after trimming) still renders one empty paragraph
   // rather than falling back to the raw, unsplit body.

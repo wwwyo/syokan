@@ -105,4 +105,36 @@ describe("Text", () => {
       ),
     ).toEqual(["a", "b"]);
   });
+
+  test("inline mode renders a span, never a p or div", () => {
+    const el = Text({ body: "hello", inline: true });
+    expect(el.type).toBe("span");
+    expect((el.props as { "data-slot": string })["data-slot"]).toBe("text");
+  });
+
+  test("inline mode collapses a paragraph break (\\n\\n) to a single <br>, not a div/p", () => {
+    const el = Text({ body: "first\n\nsecond", inline: true });
+    expect(el.type).toBe("span");
+    const children = (el.props as { children: unknown[] }).children;
+    expect(children).toEqual([
+      "first",
+      expect.objectContaining({ type: "br" }),
+      "second",
+    ]);
+  });
+
+  test("inline mode collapses any run of newlines to exactly one <br>", () => {
+    const el = Text({ body: "a\n\n\n\nb", inline: true });
+    const children = (el.props as { children: unknown[] }).children;
+    expect(children).toEqual([
+      "a",
+      expect.objectContaining({ type: "br" }),
+      "b",
+    ]);
+  });
+
+  test("inline mode with no newlines renders the plain string, matching block mode", () => {
+    const el = Text({ body: "no breaks", inline: true });
+    expect((el.props as { children: unknown }).children).toBe("no breaks");
+  });
 });
