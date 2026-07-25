@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useDocumentTitle } from "./lib/documentTitle";
 import { t } from "./lib/i18n";
 import type { SnapshotEnvelope } from "./schema";
 import { CodeSnippet } from "./components/CodeSnippet";
@@ -25,6 +26,7 @@ export type ViewPageProps = {
 export function ViewPage({ envelope, onDelete }: ViewPageProps) {
   const fullBleed = isFullBleed(envelope);
   const [showSource, setShowSource] = useState(false);
+  useDocumentTitle(envelope.title);
   const source = useMemo(() => JSON.stringify(envelope, null, 2), [envelope]);
   return (
     <PageLayout
