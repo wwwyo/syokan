@@ -17,8 +17,12 @@ export function formatDocumentTitle(title?: string): string {
 export function useDocumentTitle(title?: string): void {
   useEffect(() => {
     document.title = formatDocumentTitle(title);
+  }, [title]);
+  // Reset is a separate mount-scoped effect so a title change does not run it: keeping it in the
+  // [title] effect's cleanup would write the app name on every update just to overwrite it again.
+  useEffect(() => {
     return () => {
       document.title = APP_NAME;
     };
-  }, [title]);
+  }, []);
 }
