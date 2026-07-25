@@ -1,5 +1,5 @@
+import { Code } from "./catalogs/Code";
 import { SidebarToggle } from "./components/AppSidebar/SidebarToggle";
-import { CodeSnippet } from "./components/CodeSnippet";
 import { FontSelect } from "./components/FontSelect";
 import { LogoLockup } from "./components/LogoLockup";
 import { PageLayout } from "./components/PageLayout";
@@ -11,16 +11,18 @@ function UsageSection({
   title,
   body,
   code,
+  lang,
 }: {
   title: string;
   body: string;
   code: string;
+  lang: string;
 }) {
   return (
     <section>
       <h2 className="mb-3 mt-6 text-2xl font-semibold tracking-tight">{title}</h2>
       <p className="my-3 leading-7">{body}</p>
-      <CodeSnippet code={code} />
+      <Code code={code} lang={lang} />
     </section>
   );
 }
@@ -76,18 +78,21 @@ export function Home() {
             title={t.home.usage.step1Title}
             body={t.home.usage.step1Body}
             code={t.home.usage.step1Code}
+            lang="bash"
           />
           <p className="my-3 leading-7">{t.home.usage.responseLabel}</p>
-          <CodeSnippet code={t.home.usage.responseCode} />
+          <Code code={t.home.usage.responseCode} lang="json" />
           <UsageSection
             title={t.home.usage.step2Title}
             body={t.home.usage.step2Body}
             code={t.home.usage.step2Code}
+            lang="bash"
           />
           <UsageSection
             title={t.home.usage.step3Title}
             body={t.home.usage.step3Body}
             code={t.home.usage.step3Code}
+            lang="bash"
           />
           <section>
             <h2 className="mb-3 mt-6 text-2xl font-semibold tracking-tight">

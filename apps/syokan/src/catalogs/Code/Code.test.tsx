@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { Code, codePropsSchema } from ".";
+import { Code, codePropsSchema, dropIncompletePre } from ".";
 
 describe("codePropsSchema", () => {
   test("accepts code with optional lang/filename", () => {
@@ -37,5 +37,48 @@ describe("Code", () => {
     );
     expect(html).toContain('data-slot="code-filename"');
     expect(html).toContain("a.ts");
+  });
+});
+
+describe("dropIncompletePre", () => {
+  // A fake shadow root: this suite has no DOM, and the point under test is which <pre> the
+  // predicate picks — not pierre's rendering.
+  function fakeRoot(pres: boolean[]) {
+    const nodes = pres.map((hasCode) => ({
+      hasCode,
+      removed: false,
+      querySelector: (sel: string) =>
+        sel === "[data-code]" && hasCode ? ({} as Element) : null,
+      remove() {
+        this.removed = true;
+      },
+    }));
+    const root = {
+      querySelectorAll: () => nodes,
+    } as unknown as ShadowRoot;
+    return { root, nodes };
+  }
+
+  test("removes a placeholder <pre> that never received the highlighted body", () => {
+    const { root, nodes } = fakeRoot([false]);
+    dropIncompletePre(root);
+    expect(nodes[0]?.removed).toBe(true);
+  });
+
+  test("leaves a completed <pre> alone (warm / production renders must not be touched)", () => {
+    const { root, nodes } = fakeRoot([true]);
+    dropIncompletePre(root);
+    expect(nodes[0]?.removed).toBe(false);
+  });
+
+  test("checks every <pre>, not just the first", () => {
+    const { root, nodes } = fakeRoot([true, false, true]);
+    dropIncompletePre(root);
+    expect(nodes.map((n) => n.removed)).toEqual([false, true, false]);
+  });
+
+  test("tolerates a missing shadow root", () => {
+    expect(() => dropIncompletePre(null)).not.toThrow();
+    expect(() => dropIncompletePre(undefined)).not.toThrow();
   });
 });
