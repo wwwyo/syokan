@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 
+// Duplicated in index.html's <title> on purpose: that one must render before any JS loads,
+// and the HTML entry cannot import from here. Rename both together.
 const APP_NAME = "syokan";
 
 /** "<view title> | syokan"; an absent / blank title falls back to the bare app name. */
