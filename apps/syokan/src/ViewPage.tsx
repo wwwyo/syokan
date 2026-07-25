@@ -44,8 +44,7 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
       }
     >
       {/* hidden, not unmounted: unmounting would wipe in-memory node state
-          (Collapsible / TagFilter / Probe) and re-trigger pierre's dev StrictMode
-          collapse on every toggle-back. */}
+          (Collapsible / TagFilter / Probe) on every toggle-back. */}
       <div hidden={showSource} className={fullBleed ? "h-full" : undefined}>
         <ViewStateProvider scopeKey={envelope.id}>
           <Render item={envelope.root} />

@@ -29,18 +29,18 @@ const FILE_STYLE = {
   "--diffs-line-height": "1.65",
 } as CSSProperties;
 
-// Dev StrictMode collapse fix. On a cold-grammar first render, File paints an empty <pre>
-// (no [data-code]) into its shadow DOM, then StrictMode unmounts before the async highlight
-// lands. The remounted instance's shouldRenderCode() only tests `pre == null`, so it adopts the
-// stale empty <pre> via the hydrate path — which never registers a completion callback — and
-// stays collapsed. Dropping the incomplete <pre> at unmount forces the remount back onto the
-// normal render path (pre == null → re-highlights). A module-level stable ref avoids option
-// equality churn; warm/production renders leave a completed <pre> ([data-code]) untouched.
+// Dev StrictMode collapse fix. On a cold-grammar first render, File paints an empty <pre> (one
+// holding no [data-code] node) into its shadow DOM, then StrictMode unmounts before the async
+// highlight lands. The remounted instance's shouldRenderCode() only tests `pre == null`, so it
+// adopts the stale empty <pre> via the hydrate path — which never registers a completion callback
+// — and stays collapsed. Dropping the incomplete <pre> at unmount forces the remount back onto
+// the normal render path (pre == null → re-highlights). A module-level stable ref avoids option
+// equality churn; warm/production renders leave a filled-in <pre> untouched.
 // Exported for the unit test: the DOM predicate is the part that must not drift, and a full
 // StrictMode-remount test would need a browser + warm grammar cache this suite doesn't have.
 export function dropIncompletePre(root: ShadowRoot | null | undefined): void {
   // Every <pre>, not just the first: which one carries the code is pierre's business, and
-  // removing only completed ones is safe regardless of how many it paints.
+  // keeping only the ones that contain a [data-code] node is safe regardless of how many it paints.
   for (const pre of root?.querySelectorAll("pre") ?? []) {
     if (!pre.querySelector("[data-code]")) pre.remove();
   }
