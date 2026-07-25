@@ -185,14 +185,15 @@ The global tool is **a single executable** (`bun run compile` → `apps/syokan/d
 
 ## Known pitfalls
 
-### Catalog `Code` / `Diff` collapse in dev (StrictMode)
+### Catalog `Code` / `Diff` collapse in dev (StrictMode) — fixed, keep the guard
 
-`@pierre/diffs`' `File` (the catalog's `Code` / `Diff`) **collapses to height 0 on first render in `bun run dev` (React StrictMode) when the grammar is cold**. Easy to hit inside tabs or on client transitions (ViewPage is intermittent; the home "usage" tab used to be deterministic before it moved to `CodeSnippet`).
+`@pierre/diffs`' `File` (the catalog's `Code` / `Diff`) used to **collapse to height 0 on first render in `bun run dev` (React StrictMode) when the grammar is cold** (deterministic in the home "usage" tab, intermittent on client transitions). It is fixed by an `onPostRender` guard in `src/catalogs/Code/index.tsx` — do not delete that hook, and re-check the tab render whenever the pierre version moves.
 
-- **Cause**: on a cold first render, File emits an empty placeholder (height 0) and swaps in the body via a re-render callback when async highlighting completes. Under StrictMode's mount→unmount→remount, that callback lands on the old instance, already `cleanUp`'d (`enabled=false`) at unmount, becoming a no-op — so it stays collapsed.
-- **Dev-only impact**. Warm (grammar cached) renders and production builds (StrictMode disabled) render fine. `disableWorkerPool` / delayed mount / removing the ResizeObserver patch / changing the default tab all fail (the core is async callback × lifecycle).
-- **Policy**: for static code fragments that need no highlighting, use `components/CodeSnippet` (a bare `<pre>`; independent of initial measurement, never collapses). Docs that need highlighting stay on catalog `Code` (accept the dev-time appearance; it renders in production). Details in the comment in `src/catalogs/Code/index.tsx`.
-- **Upstream**: a robustness bug on pierre's side — after a StrictMode remount, the async highlight completion callback is not re-attached to the new instance. Candidate for an upstream issue.
+- **Cause**: on a cold first render File paints an empty `<pre>` (no `[data-code]`) into its shadow DOM and fills it in when async highlighting completes. StrictMode unmounts before that lands; on remount, `shouldRenderCode()` only tests whether the `<pre>` exists, so the new instance adopts the stale empty one through the hydrate path, which registers no completion callback — the body never arrives.
+- **The fix**: drop an incomplete `<pre>` at unmount, so the remount takes the normal render path and re-highlights. Warm and production renders leave a completed `<pre>` untouched.
+- **Dead ends** (kept so they aren't retried): `disableWorkerPool`, delayed mount, removing the ResizeObserver patch, changing the default tab. The knob that matters is which DOM the remount inherits, not timing.
+- **Upstream**: a robustness bug on pierre's side — `shouldRenderCode()` treats a placeholder `<pre>` as rendered output. Candidate for an upstream issue; the guard above is a consumer-side workaround.
+- `components/CodeSnippet` (a bare `<pre>`) is no longer a fallback for this and stays only for the public share viewer, which renders doc snippets without pulling in the highlighter.
 
 ### Bun (macOS) `fs.watch`: watching a parent directory does not fire on content changes inside it
 

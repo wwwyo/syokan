@@ -1,4 +1,4 @@
-import { File } from "@pierre/diffs/react";
+import { File, type FileOptions } from "@pierre/diffs/react";
 import type { CSSProperties } from "react";
 import { z } from "zod";
 import { toCodeLang } from "../../lib/code";
@@ -29,11 +29,27 @@ const FILE_STYLE = {
   "--diffs-line-height": "1.65",
 } as CSSProperties;
 
+// Dev StrictMode collapse fix. On a cold-grammar first render, File paints an empty <pre>
+// (no [data-code]) into its shadow DOM, then StrictMode unmounts before the async highlight
+// lands. The remounted instance's shouldRenderCode() only tests `pre == null`, so it adopts the
+// stale empty <pre> via the hydrate path — which never registers a completion callback — and
+// stays collapsed. Dropping the incomplete <pre> at unmount forces the remount back onto the
+// normal render path (pre == null → re-highlights). A module-level stable ref avoids option
+// equality churn; warm/production renders leave a completed <pre> ([data-code]) untouched.
+const removeIncompleteRender: NonNullable<
+  FileOptions<undefined>["onPostRender"]
+> = (node, _instance, phase) => {
+  if (phase !== "unmount") return;
+  const pre = node.shadowRoot?.querySelector("pre");
+  if (pre && !pre.querySelector("[data-code]")) pre.remove();
+};
+
 const FILE_OPTIONS = {
   // The github theme, kept consistent across all code display in the app. dark/light switches via themeType
   theme: { dark: "github-dark", light: "github-light" },
   disableFileHeader: true,
   overflow: "scroll",
+  onPostRender: removeIncompleteRender,
 } as const;
 
 /**
