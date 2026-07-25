@@ -36,12 +36,21 @@ const FILE_STYLE = {
 // stays collapsed. Dropping the incomplete <pre> at unmount forces the remount back onto the
 // normal render path (pre == null → re-highlights). A module-level stable ref avoids option
 // equality churn; warm/production renders leave a completed <pre> ([data-code]) untouched.
+// Exported for the unit test: the DOM predicate is the part that must not drift, and a full
+// StrictMode-remount test would need a browser + warm grammar cache this suite doesn't have.
+export function dropIncompletePre(root: ShadowRoot | null | undefined): void {
+  // Every <pre>, not just the first: which one carries the code is pierre's business, and
+  // removing only completed ones is safe regardless of how many it paints.
+  for (const pre of root?.querySelectorAll("pre") ?? []) {
+    if (!pre.querySelector("[data-code]")) pre.remove();
+  }
+}
+
 const removeIncompleteRender: NonNullable<
   FileOptions<undefined>["onPostRender"]
 > = (node, _instance, phase) => {
   if (phase !== "unmount") return;
-  const pre = node.shadowRoot?.querySelector("pre");
-  if (pre && !pre.querySelector("[data-code]")) pre.remove();
+  dropIncompletePre(node.shadowRoot);
 };
 
 const FILE_OPTIONS = {
