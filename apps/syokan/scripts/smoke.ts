@@ -9,7 +9,17 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const bin = process.argv[2] ?? fileURLToPath(new URL("../dist/syokan", import.meta.url));
-const port = 40000 + (process.pid % 20000);
+
+// Let the OS hand out a free ephemeral port instead of deriving one from the PID —
+// a fixed guess can collide with whatever else runs on a shared CI runner.
+function freePort(): number {
+  const listener = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
+  const picked = listener.port;
+  listener.stop(true);
+  return picked;
+}
+
+const port = freePort();
 const baseUrl = `http://localhost:${port}`;
 const work = mkdtempSync(join(tmpdir(), "syokan-smoke-"));
 const env = {
@@ -131,9 +141,10 @@ try {
   });
 
   await step("syokan stop shuts the server down", async () => {
+    // Assert the exit code and the observable effect (health goes down) — not the CLI's
+    // human-readable wording, which may change without the stop behavior changing.
     const r = await run(["stop"]);
-    if (r.code !== 0 || !r.err.includes("stopped server")) throw new Error(`exit=${r.code}\n${r.err}`);
-    // Don't trust the CLI's report alone — the health endpoint must actually stop answering.
+    if (r.code !== 0) throw new Error(`exit=${r.code}\n${r.err}`);
     const deadline = Date.now() + 5000;
     for (;;) {
       try {
