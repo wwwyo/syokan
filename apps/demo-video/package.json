@@ -10,9 +10,9 @@
     "still": "remotion still Demo"
   },
   "dependencies": {
-    "@remotion/cli": "4.0.484",
-    "@remotion/google-fonts": "4.0.484",
-    "remotion": "4.0.484"
+    "@remotion/cli": "4.0.491",
+    "@remotion/google-fonts": "4.0.491",
+    "remotion": "4.0.491"
   },
   "devDependencies": {
     "@types/react": "catalog:",
