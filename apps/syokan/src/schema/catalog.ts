@@ -5,10 +5,9 @@ export type Item = {
   props: Record<string, unknown>;
   children?: Item[];
   key?: string;
-  // cross-cutting mechanisms (available on every node, independent of type):
-  // id anchors the node for in-view navigation; tags opt the node into TagFilter narrowing.
+  // cross-cutting mechanism (available on every node, independent of type):
+  // id anchors the node for in-view navigation.
   id?: string;
-  tags?: string[];
 };
 
 export type ComponentSpec<
@@ -92,10 +91,13 @@ function buildUnion(
         props: spec.propsSchema,
         children: childrenSchema,
         key: z.string().min(1).optional(),
-        id: z.string().min(1).optional(),
-        // min(1): an empty tags array opts the node into filtering yet matches no
-        // selection, so it would vanish whenever any filter is active. Omit instead.
-        tags: z.array(z.string().min(1)).min(1).optional(),
+        id: z
+          .string()
+          .min(1)
+          .describe(
+            "In-view anchor and UI-state identity. A Link with href \"#<id>\" scrolls to the node, temporarily highlighting it and revealing it if inside a closed Collapsible or a checked-folded Checklist item. Interactive nodes (Checklist/Collapsible/Probe) persist their state across reloads only when they carry an id.",
+          )
+          .optional(),
       })
       .strict();
   });

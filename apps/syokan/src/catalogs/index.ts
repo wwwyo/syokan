@@ -16,7 +16,6 @@ import { Probe, probePropsSchema } from "./Probe";
 import { Stack, stackPropsSchema } from "./Stack";
 import { Stat, statPropsSchema } from "./Stat";
 import { Table, tablePropsSchema } from "./Table";
-import { TagFilter, tagFilterPropsSchema } from "./TagFilter";
 import { Text, textPropsSchema } from "./Text";
 import { Time, timePropsSchema } from "./Time";
 import { TreeDoc, treeDocPropsSchema } from "./TreeDoc";
@@ -88,7 +87,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Table", tablePropsSchema, Table, {
     childrenTypes: [],
     notes:
-      "Display-only. Cells accept a string, one inline node (Text/Link/Badge/Time), or an array of them. Row narrowing is not a Table feature — tag the rows' surrounding nodes and use TagFilter.",
+      "Display-only. Cells accept a string, one inline node (Text/Link/Badge/Time), or an array of them.",
   }),
   defineViewComponent("Stat", statPropsSchema, Stat, {
     childrenTypes: [],
@@ -103,10 +102,6 @@ const entries: readonly ViewComponentEntry[] = [
     notes:
       "children are the folded body. Open/closed is viewer-local UI state; give the node an id to persist it. Anchor navigation opens closed ancestors automatically. Fold data drill-downs (per-item detail, long payloads), never prose — prose belongs in a visible Markdown node, not behind a fold.",
   }),
-  defineViewComponent("TagFilter", tagFilterPropsSchema, TagFilter, {
-    notes:
-      "Narrows descendants: when chips are selected, only nodes whose cross-cutting `tags` intersect the selection stay visible; untagged nodes always show. Give the node an id to persist the selection.",
-  }),
   defineViewComponent("Graph", graphPropsSchema, Graph, {
     childrenTypes: [],
     notes:
@@ -115,7 +110,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Probe", probePropsSchema, Probe, {
     childrenTypes: [],
     notes:
-      "check must be one of the predefined read-only kinds (see mechanisms.probe.kinds); include the generation-time run as `result`. Viewers re-run it via the local server; reruns land in viewer-local UI state. On shared views rerun is disabled and args/results are hidden unless shareVisible.",
+      "check must be one of the predefined read-only kinds (see this type's own `check` props schema in `syokan catalog`); include the generation-time run as `result`. Viewers re-run it via the local server; reruns land in viewer-local UI state. On shared views rerun is disabled and args/results are hidden unless shareVisible.",
   }),
 ];
 

@@ -30,3 +30,20 @@ export function createSnapshotEnvelopeSchema(itemSchema: z.ZodType<Item>) {
     })
     .strict();
 }
+
+// The POST/PUT request-body shape: distinct from the stored SnapshotEnvelope above
+// (no id/createdAt; schemaVersion is optional; carries idempotencyKey instead). This is
+// the SSOT published at GET /api/catalog under `envelope` (see catalogs/manifest.ts) so
+// producers pull the contract from the API instead of a hand-copied doc. Tree-wide id
+// uniqueness (findDuplicateId) is a cross-node invariant the schema alone can't express
+// concisely, so callers layer a superRefine on top (see server/routes.ts).
+export function createSnapshotInputSchema(itemSchema: z.ZodType<Item>) {
+  return z
+    .object({
+      schemaVersion: z.literal(CURRENT_SCHEMA_VERSION).optional(),
+      title: z.string().min(1).optional(),
+      root: itemSchema,
+      idempotencyKey: z.string().min(1).optional(),
+    })
+    .strict();
+}

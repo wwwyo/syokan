@@ -88,25 +88,27 @@ snapshot **envelope**（**JSON** のみ。markdown は描画されない — 文
 
 ```jsonc
 {
-  "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // 必須: view tree
-  "title": "Today's RSS",                              // 任意
-  "idempotencyKey": "rss-2026-06-20"                   // POST では任意・PUT では必須: view に名前を付け、後から狙い撃てるようにする
+  "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] },
+  "title": "Today's RSS",
+  "idempotencyKey": "rss-2026-06-20"
 }
 ```
+
+スキーマの SSOT は `GET /api/catalog` が返す `envelope` キー（`syokan catalog` からも見られる）— フィールドを手で書き写さず、そこから引くこと。
 
 `POST` は常に新規作成(`201`)し、`idempotencyKey` は以後の `PUT` の的として登録するだけ。`PUT` は `idempotencyKey` 必須で既存の view を狙い撃つ: 一致すれば `root`/`title` をその場で置き換え(id/url は同じ、`createdAt` は初回のまま)`200`、一致が無ければ `404`(`not_found`)——`PUT` は新規作成しない(`allowMissing` のような逃げ道は無い。作りたいときは `POST` を使う)。検証エラーは `400`（`invalid_json` / `validation_failed`）。CLI コマンドは `syokan --help`。
 
 ## catalog
 
-`type` の SSOT は catalog（`apps/syokan/src/catalogs`）。manifest を取得して props 契約を引く:
+`type` の SSOT は catalog（`apps/syokan/src/catalogs`）。manifest を取得して props 契約と全 type 一覧を引く — `syokan catalog`（CLI）または:
 
 ```
-GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], mechanisms: { node, uiState, probe } }
+GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], envelope: <POST/PUT body の JSON Schema> }
 ```
 
-現在の type — container: `Stack` `Card` `Checklist` `Collapsible` `TagFilter` / leaf: `Heading` `Link` `Text` `Time` `Diff` `Code` `Badge` `Mermaid` `TreeDoc` `Table` `Stat` `Graph` `Probe`。Storybook（`bun run storybook`）で視覚的に確認できる。
+type は Storybook（`bun run storybook`）で視覚的に確認できる。
 
-すべての node は横断フィールド `id`（view 内 anchor。`Link href:"#<id>"` で移動でき、操作を持つ node が閲覧端末ローカルの状態を保持するための identity にもなる）と `tags`（祖先 `TagFilter` による絞り込み対象化）を受け付ける。操作状態（チェック・開閉・絞り込み選択・Probe 再実行）は閲覧側ブラウザに留まり、snapshot 本体は不変のまま。`Probe` は `mechanisms.probe.kinds` に公開された事前定義の読み取り専用 check だけを実行でき（`POST /api/probes/run`）、公開共有では再実行が無効化され、`shareVisible: true` を指定しない限り publish 時に引数と結果が envelope から削除される。
+すべての node は横断フィールド `id`（view 内 anchor。`Link href:"#<id>"` で移動でき、操作を持つ node が閲覧端末ローカルの状態を保持するための identity にもなる）を受け付ける。操作状態（チェック・開閉・Probe 再実行）は閲覧側ブラウザに留まり、snapshot 本体は不変のまま。`Probe` は自身の `check` props スキーマに公開された事前定義の読み取り専用 check だけを実行でき（`POST /api/probes/run`）、公開共有では再実行が無効化され、`shareVisible: true` を指定しない限り publish 時に引数と結果が envelope から削除される。
 
 `TreeDoc`（props: `path`、**絶対パスのみ**、URL 不可）は catalog tree JSON ファイルを参照する catalog ノード。サーバが内容を読み、クライアントが検証して live な subtree として描画し、ファイルの変更を view に追従させる（forward sync）。書きかけの不正な保存で view は消えない: ファイルが正常に戻るまで、直前の正常な描画を保ったまま控えめなエラーを添える。sync 対象の tree の中に `TreeDoc` は置けない（入れ子を拒否することで循環を仕組みごと排除）。サーバは localhost のみに bind し、監視は view を開いている間だけの一時状態（永続しない）。publish 時は各 `TreeDoc` がその時点の subtree に凍結され、公開 payload がファイルを参照することはない。
 

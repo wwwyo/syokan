@@ -429,6 +429,17 @@ describe("GET /api/catalog", () => {
     expect((heading?.props as { type?: string }).type).toBe("object");
     expect(heading?.childrenTypes).toEqual([]);
   });
+
+  test("response shape is exactly { items, envelope } — no mechanisms, no TagFilter", async () => {
+    const res = getCatalog();
+    const data = (await res.json()) as {
+      items: Array<{ type: string }>;
+      envelope: unknown;
+    };
+    expect(Object.keys(data).sort()).toEqual(["envelope", "items"]);
+    expect(data.items.some((i) => i.type === "TagFilter")).toBe(false);
+    expect(data.envelope).toBeDefined();
+  });
 });
 
 describe("template routes", () => {

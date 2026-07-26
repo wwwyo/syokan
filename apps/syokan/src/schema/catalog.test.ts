@@ -152,19 +152,17 @@ describe("createCatalog", () => {
     expect(result.success).toBe(false);
   });
 
-  test("accepts cross-cutting id and tags on any node", () => {
+  test("accepts cross-cutting id on any node", () => {
     const { itemSchema } = createCatalog([TextSpec, ContainerSpec]);
     const parsed = itemSchema.parse({
       type: "Container",
       props: {},
       id: "risk-1",
-      tags: ["high"],
       children: [
         { type: "Text", props: { content: "hi" }, id: "risk-1-body" },
       ],
     });
     expect(parsed.id).toBe("risk-1");
-    expect(parsed.tags).toEqual(["high"]);
     expect(parsed.children?.[0]?.id).toBe("risk-1-body");
   });
 
@@ -188,17 +186,21 @@ describe("createCatalog", () => {
     expect(findDuplicateId(dup)).toBe("dup");
   });
 
-  test("rejects empty id and empty tag entries", () => {
+  test("rejects empty id", () => {
     const { itemSchema } = createCatalog([TextSpec]);
     expect(
       itemSchema.safeParse({ type: "Text", props: { content: "x" }, id: "" })
         .success,
     ).toBe(false);
+  });
+
+  test("rejects a legacy tags field (removed cross-cutting mechanism)", () => {
+    const { itemSchema } = createCatalog([TextSpec]);
     expect(
       itemSchema.safeParse({
         type: "Text",
         props: { content: "x" },
-        tags: [""],
+        tags: ["high"],
       }).success,
     ).toBe(false);
   });

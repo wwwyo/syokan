@@ -15,7 +15,6 @@ import { Probe } from "./Probe";
 import { Stack } from "./Stack";
 import { Stat } from "./Stat";
 import { Table } from "./Table";
-import { TagFilter } from "./TagFilter";
 import { Text } from "./Text";
 import { Time } from "./Time";
 import { TreeDoc } from "./TreeDoc";
@@ -77,13 +76,13 @@ describe("catalog", () => {
     expect(components.get("Stat")).toBe(asItem(Stat));
     expect(components.get("Checklist")).toBe(asItem(Checklist));
     expect(components.get("Collapsible")).toBe(asItem(Collapsible));
-    expect(components.get("TagFilter")).toBe(asItem(TagFilter));
     expect(components.get("Graph")).toBe(asItem(Graph));
     expect(components.get("Probe")).toBe(asItem(Probe));
     expect(components.get("Markdown")).toBe(asItem(Markdown));
     expect(components.get("MarkdownDoc")).toBeUndefined();
     expect(components.get("FileDoc")).toBeUndefined();
-    expect(components.size).toBe(19);
+    expect(components.get("TagFilter")).toBeUndefined();
+    expect(components.size).toBe(18);
   });
 
   test("Heading requires text and is strict", () => {

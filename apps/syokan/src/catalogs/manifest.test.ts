@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { components } from "./index";
-import { catalogManifest, catalogMechanisms } from "./manifest";
+import { catalogEnvelopeSchema, catalogManifest } from "./manifest";
 
 describe("catalogManifest", () => {
   test("covers every registered catalog type exactly once", () => {
@@ -44,20 +44,20 @@ describe("catalogManifest", () => {
   });
 });
 
-describe("catalogMechanisms", () => {
-  test("publishes the cross-cutting node fields machine-readably", () => {
-    const mechanisms = catalogMechanisms() as {
-      node?: { fields?: Record<string, unknown> };
-      probe?: { kinds?: Record<string, unknown> };
+describe("catalogEnvelopeSchema", () => {
+  test("emits JSON Schema for the snapshot input (POST/PUT body)", () => {
+    const schema = catalogEnvelopeSchema() as {
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+      additionalProperties?: boolean;
     };
-    expect(mechanisms.node?.fields?.id).toBeDefined();
-    expect(mechanisms.node?.fields?.tags).toBeDefined();
-  });
-
-  test("publishes probe kinds as JSON Schema including all three kinds", () => {
-    const json = JSON.stringify(catalogMechanisms());
-    expect(json).toContain("diff_clean");
-    expect(json).toContain("search_count");
-    expect(json).toContain("file_exists");
+    expect(schema.type).toBe("object");
+    expect(schema.properties?.root).toBeDefined();
+    expect(schema.properties?.idempotencyKey).toBeDefined();
+    expect(schema.required).toContain("root");
+    expect(schema.required).not.toContain("idempotencyKey");
+    // strict() becomes additionalProperties:false (no silent-strip contract).
+    expect(schema.additionalProperties).toBe(false);
   });
 });

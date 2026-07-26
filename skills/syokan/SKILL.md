@@ -17,8 +17,8 @@ If syokan is not installed yet (`syokan --help` fails), or the user says "onboar
 - **Snapshots are ephemeral**: a posted snapshot has no persistence guarantee. Only put reconstructible, transient data there (today's RSS, an in-progress review, etc.). For layouts you reuse, save a template to reproduce them (templates persist — see "Templates for reproducibility" below).
 - **JSON only — no free-form markdown ingest**: the server accepts nothing but a JSON envelope; you can't POST a raw `.md` file. `Markdown` is a catalog node like any other, and it is deliberately restricted to prose flow: paragraphs, plain bullet/numbered lists (nested ok), bold/italic/strikethrough, inline code, fenced code, blockquotes, links. Block structure and data still belong to their own node — the server 400s a `Markdown` body containing a heading (use `Heading`), a GFM table (`Table`), a task-list item (`Checklist`), raw HTML, an image, or a non-http(s) link, naming the replacement in the error. A ` ```mermaid ` fence inside `Markdown` renders as a plain code block, not a diagram — put diagrams in their own `Mermaid` node. For anything outside that prose subset, structure it into catalog nodes yourself: headings → `Heading`, code fences needing their own filename/copy affordance → `Code`, mermaid fences → `Mermaid`, preformatted or verbatim text outside prose (raw logs, ASCII tables) → `Code` with no `lang`.
 - **Strict schema**: props are validated strictly. Keys not in the schema are rejected — do not invent extra keys.
-- **Leaves cannot have children**: only containers (`Stack`, `Card`, `Checklist`, `Collapsible`, `TagFilter`) accept children; check `childrenTypes` in `syokan catalog`. Attaching children to a leaf node is rejected at ingest.
-- **Probes are predefined checks only**: `Probe.check` must be one of the kinds published in the catalog's `mechanisms.probe.kinds`. There is no way to run an arbitrary command from a view — do not try.
+- **Leaves cannot have children**: only containers (`Stack`, `Card`, `Checklist`, `Collapsible`) accept children; check `childrenTypes` in `syokan catalog`. Attaching children to a leaf node is rejected at ingest.
+- **Probes are predefined checks only**: `Probe.check` must be one of the kinds accepted by `Probe`'s `check` props schema (see `syokan catalog`). There is no way to run an arbitrary command from a view — do not try.
 
 ## From composing to viewing
 
@@ -49,30 +49,26 @@ For daily or recurring views, include something like the date in the `idempotenc
 
 Get the available `type`s and their props definitions **from `syokan catalog`** (never transcribe them into md — pull them from here every time).
 
-The output is `{ "items": [{ "type", "props", "childrenTypes", "notes" }], "mechanisms": { ... } }`.
+The output is `{ "items": [{ "type", "props", "childrenTypes", "notes" }], "envelope": <JSON Schema for the POST/PUT body> }`.
 
-- `props`: the type's props as JSON Schema. Satisfy `required` / `enum` / `format` (httpUrl is `uri`, `Time.datetime` is `date-time`) / `additionalProperties:false` (unknown keys are rejected) exactly as given.
+- `props`: the type's props as JSON Schema. Satisfy `required` / `enum` / `format` (httpUrl is `uri`, `Time.datetime` is `date-time`) / `additionalProperties:false` (unknown keys are rejected) exactly as given. `Probe`'s `check` props schema is where its predefined check kinds live.
 - `childrenTypes`: `null` means a container that accepts children, `[]` means a leaf that accepts none, `[..]` means only the listed types may be children.
 - `notes`: usage contract the props schema can't express (e.g. `Checklist` pairs `children[i]` with `items[i]`). Read it before using a type.
-- `mechanisms`: cross-cutting capabilities that work on **every** node — read this to know what `id` / `tags` do and which `Probe` kinds exist.
+- `envelope`: the JSON Schema for the POST/PUT snapshot body (`root` / `title` / `schemaVersion` / `idempotencyKey`) — the SSOT for "Envelope shape" above.
 
 For complete examples combining the components, see [references/examples.md](references/examples.md).
 
-## Cross-cutting node fields (id / tags)
+## Cross-cutting node field (id)
 
-Besides `type` / `props` / `children` / `key`, any node may carry:
+Besides `type` / `props` / `children` / `key`, any node may carry `id`: it makes the node addressable. A `Link` with `href: "#<id>"` jumps to it inside the view (revealing it if folded). It is also the identity for viewer-local UI state — **give an `id` to every `Checklist` / `Collapsible` / `Probe`** so checks, folds, and probe reruns survive reloads.
 
-- `id`: makes the node addressable. A `Link` with `href: "#<id>"` jumps to it inside the view (revealing it if folded or filtered out). It is also the identity for viewer-local UI state — **give an `id` to every `Checklist` / `Collapsible` / `TagFilter` / `Probe`** so checks, folds, and selections survive reloads.
-- `tags`: opts the node into narrowing by an ancestor `TagFilter` (e.g. tag finding cards with `"High"` / `"Medium"` and let the reader show only High). Untagged nodes are never filtered.
-
-Interaction state (checks, folds, filter selections, probe re-runs) lives in the viewer's browser, never in the envelope — post the *initial* state (`checked`, `defaultOpen`, `result`) and let the reader take it from there.
+Interaction state (checks, folds, probe re-runs) lives in the viewer's browser, never in the envelope — post the *initial* state (`checked`, `defaultOpen`, `result`) and let the reader take it from there.
 
 ## Interactive views (risk panels, TODO, dashboards)
 
 Typical composition for a review risk panel (condensed envelope in [references/examples.md](references/examples.md) Example 5):
 
 - `Stat` row up top for the counts; `Table` as the cockpit where each row `Link`s (`#id`) to its finding `Card`.
-- `TagFilter` around the findings; cards tagged by severity.
 - Low-priority detail (evidence hunks, verified-None sections) goes inside `Collapsible` instead of being deleted.
 - "No findings" claims carry a `Probe` whose `check` re-measures the claim (search count, diff cleanliness, file existence). Include the `result` you measured at generation time — you can run it via `POST /api/probes/run` with the same `check` — or omit it and the reader runs it. On public shares, probe args/results are stripped unless you set `shareVisible: true`.
 - `Graph` (roles: added/removed/hotspot/neutral, colors fixed by syokan) side by side in a horizontal `Stack` for before/after dependency contrasts. Prefer it over `Mermaid` when the diagram is a plain node/edge sketch — it cannot fail to parse.

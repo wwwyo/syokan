@@ -33,14 +33,10 @@ export function Render({ item }: RenderProps): ReactElement {
   ) : (
     <UnknownComponent type={item.type} />
   );
-  // id / tags apply to any node (an anchor target must exist even for an unknown type,
+  // id applies to any node (an anchor target must exist even for an unknown type,
   // or a #id Link would silently fail to navigate)
-  if (item.id !== undefined || item.tags !== undefined) {
-    element = (
-      <NodeWrapper id={item.id} tags={item.tags}>
-        {element}
-      </NodeWrapper>
-    );
+  if (item.id !== undefined) {
+    element = <NodeWrapper id={item.id}>{element}</NodeWrapper>;
   }
   // reset per node (own id or null): stateful components must never inherit an
   // ancestor's identity, or siblings under one identified ancestor would share keys

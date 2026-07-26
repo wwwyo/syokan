@@ -150,7 +150,7 @@ To embed a synced subtree inside a larger static view, place the node yourself (
 
 ## Example 5: review risk panel (interactive primitives)
 
-Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"#<id>"`) → findings narrowed by `TagFilter` (cards carry `tags`) → evidence folded in `Collapsible` → "no findings" claims backed by re-runnable `Probe`s → reviewer `Checklist`. Interaction state stays in the viewer's browser; post only the initial state.
+Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"#<id>"`) → evidence folded in `Collapsible` → "no findings" claims backed by re-runnable `Probe`s → reviewer `Checklist`. Interaction state stays in the viewer's browser; post only the initial state.
 
 ```json
 {
@@ -169,9 +169,8 @@ Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"
         ]
       },
       {
-        "type": "TagFilter",
-        "props": { "tags": ["High", "None"], "label": "Severity" },
-        "id": "severity-filter",
+        "type": "Stack",
+        "props": {},
         "children": [
           {
             "type": "Table",
@@ -190,7 +189,6 @@ Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"
             "type": "Card",
             "props": { "title": "token could reach logs" },
             "id": "risk-1",
-            "tags": ["High"],
             "children": [
               {
                 "type": "Stack",

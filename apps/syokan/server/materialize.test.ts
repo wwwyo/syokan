@@ -140,21 +140,18 @@ describe("materializeTree", () => {
     expect(result).toEqual({ ok: true, root: tree });
   });
 
-  test("cross-cutting id and tags survive the copy", async () => {
+  test("cross-cutting id survives the copy", async () => {
     const tree: Item = {
       type: "Stack",
       props: {},
       id: "root",
-      children: [
-        { type: "Text", props: { body: "x" }, id: "risk-1", tags: ["High"] },
-      ],
+      children: [{ type: "Text", props: { body: "x" }, id: "risk-1" }],
     };
     const result = await materializeTree(tree);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.root.id).toBe("root");
       expect(result.root.children?.[0]?.id).toBe("risk-1");
-      expect(result.root.children?.[0]?.tags).toEqual(["High"]);
     }
   });
 
