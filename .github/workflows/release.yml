@@ -99,5 +99,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Formula/syokan.rb
-          git commit -m "syokan ${GITHUB_REF_NAME}"
+          # No-op on a re-run or an identical formula: commit only when staged content changed.
+          git diff --cached --quiet || git commit -m "syokan ${GITHUB_REF_NAME}"
           git push

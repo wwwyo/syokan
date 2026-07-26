@@ -32,6 +32,12 @@ case "$(uname -m)" in
   *) err "unsupported architecture: $(uname -m). syokan ships arm64 and x86_64 binaries." ;;
 esac
 
+# Accept both "0.2.0" and "v0.2.0" — release tags are v-prefixed.
+case "$VERSION" in
+  latest | v*) ;;
+  *) VERSION="v${VERSION}" ;;
+esac
+
 asset="syokan-${os}-${arch}"
 if [ "$VERSION" = "latest" ]; then
   base_url="https://github.com/${REPO}/releases/latest/download"
@@ -60,7 +66,10 @@ fi
 [ "$actual" = "$expected" ] || err "checksum mismatch for ${asset} (expected ${expected}, got ${actual}); aborting"
 
 mkdir -p "$INSTALL_DIR"
-install -m 755 "${tmp}/${asset}" "${INSTALL_DIR}/syokan"
+# Stage in the destination dir, then rename: mv within one filesystem is atomic, so an
+# interrupted install never leaves a half-written binary at the final path.
+install -m 755 "${tmp}/${asset}" "${INSTALL_DIR}/.syokan.tmp.$$"
+mv -f "${INSTALL_DIR}/.syokan.tmp.$$" "${INSTALL_DIR}/syokan"
 
 installed_version="$("${INSTALL_DIR}/syokan" --version)" ||
   err "installed binary failed to run (${INSTALL_DIR}/syokan)"

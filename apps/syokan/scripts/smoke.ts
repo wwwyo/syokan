@@ -20,9 +20,11 @@ const env = {
   XDG_STATE_HOME: join(work, "state"),
 };
 
-function fail(step: string, detail: string): never {
-  console.error(`smoke: FAIL at ${step}\n${detail}`);
-  process.exit(1);
+// Thrown instead of exiting so the outer finally still tears down the spawned server / temp dir.
+class SmokeFailure extends Error {
+  constructor(step: string, detail: string) {
+    super(`smoke: FAIL at ${step}\n${detail}`);
+  }
 }
 
 async function run(args: string[], stdin?: string): Promise<{ code: number; out: string; err: string }> {
@@ -46,10 +48,11 @@ async function step<T>(name: string, fn: () => Promise<T>): Promise<T> {
     console.log(`smoke: ok - ${name}`);
     return result;
   } catch (e) {
-    fail(name, e instanceof Error ? e.message : String(e));
+    throw new SmokeFailure(name, e instanceof Error ? e.message : String(e));
   }
 }
 
+let failed = false;
 try {
   await step("--help runs", async () => {
     const r = await run(["--help"]);
@@ -130,11 +133,26 @@ try {
   await step("syokan stop shuts the server down", async () => {
     const r = await run(["stop"]);
     if (r.code !== 0 || !r.err.includes("stopped server")) throw new Error(`exit=${r.code}\n${r.err}`);
+    // Don't trust the CLI's report alone — the health endpoint must actually stop answering.
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      try {
+        await fetch(`${baseUrl}/api/health`, { signal: AbortSignal.timeout(1000) });
+      } catch {
+        return;
+      }
+      if (Date.now() > deadline) throw new Error("server still answers /api/health after stop");
+      await new Promise((r2) => setTimeout(r2, 100));
+    }
   });
 
   console.log("smoke: PASS");
+} catch (e) {
+  failed = true;
+  console.error(e instanceof Error ? e.message : String(e));
 } finally {
   // Best-effort teardown so a failed run doesn't leave an orphan server or temp dir.
   await run(["stop"]).catch(() => {});
   rmSync(work, { recursive: true, force: true });
 }
+if (failed) process.exit(1);
