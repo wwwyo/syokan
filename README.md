@@ -10,7 +10,9 @@ syokan dashboard.json   # syokan your dashboard
 
 An LLM speaks a JSON incantation, and a rich, living interface materializes — no JSX written, no build step. Scattered data — today's RSS, an in-flight PR review, shared meeting notes, a live status board — appears as structured UI only when you need it. Views are ephemeral: summoned when needed, they fade; nothing is hoarded. And anything can chant: Claude Code, a scheduled agent, a CLI one-liner, a webhook.
 
-**▶ [Watch the 30-second demo](apps/demo-video/demo.mp4)** — Claude Code chants; a diff-and-graph PR review view is summoned. ([re-shootable source](apps/demo-video))
+https://github.com/user-attachments/assets/a98eed41-65a0-4aa9-a745-c06c2575f293
+
+Claude Code chants; a diff-and-graph PR review view is summoned. ([re-shootable source](apps/demo-video))
 
 > **Summon your own** — `brew install wwwyo/tap/syokan`, then chant. See [Getting started](#getting-started).
 
