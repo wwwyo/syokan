@@ -54,7 +54,7 @@ printf 'syokan-install: downloading %s (%s)...\n' "$asset" "$VERSION"
 curl -fsSL -o "${tmp}/${asset}" "${base_url}/${asset}" ||
   err "download failed: ${base_url}/${asset} (does release ${VERSION} exist?)"
 curl -fsSL -o "${tmp}/checksums.txt" "${base_url}/checksums.txt" ||
-  err "checksums.txt is missing for ${VERSION}; refusing to install unverified binaries (releases before v0.2.0 predate checksums — pass a newer version)"
+  err "checksums.txt is missing for ${VERSION}; refusing to install unverified binaries (older releases may predate it — pass a newer version)"
 
 expected="$(awk -v a="$asset" '$2 == a { print $1 }' "${tmp}/checksums.txt")"
 [ -n "$expected" ] || err "no checksum entry for ${asset} in checksums.txt"
