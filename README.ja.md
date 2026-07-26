@@ -94,7 +94,7 @@ snapshot **envelope**（**JSON** のみ。markdown は描画されない — 文
 }
 ```
 
-スキーマの SSOT は `GET /api/catalog` が返す `envelope` キー（`syokan catalog` からも見られる）— フィールドを手で書き写さず、そこから引くこと。
+これらのキーの SSOT は `GET /api/catalog` が返す `envelope` スキーマ（`syokan catalog` からも見られる）— フィールドを手で書き写さず、そこから引くこと。envelope 自身のキーだけを定義し、`root` は不透明にしてある。ノード側の契約は `items` にあるので、body 全体を検証するなら両方を見る。
 
 `POST` は常に新規作成(`201`)し、`idempotencyKey` は以後の `PUT` の的として登録するだけ。`PUT` は `idempotencyKey` 必須で既存の view を狙い撃つ: 一致すれば `root`/`title` をその場で置き換え(id/url は同じ、`createdAt` は初回のまま)`200`、一致が無ければ `404`(`not_found`)——`PUT` は新規作成しない(`allowMissing` のような逃げ道は無い。作りたいときは `POST` を使う)。検証エラーは `400`（`invalid_json` / `validation_failed`）。CLI コマンドは `syokan --help`。
 
@@ -103,7 +103,7 @@ snapshot **envelope**（**JSON** のみ。markdown は描画されない — 文
 `type` の SSOT は catalog（`apps/syokan/src/catalogs`）。manifest を取得して props 契約と全 type 一覧を引く — `syokan catalog`（CLI）または:
 
 ```
-GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], envelope: <POST/PUT body の JSON Schema> }
+GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], envelope: <envelope 自身のキーの JSON Schema> }
 ```
 
 type は Storybook（`bun run storybook`）で視覚的に確認できる。

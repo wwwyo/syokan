@@ -98,6 +98,28 @@ describe("SnapshotStore", () => {
     expect(got?.root.children?.[0]?.id).toBe("n1");
   });
 
+  test("a malformed `children` on disk degrades to a readable snapshot, not a 500", async () => {
+    // Stored snapshots are read without revalidation, so children can be any shape
+    // (hand-edited file, older writer). Reading must still return the node.
+    const legacy = {
+      schemaVersion: 1,
+      id: "broken-children-1",
+      root: { type: "Stack", props: {}, tags: ["x"], children: "not-an-array" },
+      createdAt: "2026-05-01T00:00:00.000Z",
+    };
+    await Bun.write(
+      join(dir, "snapshots.json"),
+      JSON.stringify({
+        snapshots: { "broken-children-1": legacy },
+        idempotency: {},
+      }),
+    );
+    const got = await store.get("broken-children-1");
+    expect(got?.root.type).toBe("Stack");
+    expect(got && "tags" in got.root).toBe(false);
+    expect(got?.root.children).toBeUndefined();
+  });
+
   test("strips a legacy `tags` field from the dedup create() response too", async () => {
     const legacyRoot = {
       type: "Stack",

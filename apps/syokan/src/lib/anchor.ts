@@ -2,8 +2,9 @@
 // (see Render). Ancestors that can hide a node (Collapsible, checked-collapsed
 // Checklist items) register a reveal callback here and mark their DOM wrapper with
 // [data-reveal=<uid>]; navigation walks the ancestor chain and reveals
-// outermost-first, so the target becomes visible without changing persistent
-// settings (hidden wrappers reveal via a transient force-show).
+// outermost-first, so the target ends up visible. Revealing is the same operation the
+// reader could do by hand (a fold opens, and stays open in their local view state) —
+// nothing is written back to the snapshot.
 
 import { useEffect, useId, useRef } from "react";
 

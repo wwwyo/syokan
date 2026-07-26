@@ -49,12 +49,12 @@ For daily or recurring views, include something like the date in the `idempotenc
 
 Get the available `type`s and their props definitions **from `syokan catalog`** (never transcribe them into md — pull them from here every time).
 
-The output is `{ "items": [{ "type", "props", "childrenTypes", "notes" }], "envelope": <JSON Schema for the POST/PUT body> }`.
+The output is `{ "items": [{ "type", "props", "childrenTypes", "notes" }], "envelope": <JSON Schema for the envelope's own keys> }`.
 
 - `props`: the type's props as JSON Schema. Satisfy `required` / `enum` / `format` (httpUrl is `uri`, `Time.datetime` is `date-time`) / `additionalProperties:false` (unknown keys are rejected) exactly as given. `Probe`'s `check` props schema is where its predefined check kinds live.
 - `childrenTypes`: `null` means a container that accepts children, `[]` means a leaf that accepts none, `[..]` means only the listed types may be children.
 - `notes`: usage contract the props schema can't express (e.g. `Checklist` pairs `children[i]` with `items[i]`). Read it before using a type.
-- `envelope`: the JSON Schema for the POST/PUT snapshot body (`root` / `title` / `schemaVersion` / `idempotencyKey`) — the SSOT for "Envelope shape" above.
+- `envelope`: the JSON Schema for the envelope's own keys (`root` / `title` / `schemaVersion` / `idempotencyKey`) — the SSOT for "Envelope shape" above. `root` is left opaque there; what may go inside it is `items`, so a body is valid only when it satisfies both.
 
 For complete examples combining the components, see [references/examples.md](references/examples.md).
 

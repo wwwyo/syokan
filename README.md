@@ -94,7 +94,7 @@ A snapshot **envelope** (**JSON** only; markdown is not rendered — structure p
 }
 ```
 
-The schema SSOT is the `envelope` key returned by `GET /api/catalog` (also see `syokan catalog`) — fetch it rather than hand-copying field docs.
+The SSOT for these keys is the `envelope` schema returned by `GET /api/catalog` (also see `syokan catalog`) — fetch it rather than hand-copying field docs. It describes the envelope's own keys and leaves `root` opaque; the node contract lives in `items`, so validating a whole body means checking both.
 
 `POST` always creates a fresh snapshot (`201`); an `idempotencyKey` just tags it for later `PUT`s. `PUT` requires `idempotencyKey` and targets an existing view by it: a match replaces `root`/`title` in place (same id/url; `createdAt` is kept) and returns `200`; no match returns `404` (`not_found`) — `PUT` never creates (there is no "create if missing" escape hatch; use `POST` for that). Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
 
@@ -103,7 +103,7 @@ The schema SSOT is the `envelope` key returned by `GET /api/catalog` (also see `
 The SSOT for `type` is the catalog (`apps/syokan/src/catalogs`). Fetch the manifest to get the props contract and the full type list — `syokan catalog` (CLI) or:
 
 ```
-GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], envelope: <JSON Schema for POST/PUT bodies> }
+GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], envelope: <JSON Schema for the envelope's own keys> }
 ```
 
 Review types visually with Storybook (`bun run storybook`).

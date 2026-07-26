@@ -60,4 +60,14 @@ describe("catalogEnvelopeSchema", () => {
     // strict() becomes additionalProperties:false (no silent-strip contract).
     expect(schema.additionalProperties).toBe(false);
   });
+
+  test("envelope keeps root opaque instead of inlining the item union", () => {
+    // Serializing the real item schema under root would re-emit every type's props as
+    // $defs — the content `items` already carries — roughly doubling what a producer
+    // must read. Lock the payload down so that regression is loud.
+    const serialized = JSON.stringify(catalogEnvelopeSchema());
+    expect(serialized).not.toContain("$defs");
+    expect(serialized).not.toContain("$ref");
+    expect(serialized.length).toBeLessThan(2_000);
+  });
 });
