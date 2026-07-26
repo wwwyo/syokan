@@ -35,18 +35,21 @@ client-side routing（TanStack Router）の CSR app。`/` が home、`/snapshots
 普段使いの `syokan` は **単体バイナリ**（Bun/Node 不要、server も自動 lazy-spawn）。対応 OS は **macOS と Linux** — Windows は未対応。
 
 ```bash
-# macOS (Homebrew)
+# Homebrew
 brew install wwwyo/tap/syokan
 
-# Linux、または Homebrew を使わない macOS
+# インストーラ
 curl -fsSL https://raw.githubusercontent.com/wwwyo/syokan/main/install.sh | sh
 
+# mise
+mise use -g github:wwwyo/syokan@latest
+```
+
+```bash
 syokan --help   # コマンド確認（機械可読は --help --json）
 ```
 
-インストーラは OS/arch を判別し、release の `checksums.txt` と照合して `~/.local/bin` に配置する（sudo 不要、`SYOKAN_INSTALL_DIR` で変更可）。バージョン固定は `... | sh -s -- v0.2.0`。
-
-> 他の install: `mise use -g github:wwwyo/syokan@latest`（mise github backend）、[Releases](https://github.com/wwwyo/syokan/releases) から `syokan-<os>-<arch>` を直接 download、または source build（[ビルド](#ビルド-単体バイナリ)）。brew / curl / mise 経由は quarantine 属性が付かない — ブラウザで直接 download したバイナリだけが macOS Gatekeeper に弾かれうるので、その場合は `codesign --sign - <path>`。
+> または [Releases](https://github.com/wwwyo/syokan/releases) から `syokan-<os>-<arch>` を直接 download、source build（[ビルド](#ビルド-単体バイナリ)）。ブラウザで download したバイナリは macOS Gatekeeper に弾かれうるので、その場合は `codesign --sign - <path>`。
 
 最初の召喚（server は自動で立ち上がり、view URL が返る）:
 

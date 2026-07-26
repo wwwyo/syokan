@@ -35,18 +35,21 @@ It is a CSR app with client-side routing (TanStack Router). `/` is home, `/snaps
 For everyday use, `syokan` is a **single binary** (no Bun/Node required; the server lazy-spawns automatically). Supported OS: **macOS and Linux** — Windows is not supported.
 
 ```bash
-# macOS (Homebrew)
+# Homebrew
 brew install wwwyo/tap/syokan
 
-# Linux, or macOS without Homebrew
+# installer script
 curl -fsSL https://raw.githubusercontent.com/wwwyo/syokan/main/install.sh | sh
 
+# mise
+mise use -g github:wwwyo/syokan@latest
+```
+
+```bash
 syokan --help   # list commands (machine-readable: --help --json)
 ```
 
-The installer detects OS/arch, verifies the download against the release's `checksums.txt`, installs to `~/.local/bin` (no sudo; override with `SYOKAN_INSTALL_DIR`), and takes a version to pin (`... | sh -s -- v0.2.0`).
-
-> Other install options: `mise use -g github:wwwyo/syokan@latest` (mise github backend), download `syokan-<os>-<arch>` directly from [Releases](https://github.com/wwwyo/syokan/releases), or build from source ([Build](#build-single-binary)). brew / curl / mise installs carry no quarantine attribute; only a browser-downloaded binary can be blocked by macOS Gatekeeper — if so, run `codesign --sign - <path>`.
+> Or grab `syokan-<os>-<arch>` from [Releases](https://github.com/wwwyo/syokan/releases), or build from source ([Build](#build-single-binary)). A browser-downloaded binary can be blocked by macOS Gatekeeper — if so, run `codesign --sign - <path>`.
 
 Your first summon (the server starts automatically and a view URL is returned):
 
