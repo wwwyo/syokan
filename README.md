@@ -88,25 +88,27 @@ A snapshot **envelope** (**JSON** only; markdown is not rendered — structure p
 
 ```jsonc
 {
-  "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // required: view tree
-  "title": "Today's RSS",                              // optional
-  "idempotencyKey": "rss-2026-06-20"                   // optional on POST, required on PUT: names a view so it can be targeted again later
+  "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] },
+  "title": "Today's RSS",
+  "idempotencyKey": "rss-2026-06-20"
 }
 ```
+
+The SSOT for these keys is the `envelope` schema returned by `GET /api/catalog` (also see `syokan catalog`) — fetch it rather than hand-copying field docs. It describes the envelope's own keys and leaves `root` opaque; the node contract lives in `items`, so validating a whole body means checking both.
 
 `POST` always creates a fresh snapshot (`201`); an `idempotencyKey` just tags it for later `PUT`s. `PUT` requires `idempotencyKey` and targets an existing view by it: a match replaces `root`/`title` in place (same id/url; `createdAt` is kept) and returns `200`; no match returns `404` (`not_found`) — `PUT` never creates (there is no "create if missing" escape hatch; use `POST` for that). Validation errors return `400` (`invalid_json` / `validation_failed`). CLI commands: `syokan --help`.
 
 ## Catalog
 
-The SSOT for `type` is the catalog (`apps/syokan/src/catalogs`). Fetch the manifest to get the props contract:
+The SSOT for `type` is the catalog (`apps/syokan/src/catalogs`). Fetch the manifest to get the props contract and the full type list — `syokan catalog` (CLI) or:
 
 ```
-GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], mechanisms: { node, uiState, probe } }
+GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], envelope: <JSON Schema for the envelope's own keys> }
 ```
 
-Current types — containers: `Stack` `Card` `Checklist` `Collapsible` `TagFilter` / leaves: `Heading` `Link` `Text` `Time` `Diff` `Code` `Badge` `Mermaid` `TreeDoc` `Table` `Stat` `Graph` `Probe`. Review them visually with Storybook (`bun run storybook`).
+Review types visually with Storybook (`bun run storybook`).
 
-Every node also accepts the cross-cutting fields `id` (in-view anchor via `Link href:"#<id>"`, and the identity that lets interactive nodes persist their viewer-local state) and `tags` (narrowing by an ancestor `TagFilter`). Interaction state (checks, folds, filter selections, probe re-runs) stays in the viewer's browser — snapshots remain immutable. `Probe` runs only the predefined read-only checks published under `mechanisms.probe.kinds` (`POST /api/probes/run`); on public shares, re-run is disabled and probe args/results are stripped at publish unless `shareVisible: true`.
+Every node also accepts the cross-cutting field `id` (in-view anchor via `Link href:"#<id>"`, and the identity that lets interactive nodes persist their viewer-local state). Interaction state (checks, folds, probe re-runs) stays in the viewer's browser — snapshots remain immutable. `Probe` runs only the predefined read-only checks published in its `check` props schema (`POST /api/probes/run`); on public shares, re-run is disabled and probe args/results are stripped at publish unless `shareVisible: true`.
 
 `TreeDoc` (props: `path`, **absolute paths only**, no URLs) is a catalog node that references a catalog-tree JSON file. The server reads the content, the client validates it and renders it as a live subtree, and the view stays in sync with file changes (forward sync). A mid-write invalid save never blanks the view: the last valid render is kept with an unobtrusive error until the file is valid again. A `TreeDoc` cannot appear inside a synced tree (nesting is rejected, which rules out cycles). The server binds to localhost only, and watching is transient state that lives only while a view is open (never persisted). Publishing a view freezes each `TreeDoc` into its subtree at that moment — public payloads never reference files.
 

@@ -1,10 +1,10 @@
 // In-view anchor navigation. Nodes carrying an id render a [data-node-id] wrapper
 // (see Render). Ancestors that can hide a node (Collapsible, checked-collapsed
-// Checklist items, TagFilter-hidden wrappers) register a reveal callback here and
-// mark their DOM wrapper with [data-reveal=<uid>]; navigation walks the ancestor
-// chain and reveals outermost-first, so the target becomes visible without
-// changing persistent settings (the filter selection itself is untouched —
-// hidden wrappers reveal via a transient force-show).
+// Checklist items) register a reveal callback here and mark their DOM wrapper with
+// [data-reveal=<uid>]; navigation walks the ancestor chain and reveals
+// outermost-first, so the target ends up visible. Revealing is the same operation the
+// reader could do by hand (a fold opens, and stays open in their local view state) —
+// nothing is written back to the snapshot.
 
 import { useEffect, useId, useRef } from "react";
 
@@ -21,7 +21,7 @@ export function registerReveal(uid: string, reveal: () => void): () => void {
  * Register `onReveal` to run when anchor navigation reaches a node hidden inside this
  * container, and return the id to spread as `data-reveal` on the wrapper (or undefined
  * when not hidden). One place for the subscribe-while-hidden lifecycle shared by every
- * container that can hide a descendant (Collapsible, Checklist, TagFilter wrapper).
+ * container that can hide a descendant (Collapsible, Checklist).
  */
 export function useReveal(
   hidden: boolean,

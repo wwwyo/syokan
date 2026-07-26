@@ -2,7 +2,7 @@
 
 **syokan (召喚, "summon") is a verb.** An LLM speaks a JSON incantation, and a rich, living interface appears — no JSX written, no build step. Typing `syokan dashboard.json` reads literally as "syokan dashboard.json": the command itself is the incantation. Views are ephemeral — summoned when needed, they fade; nothing is hoarded. Under the hood this is a schema-driven renderer: data pulled from multiple repositories, external APIs, and the filesystem is rendered for humans through predefined React components. LLMs (Claude Code / scheduled agents / CLI) **post a JSON tree only** — no per-view JSX is ever generated.
 
-> **Setup and usage (the `POST /api/snapshots` envelope schema / catalog type list) live in [README.md](./README.md); CLI commands live in `syokan --help` (machine-readable via `--help --json`) — those are the SSOT.** This AGENTS.md covers design judgments (why) and development conventions (how to change things).
+> **Setup and usage live in [README.md](./README.md); the catalog type list and the `POST /api/snapshots` envelope schema are sourced live from `GET /api/catalog` (`syokan catalog`); CLI commands live in `syokan --help` (machine-readable via `--help --json`) — those are the SSOT.** This AGENTS.md covers design judgments (why) and development conventions (how to change things).
 
 ## Repo learning skills
 
@@ -89,11 +89,11 @@ Benefits: fewer LLM tokens, generation speed, type safety, design consistency, e
 
 The catalog's type and props definitions have **`src/catalogs` as the single SSOT**. `manifest.ts` turns them into JSON Schema and exposes them at `GET /api/catalog`; the LLM (skill) pulls the props contract from this API rather than from a transcription in md. Copying into md drifts on every catalog change, so the SSOT is kept in exactly one place.
 
-**When you add / remove / rename a catalog type (or change the envelope, CLI, or a cross-cutting mechanism), update the in-repo skill `skills/syokan/` in the same change.** Props are pulled live from `GET /api/catalog`, so they never need transcribing — but the skill's `SKILL.md` still hand-carries the *type-name roster* (in its `description` for triggering) and the prose describing each mechanism / posting flow, and those do not auto-follow the catalog. `skills/syokan/` is the SSOT of the skill (the dotfiles `.agents/skills/` copy is downstream and out of scope here). This is exactly what drifted when markdown support was removed and the primitive types were added.
+**When you add / remove / rename a catalog type (or change the envelope, CLI, or a cross-cutting mechanism), update the in-repo skill `skills/syokan/` in the same change.** Props and the envelope shape are pulled live from `GET /api/catalog`, so they never need transcribing — but the skill's `SKILL.md` still hand-carries the prose describing the posting flow and each type's intended use, and that does not auto-follow the catalog. `skills/syokan/` is the SSOT of the skill (the dotfiles `.agents/skills/` copy is downstream and out of scope here). This is exactly what drifted when markdown support was removed and the primitive types were added.
 
 ### Catalog admission bar
 
-A new catalog node must buy at least one of: (1) interaction / viewer-local state (checks, folds, filter selections — `mechanisms.uiState`), (2) validated data semantics (a schema that catches producer mistakes, with the renderer owning presentation consistency), (3) a rendering engine (diff view, mermaid, syntax highlighting), (4) structure consumed by navigation/anchors (`id`, `TagFilter`, in-view links). Alias / thin-wrapper nodes that only relabel another node are forbidden — the deleted `PlainText` node delegated to `Code` with no `lang` and bought nothing. Typography/prose belongs to `Markdown`, not to a new node.
+A new catalog node must buy at least one of: (1) interaction / viewer-local state (checks, folds — see Checklist/Collapsible), (2) validated data semantics (a schema that catches producer mistakes, with the renderer owning presentation consistency), (3) a rendering engine (diff view, mermaid, syntax highlighting), (4) structure consumed by navigation/anchors (`id`, in-view links). Alias / thin-wrapper nodes that only relabel another node are forbidden — the deleted `PlainText` node delegated to `Code` with no `lang` and bought nothing. Typography/prose belongs to `Markdown`, not to a new node.
 
 Adding a node is non-breaking; removing one is breaking (consumers already emit it). This asymmetry sets the bar for adding at maximal, and a node whose usefulness is doubtful should be removed early — "might need it later" is not a keep reason; a removed node can always be re-added once an actual need shows up.
 
@@ -101,7 +101,7 @@ Adding a node is non-breaking; removing one is breaking (consumers already emit 
 
 ### Interface-free
 
-The input path is not fixed to any one of MCP / CLI / HTTP / paste. Everything is unified into the same JSON envelope at `POST /api/snapshots` (the envelope schema's SSOT is the README).
+The input path is not fixed to any one of MCP / CLI / HTTP / paste. Everything is unified into the same JSON envelope at `POST /api/snapshots` (the envelope schema's SSOT is the `envelope` key of `GET /api/catalog`).
 
 ```
 [Claude Code]      ──┐
@@ -158,7 +158,7 @@ Implement a component at `<Name>/index.tsx` and colocate its test (`<Name>.test.
 
 ## Setup / usage
 
-Setup steps (mise / bun / portless), the `POST /api/snapshots` envelope schema, and the catalog type list have [README.md](./README.md) as SSOT. CLI commands, in the same spirit as the catalog, have `syokan --help` (machine-readable via `--help --json`) as SSOT — transcribing into md drifts, so the README doesn't carry the list either. To avoid duplication, none of it is written here.
+Setup steps (mise / bun / portless) have [README.md](./README.md) as SSOT. The catalog type list and the `POST /api/snapshots` envelope schema are sourced live from `GET /api/catalog` (`syokan catalog`) — transcribing into md drifts, so neither the README nor this file carries them. CLI commands, in the same spirit, have `syokan --help` (machine-readable via `--help --json`) as SSOT. To avoid duplication, none of it is written here.
 
 Storybook is the visual review base for catalog components. `<Name>/<Name>.stories.tsx` enumerates prop variants, edge cases, and dark/light; `.storybook/preview.tsx` loads `src/styles.css`. The toolbar's `.dark` toggle verifies theme adherence. `storybook` is registered in `.claude/launch.json`, so it can also be started via preview. See the README for the launch command.
 

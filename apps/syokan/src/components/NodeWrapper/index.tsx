@@ -1,43 +1,21 @@
-import { type ReactNode, useEffect, useState } from "react";
-import { navigateToNode, useReveal } from "../../lib/anchor";
-import { useActiveTagFilter } from "../../lib/tagFilter";
+import type { ReactNode } from "react";
+import { navigateToNode } from "../../lib/anchor";
 
 /**
- * Carrier of the cross-cutting anchor / tag-narrowing mechanisms (UI-state identity
- * is provided per node by Render). display:contents keeps it out of layout so
- * wrapping any node is safe; anchor navigation therefore scrolls to the wrapper's
- * first child box (lib/anchor).
+ * Carrier of the cross-cutting anchor mechanism (UI-state identity is provided per
+ * node by Render). display:contents keeps it out of layout so wrapping any node is
+ * safe; anchor navigation therefore scrolls to the wrapper's first child box
+ * (lib/anchor).
  */
 export function NodeWrapper({
   id,
-  tags,
   children,
 }: {
   id?: string;
-  tags?: readonly string[];
   children?: ReactNode;
 }) {
-  const active = useActiveTagFilter();
-  // transient reveal for anchor navigation into a filtered-out node: the filter
-  // selection itself must stay untouched, so force-show locally and reset when
-  // the selection changes.
-  const [forceShown, setForceShown] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset is keyed by selection change
-  useEffect(() => {
-    setForceShown(false);
-  }, [active]);
-  const filtered =
-    active !== null &&
-    tags !== undefined &&
-    !tags.some((t) => active.includes(t));
-  const hidden = filtered && !forceShown;
-  const revealId = useReveal(hidden, () => setForceShown(true));
   return (
-    <div
-      style={{ display: hidden ? "none" : "contents" }}
-      data-node-id={id}
-      data-reveal={revealId}
-    >
+    <div style={{ display: "contents" }} data-node-id={id}>
       {children}
     </div>
   );

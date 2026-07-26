@@ -46,6 +46,28 @@ export type SnapshotStore = {
   delete: (id: string) => Promise<boolean>;
 };
 
+// Old JSON files on disk are read without schema revalidation (read() below just
+// JSON.parses them), so a field removed from the schema (e.g. `tags`, dropped with
+// TagFilter) can otherwise ride back into API/UI responses forever. Recursively strip
+// it from every node on every read path (get() and the create() dedup-return) so
+// responses always match the current shape. The stored file is left as-is: snapshots
+// are ephemeral, so rewriting them at read time buys nothing a projection doesn't.
+function stripLegacyNodeFields(item: Item): Item {
+  const { tags: _legacyTags, ...rest } = item as Item & { tags?: unknown };
+  const copy = rest as Item;
+  // On-disk snapshots are parsed without revalidation (that is why this function exists),
+  // so children may be any shape. Recurse only into a real array; drop anything else
+  // rather than throwing and turning a read into a 500.
+  if (copy.children !== undefined) {
+    if (Array.isArray(copy.children)) {
+      copy.children = copy.children.map(stripLegacyNodeFields);
+    } else {
+      delete copy.children;
+    }
+  }
+  return copy;
+}
+
 const LOCK_TIMEOUT_MS = 5_000;
 
 export function createSnapshotStore(dataDir: string): SnapshotStore {
@@ -191,7 +213,7 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     return {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       id,
-      root,
+      root: stripLegacyNodeFields(root),
       createdAt,
       ...(title !== undefined ? { title } : {}),
     };

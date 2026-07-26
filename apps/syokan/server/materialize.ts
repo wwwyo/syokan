@@ -8,11 +8,10 @@ export type MaterializeResult =
   | { ok: true; root: Item }
   | { ok: false; path: string; reason: MaterializeFailure };
 
-// key and the cross-cutting mechanisms (id / tags) ride along unchanged
+// key and the cross-cutting id mechanism ride along unchanged
 function carryNodeFields(from: Item, to: Item): void {
   if (from.key !== undefined) to.key = from.key;
   if (from.id !== undefined) to.id = from.id;
-  if (from.tags !== undefined) to.tags = from.tags;
 }
 
 // A published envelope leaves the localhost trust boundary: probe args/results can

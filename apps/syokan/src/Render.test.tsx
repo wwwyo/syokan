@@ -41,12 +41,11 @@ describe("Render", () => {
     expect(html).toContain("Unknown component type");
   });
 
-  test("a node carrying id/tags renders through NodeWrapper with a data-node-id anchor", () => {
+  test("a node carrying id renders through NodeWrapper with a data-node-id anchor", () => {
     const item: Item = {
       type: "Text",
       props: { body: "anchored" },
       id: "risk-1",
-      tags: ["High"],
     };
     const html = renderToString(createElement(Render, { item }));
     expect(html).toContain('data-node-id="risk-1"');

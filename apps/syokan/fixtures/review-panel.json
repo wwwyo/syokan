@@ -46,16 +46,8 @@
         ]
       },
       {
-        "type": "TagFilter",
-        "props": {
-          "tags": [
-            "High",
-            "Medium",
-            "None"
-          ],
-          "label": "Severity"
-        },
-        "id": "severity-filter",
+        "type": "Stack",
+        "props": {},
         "children": [
           {
             "type": "Table",
@@ -109,9 +101,6 @@
               "title": "share token could reach Worker logs"
             },
             "id": "risk-token-log",
-            "tags": [
-              "High"
-            ],
             "children": [
               {
                 "type": "Stack",
@@ -168,9 +157,6 @@
               "title": "publish retry lacks idempotency"
             },
             "id": "risk-retry",
-            "tags": [
-              "Medium"
-            ],
             "children": [
               {
                 "type": "Text",
@@ -186,9 +172,6 @@
               "summary": "None — checked areas with no findings (2)"
             },
             "id": "none-findings",
-            "tags": [
-              "None"
-            ],
             "children": [
               {
                 "type": "Probe",

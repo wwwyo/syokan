@@ -67,6 +67,90 @@ describe("SnapshotStore", () => {
     expect("metadata" in deduped).toBe(false);
   });
 
+  test("strips a legacy `tags` field from every node in the tree on get()", async () => {
+    const legacyRoot = {
+      type: "Stack",
+      props: {},
+      tags: ["root-tag"],
+      children: [
+        { type: "Text", props: { body: "x" }, id: "n1", tags: ["High"] },
+      ],
+    };
+    const legacy = {
+      schemaVersion: 1,
+      id: "legacy-tags-1",
+      title: "Legacy tags",
+      root: legacyRoot,
+      createdAt: "2026-05-01T00:00:00.000Z",
+    };
+    await Bun.write(
+      join(dir, "snapshots.json"),
+      JSON.stringify({
+        snapshots: { "legacy-tags-1": legacy },
+        idempotency: { "legacy-tags-key": "legacy-tags-1" },
+      }),
+    );
+    const got = await store.get("legacy-tags-1");
+    expect(got && "tags" in got.root).toBe(false);
+    expect(got?.root.children?.[0] && "tags" in got.root.children[0]).toBe(
+      false,
+    );
+    expect(got?.root.children?.[0]?.id).toBe("n1");
+  });
+
+  test("a malformed `children` on disk degrades to a readable snapshot, not a 500", async () => {
+    // Stored snapshots are read without revalidation, so children can be any shape
+    // (hand-edited file, older writer). Reading must still return the node.
+    const legacy = {
+      schemaVersion: 1,
+      id: "broken-children-1",
+      root: { type: "Stack", props: {}, tags: ["x"], children: "not-an-array" },
+      createdAt: "2026-05-01T00:00:00.000Z",
+    };
+    await Bun.write(
+      join(dir, "snapshots.json"),
+      JSON.stringify({
+        snapshots: { "broken-children-1": legacy },
+        idempotency: {},
+      }),
+    );
+    const got = await store.get("broken-children-1");
+    expect(got?.root.type).toBe("Stack");
+    expect(got && "tags" in got.root).toBe(false);
+    expect(got?.root.children).toBeUndefined();
+  });
+
+  test("strips a legacy `tags` field from the dedup create() response too", async () => {
+    const legacyRoot = {
+      type: "Stack",
+      props: {},
+      children: [
+        { type: "Text", props: { body: "x" }, id: "n1", tags: ["High"] },
+      ],
+    };
+    const legacy = {
+      schemaVersion: 1,
+      id: "legacy-tags-2",
+      root: legacyRoot,
+      createdAt: "2026-05-01T00:00:00.000Z",
+    };
+    await Bun.write(
+      join(dir, "snapshots.json"),
+      JSON.stringify({
+        snapshots: { "legacy-tags-2": legacy },
+        idempotency: { "legacy-tags-key-2": "legacy-tags-2" },
+      }),
+    );
+    const deduped = await store.create({
+      root: sampleRoot,
+      idempotencyKey: "legacy-tags-key-2",
+    });
+    expect(deduped.id).toBe("legacy-tags-2");
+    expect(deduped.root.children?.[0] && "tags" in deduped.root.children[0]).toBe(
+      false,
+    );
+  });
+
   test("survives a 'restart' (fresh store instance over the same file)", async () => {
     const env = await store.create({ root: sampleRoot });
     const next = createSnapshotStore(dir);

@@ -2,12 +2,12 @@ import type { BunRequest } from "bun";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { itemSchema } from "../src/catalogs";
-import { catalogManifest, catalogMechanisms } from "../src/catalogs/manifest";
+import { catalogManifest, catalogEnvelopeSchema } from "../src/catalogs/manifest";
 import { probeCheckSchema } from "../src/catalogs/Probe/check";
 import { resolveRepoHead, runProbe } from "./probe";
 import { isFontValue } from "../src/lib/fonts";
 import {
-  CURRENT_SCHEMA_VERSION,
+  createSnapshotInputSchema,
   findDuplicateId,
   formatValidationError,
   type Item,
@@ -39,14 +39,7 @@ function uniqueRootIds(
   }
 }
 
-const inputBaseSchema = z
-  .object({
-    schemaVersion: z.literal(CURRENT_SCHEMA_VERSION).optional(),
-    title: z.string().min(1).optional(),
-    root: itemSchema,
-    idempotencyKey: z.string().min(1).optional(),
-  })
-  .strict();
+const inputBaseSchema = createSnapshotInputSchema(itemSchema);
 
 const postInputSchema = inputBaseSchema.superRefine(uniqueRootIds);
 
@@ -172,12 +165,12 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
   };
 }
 
-// The catalog's SSOT is src/catalogs. Derive and return the list of defined types from there every time.
+// The catalog's SSOT is src/catalogs; the envelope's SSOT is src/schema/snapshot.ts.
+// Derive and return both from there every time.
 export function getCatalog(): Response {
-  // mechanisms rides alongside items (additive, so older consumers keep working)
   return Response.json({
     items: catalogManifest(),
-    mechanisms: catalogMechanisms(),
+    envelope: catalogEnvelopeSchema(),
   });
 }
 

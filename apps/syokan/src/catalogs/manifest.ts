@@ -1,6 +1,7 @@
 import { z } from "zod";
+import type { Item } from "../schema/catalog";
+import { createSnapshotInputSchema } from "../schema/snapshot";
 import { specs } from "./index";
-import { probeCheckSchema } from "./Probe/check";
 
 export type CatalogEntry = {
   type: string;
@@ -26,36 +27,23 @@ export function catalogManifest(): CatalogEntry[] {
   }));
 }
 
-// Cross-cutting mechanisms that apply to nodes regardless of type. Published together
-// with the manifest so producers (skills) never hand-copy render capabilities into
-// their own docs (they'd drift on every change here).
-export function catalogMechanisms(): Record<string, unknown> {
-  return {
-    node: {
-      description:
-        "Every node accepts these fields alongside type/props/children/key.",
-      fields: {
-        id: {
-          type: "string",
-          description:
-            'In-view anchor and UI-state identity. A Link with href "#<id>" scrolls to the node, temporarily highlighting it and revealing it if inside a closed Collapsible, a checked-folded Checklist item, or a TagFilter-hidden subtree (the filter selection itself is untouched). Interactive nodes (Checklist/Collapsible/TagFilter/Probe) persist their state across reloads only when they carry an id.',
-        },
-        tags: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Opt into narrowing by an ancestor TagFilter: while a selection is active, only nodes whose tags intersect it stay visible. Untagged nodes are never filtered out.",
-        },
-      },
-    },
-    uiState: {
-      description:
-        "Interaction state (checks, open/closed, filter selection, probe reruns) lives in the viewer's browser per device+view, separate from snapshot data; it is never written back to the envelope, and changed node content invalidates it. On public shares, viewers get their own local state.",
-    },
-    probe: {
-      description:
-        "Probe.check admits only these predefined read-only kinds — no arbitrary command execution. diff_clean results carry the repo HEAD as target ref and are marked stale when it moves.",
-      kinds: z.toJSONSchema(probeCheckSchema),
-    },
-  };
+// The POST/PUT snapshot request-body shape, as JSON Schema. The SSOT is
+// src/schema/snapshot.ts; this is derivation only, published so producers pull the
+// envelope contract from the API instead of a hand-copied doc.
+// Serializing the real item union under `root` would re-inline every type's props — the
+// same content `items` already carries, doubling the payload the producer has to read.
+// Stand in an opaque node so the envelope describes only envelope-level keys; the node
+// contract (type/props/children plus the cross-cutting key/id) is stated here in prose
+// because it is the one part of the shape `items` cannot express.
+const rootPlaceholder = z
+  .object({})
+  .loose()
+  .describe(
+    'The view tree: a catalog node `{ type, props, children? }`. Types and their props are in `items`. Any node also accepts `key` (React list identity) and `id` — an in-view anchor (a Link with href "#<id>" scrolls to it, revealing it if inside a closed Collapsible or a checked-folded Checklist item) and the identity that lets Checklist / Collapsible / Probe keep their viewer-local state across reloads.',
+  );
+
+export function catalogEnvelopeSchema(): Record<string, unknown> {
+  return z.toJSONSchema(
+    createSnapshotInputSchema(rootPlaceholder as unknown as z.ZodType<Item>),
+  ) as Record<string, unknown>;
 }
