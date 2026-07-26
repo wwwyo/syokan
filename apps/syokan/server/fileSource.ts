@@ -1,5 +1,6 @@
 import { type FSWatcher, watch } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
+import { dirname } from "node:path";
 
 // Enough for a catalog tree JSON, but caps out so a huge file can't freeze the browser. Over the limit, the body is not returned.
 export const FILE_SIZE_LIMIT = 2 * 1024 * 1024;
@@ -15,6 +16,9 @@ const REARM_DELAY_MS = 10;
 // When re-arming, if the path isn't there yet (rename in progress, etc.), retry a few times. An editor's atomic save
 // makes the replacement appear right after, so a few tries re-arm it. The cap prevents infinite retries on a delete-only case.
 const REARM_MAX_ATTEMPTS = 5;
+// Linux inotify is silent on an inode swap of a watched file but reports child events on a
+// directory watch, so watch the parent dir there (see createFileWatcher docs).
+const watchParentDir = process.platform === "linux";
 
 export type ReadFileFailure =
   | "not_found"
@@ -98,9 +102,13 @@ type WatchEntry = {
  * runtime state — never persisted.
  *
  * A "temp write → rename" save (FR-5) swaps the file's inode, so watching naively loses track of
- * changes after the swap. On macOS, watching the parent directory doesn't fire on content changes
- * inside it, so we watch the file itself and, on a `rename` event (the signal for inode swap
- * /deletion), re-arm the watch on the same path to keep following it.
+ * changes after the swap. The strategy differs per OS:
+ * - macOS: watching the parent directory doesn't fire on content changes inside it (Bun), so watch
+ *   the file itself and, on a `rename` event (the signal for inode swap/deletion), re-arm the
+ *   watch on the same path to keep following it.
+ * - Linux: inotify on the file itself doesn't fire on an inode swap (rename-over is silent), but
+ *   directory watching reports child events, so watch the parent directory instead. The dir watch
+ *   survives inode swaps, so no re-arm is needed there.
  */
 export function createFileWatcher(opts?: {
   releaseDelayMs?: number;
@@ -124,12 +132,21 @@ export function createFileWatcher(opts?: {
 
   function armWatch(path: string): FSWatcher | null {
     try {
-      const w = watch(path, (event) => {
-        notify(path);
-        // rename = inode swap/deletion. Re-arm on the same path to follow the new inode.
-        if (event === "rename") rearm(path);
-      });
-      // An error (e.g. deleted while watching) also attempts a re-arm, same as rename.
+      let w: FSWatcher;
+      if (watchParentDir) {
+        // No basename filter: Bun's Linux dir watch coalesces a burst (create tmp → write → rename)
+        // into as little as one event, and the survivor may carry the temp file's name — filtering
+        // would drop exactly the atomic saves this watch exists for. Sibling-file noise is absorbed
+        // by the notify debounce, and a spurious notify only costs the client one refetch.
+        w = watch(dirname(path), () => notify(path));
+      } else {
+        w = watch(path, (event) => {
+          notify(path);
+          // rename = inode swap/deletion. Re-arm on the same path to follow the new inode.
+          if (event === "rename") rearm(path);
+        });
+      }
+      // An error (e.g. the watched path deleted while watching) attempts a re-arm.
       w.on("error", () => rearm(path));
       w.unref?.();
       return w;
