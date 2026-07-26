@@ -15,10 +15,18 @@ concurrency:
 
 jobs:
   test:
+    # The check name is what branch protection matches on, so it is spelled from `platform`
+    # rather than the runner label: swapping `ubuntu-latest` for a pinned image would
+    # otherwise rename the check, and a required check that never reports blocks every merge.
+    name: test (${{ matrix.platform }})
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - platform: linux
+            os: ubuntu-latest
+          - platform: macos
+            os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
