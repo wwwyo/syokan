@@ -155,3 +155,5 @@ Dual-mode ([entry.ts](./apps/syokan/entry.ts)): a normal launch is the CLI; the 
 ## More
 
 - Design rationale, directory layout, development conventions: [AGENTS.md](./AGENTS.md)
+
+<!-- ruleset verification, reverted immediately -->
