@@ -1,9 +1,12 @@
 name: release
 
 # `bun run release` (apps/syokan/scripts/release.ts) does bump + commit + v* tag + push.
-# That tag triggers this workflow, which publishes a release with cross-compiled binaries attached.
-# The human decides the version (tag); the heavy compile and asset upload are offloaded to CI.
+# That tag triggers this workflow: build → smoke → publish → homebrew.
+# The human decides the version (tag); everything after is automated.
 # (package.json isn't at the git root, so npm version's built-in tagging can't be used — the script tags explicitly.)
+#
+# smoke gates publishing: the release only goes out if the compiled binaries themselves pass the
+# end-to-end smoke test (post → view → TreeDoc file-follow over SSE) on both Linux and macOS.
 on:
   push:
     tags:
@@ -13,7 +16,7 @@ permissions:
   contents: write # required to create the release and upload assets
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -22,6 +25,79 @@ jobs:
       - run: bun run typecheck
       - run: bun test
       - run: bun run compile:all
-      - run: gh release create "$GITHUB_REF_NAME" apps/syokan/dist/syokan-* --generate-notes
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binaries
+          path: apps/syokan/dist/syokan-*
+          if-no-files-found: error
+
+  # Runs the smoke test against the exact artifacts that will be published: the Linux binary on
+  # ubuntu, the darwin binary on macos (also proves the ubuntu-cross-compiled darwin binary
+  # executes on a clean Apple Silicon machine — it is not codesigned by Apple tooling).
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            binary: syokan-linux-x64
+          - os: macos-latest
+            binary: syokan-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: binaries
+          path: dist
+      - run: chmod +x "dist/${{ matrix.binary }}"
+      - run: bun apps/syokan/scripts/smoke.ts "dist/${{ matrix.binary }}"
+
+  publish:
+    needs: smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: binaries
+          path: dist
+      # checksums.txt lets the curl installer (install.sh) and any manual download verify integrity.
+      - run: cd dist && sha256sum syokan-* > checksums.txt
+      - run: gh release create "$GITHUB_REF_NAME" dist/syokan-* dist/checksums.txt --generate-notes
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  # Regenerates the Homebrew formula in wwwyo/homebrew-tap so `brew install wwwyo/tap/syokan`
+  # picks up this release with no manual step. Needs the TAP_GITHUB_TOKEN secret (fine-grained
+  # PAT, contents:write on wwwyo/homebrew-tap). Failing here does NOT unpublish the release —
+  # it just shows red so the maintainer can re-run the job.
+  homebrew:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: binaries
+          path: dist
+      - run: cd dist && sha256sum syokan-* > checksums.txt
+      - name: Update formula in wwwyo/homebrew-tap
+        env:
+          GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          bun apps/syokan/scripts/generate-formula.ts "$version" dist/checksums.txt > syokan.rb
+          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/wwwyo/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          mv syokan.rb tap/Formula/syokan.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/syokan.rb
+          git commit -m "syokan ${GITHUB_REF_NAME}"
+          git push

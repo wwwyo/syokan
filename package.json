@@ -15,6 +15,7 @@
     "dev": "bun --filter '@syokan/*' --parallel --elide-lines 0 dev",
     "compile": "bun --filter @syokan/app compile",
     "compile:all": "bun --filter @syokan/app compile:all",
+    "smoke": "bun apps/syokan/scripts/smoke.ts",
     "release": "bun apps/syokan/scripts/release.ts",
     "build:share": "bun --filter @syokan/share build",
     "deploy:share": "bun --filter @syokan/share deploy",

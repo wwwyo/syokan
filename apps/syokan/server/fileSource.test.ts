@@ -35,11 +35,6 @@ function waitFor(
   });
 }
 
-// Re-arming after a rename (inode swap) assumes macOS fs.watch behavior (AGENTS.md pitfall #7).
-// On Linux (inotify) watching the file itself doesn't fire on an inode swap, so it doesn't hold.
-// Run only on the target macOS (the in-place-change watcher tests run on all OSes).
-const rearmOnRename = process.platform === "darwin";
-
 describe("readTextFile", () => {
   test("reads a UTF-8 file", async () => {
     const p = join(dir, "a.md");
@@ -104,7 +99,9 @@ describe("createFileWatcher", () => {
     watcher.closeAll();
   });
 
-  test.skipIf(!rearmOnRename)("survives temp-write→rename (editor save) via re-arm on rename", async () => {
+  // Surviving an inode swap works via re-arm on rename (macOS) or the parent-dir watch (Linux);
+  // either way the observable spec is the same: an editor-style save keeps notifying.
+  test("survives temp-write→rename (editor save)", async () => {
     const p = join(dir, "doc.md");
     await writeFile(p, "v1");
     const watcher = createFileWatcher({ notifyDebounceMs: 5 });
@@ -121,7 +118,7 @@ describe("createFileWatcher", () => {
     watcher.closeAll();
   });
 
-  test.skipIf(!rearmOnRename)("re-arms across a brief gap where the path momentarily disappears", async () => {
+  test("keeps following across a brief gap where the path momentarily disappears", async () => {
     const p = join(dir, "gap.md");
     await writeFile(p, "v1");
     const watcher = createFileWatcher({ notifyDebounceMs: 5, rearmDelayMs: 15 });
