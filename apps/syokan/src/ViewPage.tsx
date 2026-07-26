@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
+import { Code } from "./catalogs/Code";
+import { useDocumentTitle } from "./lib/documentTitle";
 import { t } from "./lib/i18n";
 import type { SnapshotEnvelope } from "./schema";
-import { CodeSnippet } from "./components/CodeSnippet";
 import { PageLayout } from "./components/PageLayout";
 import { ViewHeader } from "./components/ViewHeader";
 import { ViewStateProvider } from "./lib/viewState";
@@ -25,6 +26,7 @@ export type ViewPageProps = {
 export function ViewPage({ envelope, onDelete }: ViewPageProps) {
   const fullBleed = isFullBleed(envelope);
   const [showSource, setShowSource] = useState(false);
+  useDocumentTitle(envelope.title);
   const source = useMemo(() => JSON.stringify(envelope, null, 2), [envelope]);
   return (
     <PageLayout
@@ -42,9 +44,7 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
       }
     >
       {/* hidden, not unmounted: unmounting would wipe in-memory node state
-          (Collapsible / TagFilter / Probe) and re-trigger pierre's dev StrictMode
-          collapse on every toggle-back. CodeSnippet (bare <pre>) for the JSON pane
-          for the same collapse reason. */}
+          (Collapsible / TagFilter / Probe) on every toggle-back. */}
       <div hidden={showSource} className={fullBleed ? "h-full" : undefined}>
         <ViewStateProvider scopeKey={envelope.id}>
           <Render item={envelope.root} />
@@ -54,10 +54,10 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
         fullBleed ? (
           // fullBleed kills document scrolling, so the JSON pane scrolls itself
           <div className="h-full min-h-0 overflow-y-auto">
-            <CodeSnippet code={source} />
+            <Code code={source} lang="json" />
           </div>
         ) : (
-          <CodeSnippet code={source} />
+          <Code code={source} lang="json" />
         )
       ) : null}
     </PageLayout>
