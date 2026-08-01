@@ -843,8 +843,10 @@ describe("planStop (what `stop` targets)", () => {
     expect(await planStop(deps, 58910)).toEqual({ action: "kill", pid: 31465 });
   });
 
-  test("falls back to the pidfile for an older server that reports no pid", async () => {
-    const deps = probeDeps({ health: Response.json({ ok: true }) });
+  // Same lineage (health carries a version) but from before the pid marker: the pidfile was
+  // written by a CLI of that same lineage, which is enough of a tie to act on.
+  test("falls back to the pidfile for a same-lineage server that reports no pid", async () => {
+    const deps = probeDeps({ health: Response.json({ ok: true, version: "0.3.0" }) });
     expect(await planStop(deps, 58910)).toEqual({ action: "kill", pid: 58910 });
   });
 
@@ -856,12 +858,16 @@ describe("planStop (what `stop` targets)", () => {
     });
   });
 
-  test("treats a pre-health syokan build (catalog only) as stoppable via the pidfile", async () => {
+  // A pid this old has no verifiable tie to the port, and killing a recycled one hits a stranger.
+  test("refuses to kill a pre-health syokan build (catalog only) from the pidfile", async () => {
     const deps = probeDeps({
       health: new Response(null, { status: 404 }),
       catalog: Response.json({ items: [], envelope: {} }),
     });
-    expect(await planStop(deps, 58910)).toEqual({ action: "kill", pid: 58910 });
+    expect(await planStop(deps, 58910)).toEqual({
+      action: "none",
+      reason: "unknown_pid",
+    });
   });
 
   test("stops nothing when the port is free", async () => {

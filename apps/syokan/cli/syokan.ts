@@ -111,7 +111,9 @@ export async function probeServer(
   try {
     res = await deps.fetch(`${deps.baseUrl}/api/health`);
   } catch {
-    // A refused connection is the only signal that the port is genuinely free.
+    // Unreachable (refused / reset / DNS): nothing usable is there, so treat the port as free.
+    // Spawning against a port that merely looks unreachable is safe — a real occupant makes the
+    // child fail to bind and the readiness timeout reaps it.
     return { kind: "absent" };
   }
   if (!res.ok) {
@@ -1030,6 +1032,11 @@ function isCompiledBinary(): boolean {
   return basename(process.execPath).replace(/\.exe$/i, "") !== "bun";
 }
 
+// Held so a readiness-timeout cleanup can kill through the child handle instead of the bare pid:
+// a pid can be recycled between spawn and cleanup, and `process.kill` on a recycled pid would
+// signal a stranger. Bun's handle only ever signals our own child.
+let spawnedProc: Bun.Subprocess | null = null;
+
 function realSpawnServer(baseUrl: string): SpawnResult {
   const port = portFromBaseUrl(baseUrl);
   const dir = runtimeDir();
@@ -1056,6 +1063,7 @@ function realSpawnServer(baseUrl: string): SpawnResult {
   });
   // Drop the reference from the parent's event loop so the CLI can exit immediately
   proc.unref();
+  spawnedProc = proc;
   writeFileSync(
     pidFilePath(port),
     JSON.stringify({ pid: proc.pid, port, baseUrl }),
@@ -1088,12 +1096,9 @@ function realRecordServer(baseUrl: string, pid: number): void {
   }
 }
 
+// Only ever reaps a child of this process, so a pid recycled since spawn cannot be signalled.
 function realKillServer(baseUrl: string, pid: number): void {
-  try {
-    process.kill(pid);
-  } catch {
-    // Already gone; the pidfile still needs clearing
-  }
+  if (spawnedProc?.pid === pid) spawnedProc.kill();
   const port = portFromBaseUrl(baseUrl);
   if (pidFromFile(port) === pid) rmSync(pidFilePath(port), { force: true });
 }
@@ -1102,9 +1107,12 @@ export type StopPlan =
   | { action: "kill"; pid: number }
   | { action: "none"; reason: "none" | "foreign" | "unknown_pid" };
 
-// What is listening decides, not what the pidfile claims. A live server reports its own pid, so
-// the pidfile is consulted only for older builds that don't — and only while such a server is
-// actually answering, which is what keeps a recycled pid from being killed by mistake.
+// What is listening decides, not what the pidfile claims. A live server reports its own pid; the
+// pidfile is a fallback only for a server of this lineage that predates the pid marker, where the
+// same-lineage CLI that wrote the file is decent evidence the two refer to each other.
+// A pre-health build gets no fallback: nothing ties its port to that file, and killing a pid this
+// stale could hit a stranger — an unrecoverable side effect, against which "stop it by hand"
+// (which the message says) is a mild one.
 export async function planStop(
   deps: Pick<CliDeps, "fetch" | "baseUrl">,
   filePid: number | undefined,
@@ -1112,7 +1120,10 @@ export async function planStop(
   const probe = await probeServer(deps);
   if (probe.kind === "absent") return { action: "none", reason: "none" };
   if (probe.kind === "foreign") return { action: "none", reason: "foreign" };
-  const pid = probe.kind === "compatible" ? (probe.pid ?? filePid) : filePid;
+  if (probe.kind === "incompatible") {
+    return { action: "none", reason: "unknown_pid" };
+  }
+  const pid = probe.pid ?? filePid;
   if (pid === undefined) return { action: "none", reason: "unknown_pid" };
   return { action: "kill", pid };
 }
