@@ -18,7 +18,13 @@ import pkg from "../package.json";
 import { type Command, createRouter } from "./router";
 
 export type SpawnResult = { pid: number };
-export type StopResult = { stopped: boolean; pid?: number };
+// reason explains a non-stop so the CLI can say why instead of the flat "nothing to stop":
+// foreign=the port belongs to another app / unknown_pid=a syokan server answers but won't name its pid.
+export type StopResult = {
+  stopped: boolean;
+  pid?: number;
+  reason?: "none" | "foreign" | "unknown_pid";
+};
 
 export type CliDeps = {
   fetch: typeof fetch;
@@ -36,7 +42,12 @@ export type CliDeps = {
   baseUrl: string;
   // For lazy-spawn: start the server detached
   spawnServer: () => SpawnResult;
-  // For `syokan stop`: stop the lazy-spawned server
+  // Record the pid of the server actually answering on the port. The pidfile is a cache of a
+  // reachable server, not the source of truth for whether one exists.
+  recordServer: (pid: number) => void;
+  // Terminate a server we spawned ourselves (readiness-timeout cleanup, so failures leave no orphan)
+  killServer: (pid: number) => void;
+  // For `syokan stop`: stop whichever syokan server holds the port (not merely one we spawned)
   stopServer: () => StopResult | Promise<StopResult>;
   // Wait for the readiness poll (tests inject an immediate resolve)
   sleep: (ms: number) => Promise<void>;
@@ -53,54 +64,119 @@ type PostResult = { ok: boolean; status: number; data: unknown };
 const READY_RETRIES = 150;
 const READY_INTERVAL_MS = 100;
 
-// absent=none / compatible=same lineage as this build / incompatible=an old build is running.
+// absent=nothing listening / compatible=same lineage as this build / incompatible=an old build is
+// running / foreign=the port answers but isn't syokan at all.
 // An old build doesn't return a version in health. If a new CLI silently reuses it,
 // catalog/templates 404 and stop can't kill it (it looks at a different pidfile), so distinguish them.
-type ServerProbe = "absent" | "compatible" | "incompatible";
+// foreign is separated out because "spawn and wait" can never succeed against it — the new process
+// cannot take the port — and reporting that as a readiness timeout hides the actual cause.
+export type ServerProbe =
+  | { kind: "absent" }
+  | { kind: "compatible"; pid?: number }
+  | { kind: "incompatible" }
+  | { kind: "foreign" };
 
-async function probeServer(deps: CliDeps): Promise<ServerProbe> {
+async function readJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+// Builds too old to serve /api/health still serve /api/catalog, so the catalog's shape is what
+// separates "an old syokan" from "someone else's server" once health has failed.
+async function servesCatalog(
+  deps: Pick<CliDeps, "fetch" | "baseUrl">,
+): Promise<boolean> {
+  try {
+    const res = await deps.fetch(`${deps.baseUrl}/api/catalog`);
+    if (!res.ok) return false;
+    const body = (await readJson(res)) as Record<string, unknown> | null;
+    return (
+      body !== null &&
+      typeof body === "object" &&
+      "items" in body &&
+      "envelope" in body
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function probeServer(
+  deps: Pick<CliDeps, "fetch" | "baseUrl">,
+): Promise<ServerProbe> {
   let res: Response;
   try {
     res = await deps.fetch(`${deps.baseUrl}/api/health`);
   } catch {
-    return "absent";
+    // A refused connection is the only signal that the port is genuinely free.
+    return { kind: "absent" };
   }
-  if (!res.ok) return "absent";
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    body = null;
+  if (!res.ok) {
+    return (await servesCatalog(deps))
+      ? { kind: "incompatible" }
+      : { kind: "foreign" };
   }
-  const version = (body as { version?: unknown } | null)?.version;
-  return typeof version === "string" ? "compatible" : "incompatible";
+  const body = (await readJson(res)) as {
+    version?: unknown;
+    pid?: unknown;
+  } | null;
+  if (typeof body?.version !== "string") return { kind: "incompatible" };
+  return {
+    kind: "compatible",
+    pid: typeof body.pid === "number" ? body.pid : undefined,
+  };
+}
+
+function portConflictError(baseUrl: string): string {
+  return `${baseUrl} is held by a process that is not syokan; stop that process, or point SYOKAN_BASE_URL at a free port`;
 }
 
 // lazy-spawn: use the server if it's already running; otherwise start it and wait until ready.
+// Reachability decides, never the pidfile: a stale pidfile with a live server must adopt the
+// live one (spawning a rival that cannot bind the port used to time out on every invocation).
 // If an old build occupies the same port, don't silently reuse it — return an error prompting a stop.
 export async function ensureServerRunning(
   deps: CliDeps,
 ): Promise<{ ok: true; spawned: boolean } | { ok: false; error: string }> {
   const probe = await probeServer(deps);
-  if (probe === "compatible") return { ok: true, spawned: false };
-  if (probe === "incompatible") {
+  if (probe.kind === "compatible") {
+    if (probe.pid !== undefined) deps.recordServer(probe.pid);
+    return { ok: true, spawned: false };
+  }
+  if (probe.kind === "incompatible") {
     return {
       ok: false,
       error: `an older syokan server is already running at ${deps.baseUrl}; stop it first (kill the process on its port, or run the previous build's 'syokan stop')`,
     };
   }
-  deps.spawnServer();
+  if (probe.kind === "foreign") {
+    return { ok: false, error: portConflictError(deps.baseUrl) };
+  }
+  const spawned = deps.spawnServer();
   for (let i = 0; i < READY_RETRIES; i++) {
     await deps.sleep(READY_INTERVAL_MS);
-    if ((await probeServer(deps)) === "compatible") {
+    const polled = await probeServer(deps);
+    if (polled.kind === "compatible") {
+      deps.recordServer(polled.pid ?? spawned.pid);
       return { ok: true, spawned: true };
     }
+    // Someone else won the port while we were starting: waiting out the timeout cannot help.
+    if (polled.kind === "foreign") {
+      deps.killServer(spawned.pid);
+      return { ok: false, error: portConflictError(deps.baseUrl) };
+    }
   }
+  // Reap our own child. Leaving it behind means every retry adds another server that can
+  // never serve, which is exactly how a repeatedly-invoking agent piles up processes.
+  deps.killServer(spawned.pid);
   return {
     ok: false,
     error: `server did not become ready within ${
       (READY_RETRIES * READY_INTERVAL_MS) / 1000
-    }s`,
+    }s; the spawned process (pid ${spawned.pid}) was terminated`,
   };
 }
 
@@ -325,9 +401,17 @@ export async function runOpen(
 }
 
 export async function runStop(deps: CliDeps): Promise<CliResult> {
-  const { stopped, pid } = await deps.stopServer();
+  const { stopped, pid, reason } = await deps.stopServer();
   if (stopped) {
     deps.stderr(`syokan: stopped server (pid ${pid})`);
+  } else if (reason === "foreign") {
+    deps.stderr(
+      `syokan: ${deps.baseUrl} is held by a process that is not syokan; leaving it alone`,
+    );
+  } else if (reason === "unknown_pid") {
+    deps.stderr(
+      `syokan: a syokan server answers at ${deps.baseUrl} but does not report its pid (older build); stop it manually`,
+    );
   } else {
     deps.stderr("syokan: no syokan-managed server to stop");
   }
@@ -743,7 +827,7 @@ const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
   {
     name: "stop",
     usage: "syokan stop",
-    summary: "Stop the lazy-spawned server",
+    summary: "Stop the syokan server on this port",
     run: (_rest, deps) => runStop(deps),
   },
   {
@@ -979,43 +1063,79 @@ function realSpawnServer(baseUrl: string): SpawnResult {
   return { pid: proc.pid };
 }
 
+// The pidfile is only a hint: a corrupt or pid-less file reads as "unknown".
+function pidFromFile(port: number): number | undefined {
+  const file = pidFilePath(port);
+  if (!existsSync(file)) return undefined;
+  try {
+    const pid = (JSON.parse(readFileSync(file, "utf8")) as { pid?: number }).pid;
+    return typeof pid === "number" ? pid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Overwrite the pidfile with the pid of the server that actually answered, so a stale entry
+// (dead pid, or a server started outside this CLI) can no longer make `stop` a no-op.
+function realRecordServer(baseUrl: string, pid: number): void {
+  const port = portFromBaseUrl(baseUrl);
+  if (pidFromFile(port) === pid) return;
+  try {
+    mkdirSync(runtimeDir(), { recursive: true });
+    writeFileSync(pidFilePath(port), JSON.stringify({ pid, port, baseUrl }));
+  } catch {
+    // Best effort: an unwritable pidfile must not fail the command itself
+  }
+}
+
+function realKillServer(baseUrl: string, pid: number): void {
+  try {
+    process.kill(pid);
+  } catch {
+    // Already gone; the pidfile still needs clearing
+  }
+  const port = portFromBaseUrl(baseUrl);
+  if (pidFromFile(port) === pid) rmSync(pidFilePath(port), { force: true });
+}
+
+export type StopPlan =
+  | { action: "kill"; pid: number }
+  | { action: "none"; reason: "none" | "foreign" | "unknown_pid" };
+
+// What is listening decides, not what the pidfile claims. A live server reports its own pid, so
+// the pidfile is consulted only for older builds that don't — and only while such a server is
+// actually answering, which is what keeps a recycled pid from being killed by mistake.
+export async function planStop(
+  deps: Pick<CliDeps, "fetch" | "baseUrl">,
+  filePid: number | undefined,
+): Promise<StopPlan> {
+  const probe = await probeServer(deps);
+  if (probe.kind === "absent") return { action: "none", reason: "none" };
+  if (probe.kind === "foreign") return { action: "none", reason: "foreign" };
+  const pid = probe.kind === "compatible" ? (probe.pid ?? filePid) : filePid;
+  if (pid === undefined) return { action: "none", reason: "unknown_pid" };
+  return { action: "kill", pid };
+}
+
 async function realStopServer(baseUrl: string): Promise<StopResult> {
   const port = portFromBaseUrl(baseUrl);
   const file = pidFilePath(port);
-  if (!existsSync(file)) return { stopped: false };
-  let pid: number | undefined;
-  try {
-    pid = (JSON.parse(readFileSync(file, "utf8")) as { pid?: number }).pid;
-  } catch {
-    // A pidfile corrupted by a broken / interrupted write. Clean it up and treat as nothing-to-stop
-    rmSync(file, { force: true });
-    return { stopped: false };
-  }
-  if (typeof pid !== "number") {
-    rmSync(file, { force: true });
-    return { stopped: false };
-  }
-  // To avoid killing an unrelated process due to PID reuse, kill only when a syokan server
-  // actually responds at the recorded baseUrl. If it's down, just clean up the
-  // pidfile (= nothing-to-stop) to avoid a mistaken kill.
-  let healthy = false;
-  try {
-    const res = await fetch(`${baseUrl}/api/health`);
-    healthy = res.ok;
-  } catch {
-    healthy = false;
-  }
-  if (!healthy) {
-    rmSync(file, { force: true });
-    return { stopped: false };
+  const plan = await planStop(
+    { fetch: globalThis.fetch, baseUrl },
+    pidFromFile(port),
+  );
+  if (plan.action === "none") {
+    // Keep the file only when it may still be the sole handle on a live older server.
+    if (plan.reason !== "unknown_pid") rmSync(file, { force: true });
+    return { stopped: false, reason: plan.reason };
   }
   try {
-    process.kill(pid);
+    process.kill(plan.pid);
   } catch {
     // Clean up the pidfile even if it's already dead
   }
   rmSync(file, { force: true });
-  return { stopped: true, pid };
+  return { stopped: true, pid: plan.pid };
 }
 
 // Assemble the runtime deps and run the CLI. Called from both entry.ts (the single binary's
@@ -1051,6 +1171,8 @@ export async function runCli(): Promise<void> {
     },
     baseUrl,
     spawnServer: () => realSpawnServer(baseUrl),
+    recordServer: (pid) => realRecordServer(baseUrl, pid),
+    killServer: (pid) => realKillServer(baseUrl, pid),
     stopServer: () => realStopServer(baseUrl),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     openUrl: (url) => {

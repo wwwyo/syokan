@@ -69,7 +69,10 @@ export function startServer() {
   const share = (req: Request) => shareApp.fetch(req);
   const server = serve({
     routes: {
-      "/api/health": () => Response.json({ ok: true, version: pkg.version }),
+      // pid lets the CLI refresh its pidfile from the server that is actually listening, so a
+      // stale pidfile can neither strand `stop` nor trigger a duplicate spawn.
+      "/api/health": () =>
+        Response.json({ ok: true, version: pkg.version, pid: process.pid }),
       // The catalog's SSOT is src/catalogs. The LLM pulls the props definitions from here.
       "/api/catalog": getCatalog,
       "/api/snapshots": {
