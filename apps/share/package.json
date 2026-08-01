@@ -12,14 +12,14 @@
   "dependencies": {
     "@hono/zod-validator": "0.9.0",
     "@syokan/app": "workspace:*",
-    "hono": "4.12.31",
+    "hono": "4.12.32",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260719.1",
+    "@cloudflare/workers-types": "5.20260724.1",
     "bun-plugin-tailwind": "0.1.2",
-    "wrangler": "4.112.0"
+    "wrangler": "4.114.0"
   }
 }
