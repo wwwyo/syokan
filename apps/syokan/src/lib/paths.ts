@@ -35,7 +35,8 @@ export function dataDir(): string {
   return join(stateHome(), "syokan");
 }
 
-// pid/port and logs are also machine-local state. They live in the same state dir as snapshots.
+// The server log is machine-local state, so it lives in the same state dir as snapshots. Nothing
+// about a running server is recorded here — liveness is a question for the port, not for disk.
 export function runtimeDir(): string {
   return join(stateHome(), "syokan");
 }

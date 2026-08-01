@@ -22,7 +22,6 @@ type Harness = {
   opened: string[];
   spawnCount: () => number;
   stopCalls: () => number;
-  recorded: number[];
   killed: number[];
 };
 
@@ -32,11 +31,11 @@ function makeDeps(opts: {
   // Controls /api/health. false = nothing listening (fetch rejects, as a refused connection does).
   // Always healthy if unset (= treated as server already up)
   health?: () => boolean;
-  // true drops version from health, mimicking an old-build server (= incompatible)
-  legacyServer?: boolean;
   // true makes the port answer with a non-syokan response (= another app squatting on it)
   foreignServer?: boolean;
-  // pid reported by /api/health (undefined = a build that predates the pid marker)
+  // true answers health without a pid, i.e. without satisfying our health contract
+  pidlessServer?: boolean;
+  // pid reported by /api/health. Defaults to the pid of the server this CLI spawned.
   healthPid?: number;
   stopped?: boolean;
   // stdin contents. Setting it marks it as a pipe (stdinIsPipe=true)
@@ -48,7 +47,6 @@ function makeDeps(opts: {
   const err: string[] = [];
   const calls: Captured[] = [];
   const opened: string[] = [];
-  const recorded: number[] = [];
   const killed: number[] = [];
   let spawns = 0;
   let stops = 0;
@@ -66,7 +64,6 @@ function makeDeps(opts: {
       nextPid += 1;
       return { pid: nextPid };
     },
-    recordServer: (pid) => recorded.push(pid),
     killServer: (pid) => killed.push(pid),
     stopServer: () => {
       stops += 1;
@@ -90,18 +87,18 @@ function makeDeps(opts: {
     stdinIsPipe: () => opts.stdin !== undefined,
     fetch: (async (input: string | URL, init?: RequestInit) => {
       const url = String(input);
-      const isProbe =
-        url.endsWith("/api/health") ||
-        (opts.foreignServer === true && url.endsWith("/api/catalog"));
-      if (isProbe) {
+      if (url.endsWith("/api/health")) {
         // A refused connection rejects; it does not answer with a status code.
         if (!healthFn()) throw new Error("ECONNREFUSED");
         // Another app on the port: no syokan route answers.
         if (opts.foreignServer) return new Response("nope", { status: 404 });
-        // An old build returns no version. A new build carries a version and is treated as compatible.
-        return opts.legacyServer
-          ? Response.json({ ok: true })
-          : Response.json({ ok: true, version: "test", pid: opts.healthPid });
+        if (opts.pidlessServer) return Response.json({ ok: true });
+        // Absent an override, the responder is the server this CLI spawned.
+        return Response.json({
+          ok: true,
+          version: "test",
+          pid: opts.healthPid ?? nextPid,
+        });
       }
       const captured: Captured = {
         url,
@@ -121,7 +118,6 @@ function makeDeps(opts: {
     opened,
     spawnCount: () => spawns,
     stopCalls: () => stops,
-    recorded,
     killed,
   };
 }
@@ -536,17 +532,19 @@ describe("ensureServerRunning (lazy-spawn)", () => {
     expect(h.spawnCount()).toBe(1);
   });
 
-  test("refuses an incompatible (pre-version) server without spawning", async () => {
-    const h = makeDeps({ respond: () => okResponse(), legacyServer: true });
+  // Answering health without a pid means we could not name the process to stop later,
+  // so it does not count as a syokan we can drive.
+  test("refuses a server whose health omits the pid, without spawning", async () => {
+    const h = makeDeps({ respond: () => okResponse(), pidlessServer: true });
     const result = await ensureServerRunning(h.deps);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toContain("older syokan server");
+    if (!result.ok) expect(result.error).toContain("not this syokan build");
     expect(h.spawnCount()).toBe(0);
   });
 
-  // Regression: a stale pidfile (dead pid) plus a live server on the port used to make the CLI
-  // spawn a duplicate that could never bind, timing out on every invocation.
-  test("adopts a live server regardless of the pidfile, and records its pid", async () => {
+  // Regression: whoever answers on the port is the server, whatever this CLI did or did not start.
+  // Judging by a recorded pid instead made the CLI spawn a duplicate that could never bind.
+  test("adopts a server this CLI never started", async () => {
     const h = makeDeps({
       respond: () => okResponse(),
       health: () => true,
@@ -555,8 +553,6 @@ describe("ensureServerRunning (lazy-spawn)", () => {
     const result = await ensureServerRunning(h.deps);
     expect(result).toEqual({ ok: true, spawned: false });
     expect(h.spawnCount()).toBe(0);
-    // The live pid is written back so `stop` reaches it even though the pidfile named a dead pid.
-    expect(h.recorded).toEqual([31465]);
   });
 
   test("kills the server it spawned when readiness never arrives", async () => {
@@ -582,7 +578,6 @@ describe("ensureServerRunning (lazy-spawn)", () => {
     const result = await ensureServerRunning(h.deps);
     expect(result).toEqual({ ok: true, spawned: true });
     expect(h.killed).toEqual([4243]);
-    expect(h.recorded).toEqual([31465]);
   });
 
   test("reports a port conflict when a non-syokan process answers on the port", async () => {
@@ -590,7 +585,7 @@ describe("ensureServerRunning (lazy-spawn)", () => {
     const result = await ensureServerRunning(h.deps);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain("not syokan");
+      expect(result.error).toContain("not this syokan build");
       expect(result.error).not.toContain("did not become ready");
     }
     expect(h.spawnCount()).toBe(0);
@@ -828,67 +823,47 @@ describe("cli main: stop", () => {
     const h = makeDeps({ respond: () => okResponse(), stopped: false });
     h.deps.stopServer = () => ({ stopped: false, reason: "foreign" });
     await main(["stop"], h.deps);
-    expect(h.err[0]).toContain("not syokan");
+    expect(h.err[0]).toContain("is not syokan");
   });
 });
 
 describe("planStop (what `stop` targets)", () => {
-  function probeDeps(opts: {
-    health?: Response | "refused";
-    catalog?: Response;
-  }): Pick<CliDeps, "fetch" | "baseUrl"> {
+  function probeDeps(health?: Response): Pick<CliDeps, "fetch" | "baseUrl"> {
     return {
       baseUrl: "http://localhost:5173",
-      fetch: (async (input: string | URL) => {
-        const url = String(input);
-        if (url.endsWith("/api/health")) {
-          if (opts.health === "refused" || opts.health === undefined) {
-            throw new Error("ECONNREFUSED");
-          }
-          return opts.health.clone();
-        }
-        return opts.catalog?.clone() ?? new Response(null, { status: 404 });
+      fetch: (async () => {
+        // No response at all = a refused connection, which rejects rather than returning a status.
+        if (health === undefined) throw new Error("ECONNREFUSED");
+        return health.clone();
       }) as unknown as typeof fetch,
     };
   }
 
-  // Regression: the pidfile named a dead pid while another process served the port, and stop gave up.
-  test("kills the pid the live server reports, ignoring a stale pidfile pid", async () => {
-    const deps = probeDeps({
-      health: Response.json({ ok: true, version: "test", pid: 31465 }),
-    });
-    expect(await planStop(deps, 58910)).toEqual({ action: "kill", pid: 31465 });
-  });
-
-  // Same lineage (health carries a version) but from before the pid marker: the pidfile was
-  // written by a CLI of that same lineage, which is enough of a tie to act on.
-  test("falls back to the pidfile for a same-lineage server that reports no pid", async () => {
-    const deps = probeDeps({ health: Response.json({ ok: true, version: "0.3.0" }) });
-    expect(await planStop(deps, 58910)).toEqual({ action: "kill", pid: 58910 });
+  // Regression: `stop` used to consult a recorded pid, so a stale record made it a no-op while a
+  // server was plainly answering on the port.
+  test("kills the pid the live server reports", async () => {
+    const deps = probeDeps(
+      Response.json({ ok: true, version: "test", pid: 31465 }),
+    );
+    expect(await planStop(deps)).toEqual({ action: "kill", pid: 31465 });
   });
 
   test("does not kill anything when the port is held by another app", async () => {
-    const deps = probeDeps({ health: new Response("nope", { status: 404 }) });
-    expect(await planStop(deps, 58910)).toEqual({
+    const deps = probeDeps(new Response("nope", { status: 404 }));
+    expect(await planStop(deps)).toEqual({
       action: "none",
       reason: "foreign",
     });
   });
 
-  // A pid this old has no verifiable tie to the port, and killing a recycled one hits a stranger.
-  test("refuses to kill a pre-health syokan build (catalog only) from the pidfile", async () => {
-    const deps = probeDeps({
-      health: new Response(null, { status: 404 }),
-      catalog: Response.json({ items: [], envelope: {} }),
-    });
-    expect(await planStop(deps, 58910)).toEqual({
-      action: "none",
-      reason: "unknown_pid",
-    });
+  // Without a pid there is no one to signal, and guessing is how a stranger gets killed.
+  test("treats a health response without a pid as not ours", async () => {
+    const deps = probeDeps(Response.json({ ok: true, version: "test" }));
+    expect(await planStop(deps)).toEqual({ action: "none", reason: "foreign" });
   });
 
   test("stops nothing when the port is free", async () => {
-    expect(await planStop(probeDeps({}), 58910)).toEqual({
+    expect(await planStop(probeDeps())).toEqual({
       action: "none",
       reason: "none",
     });
