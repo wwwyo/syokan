@@ -34,8 +34,7 @@ export type TableProps = z.infer<typeof tablePropsSchema>;
 
 /**
  * Display-only table for aggregations and listings. Cells accept plain strings or
- * inline nodes (Text / Link / Badge / Time); narrowing rows is not a Table concern —
- * that's the cross-cutting tag mechanism (TagFilter).
+ * inline nodes (Text / Link / Badge / Time).
  */
 export function Table({ columns, rows }: TableProps) {
   return (

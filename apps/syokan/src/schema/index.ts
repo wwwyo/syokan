@@ -24,4 +24,5 @@ export {
   type SnapshotSummary,
   CURRENT_SCHEMA_VERSION,
   createSnapshotEnvelopeSchema,
+  createSnapshotInputSchema,
 } from "./snapshot";

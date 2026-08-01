@@ -1,0 +1,36 @@
+name: ci
+
+# Per-PR verification on both distributed OSes (macOS / Linux), so OS-dependent behavior like
+# fs.watch diverging per platform is caught before merge, not at release.
+# Kept to typecheck + test here (macos runners are pricey); the compiled-binary smoke test
+# runs in release.yml as the publish gate.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # The check name is what branch protection matches on, so it is spelled from `platform`
+    # rather than the runner label: swapping `ubuntu-latest` for a pinned image would
+    # otherwise rename the check, and a required check that never reports blocks every merge.
+    name: test (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-latest
+          - platform: macos
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0 / installs the same bun version as local per mise.toml
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test

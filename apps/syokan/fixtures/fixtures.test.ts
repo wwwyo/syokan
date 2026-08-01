@@ -31,7 +31,6 @@ describe("review-panel fixture", () => {
       "Stat",
       "Checklist",
       "Collapsible",
-      "TagFilter",
       "Graph",
       "Probe",
     ]) {

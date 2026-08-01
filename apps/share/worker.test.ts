@@ -306,7 +306,7 @@ describe("POST /api/v1/shares", () => {
 		);
 	});
 
-	test("preserves cross-cutting id and tags through validation into KV", async () => {
+	test("preserves cross-cutting id through validation into KV", async () => {
 		const { env, kv } = createEnv();
 		const { token } = await login(env);
 		const res = await publish(env, token, {
@@ -320,7 +320,6 @@ describe("POST /api/v1/shares", () => {
 							type: "Text",
 							props: { body: "high" },
 							id: "risk-1",
-							tags: ["High"],
 						},
 					],
 				},
@@ -333,12 +332,11 @@ describe("POST /api/v1/shares", () => {
 		) as ShareRecord;
 		const root = (record.envelope as { root: unknown }).root as {
 			id?: string;
-			children?: { id?: string; tags?: string[] }[];
+			children?: { id?: string }[];
 		};
-		// a plain z.object would strip these, breaking anchors / TagFilter on shared views
+		// a plain z.object would strip this, breaking anchors on shared views
 		expect(root.id).toBe("root");
 		expect(root.children?.[0]?.id).toBe("risk-1");
-		expect(root.children?.[0]?.tags).toEqual(["High"]);
 	});
 
 	test("a TreeDoc anywhere in the tree is 400", async () => {

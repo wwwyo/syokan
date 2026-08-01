@@ -10,7 +10,9 @@ syokan dashboard.json   # dashboard.json を syokan
 
 LLM が JSON の呪文を唱えると、rich で生きた interface が立ち現れる — JSX は書かず、build も無い。散らばったデータ — 今日の RSS、進行中の PR review、共有された議事録、生きた status board — が、必要なときだけ構造化された UI として現れる。view は ephemeral — 召喚された view はやがて消える前提で、何も溜め込まない。そして唱えるのは誰でもいい: Claude Code、scheduled agent、CLI ワンライナー、webhook。
 
-**▶ [30秒デモを見る](apps/demo-video/demo.mp4)** — Claude Code が唱えると、diff とグラフを含む PR review の view が召喚される。([撮り直し用の素材](apps/demo-video))
+https://github.com/user-attachments/assets/a98eed41-65a0-4aa9-a745-c06c2575f293
+
+Claude Code が唱えると、diff とグラフを含む PR review の view が召喚される。([撮り直し用の素材](apps/demo-video))
 
 > **自分のデータを召喚する** — `brew install wwwyo/tap/syokan` を入れて唱える。[はじめに](#はじめに) 参照。
 
@@ -35,18 +37,21 @@ client-side routing（TanStack Router）の CSR app。`/` が home、`/snapshots
 普段使いの `syokan` は **単体バイナリ**（Bun/Node 不要、server も自動 lazy-spawn）。対応 OS は **macOS と Linux** — Windows は未対応。
 
 ```bash
-# macOS (Homebrew)
+# Homebrew
 brew install wwwyo/tap/syokan
 
-# Linux、または Homebrew を使わない macOS
+# インストーラ
 curl -fsSL https://raw.githubusercontent.com/wwwyo/syokan/main/install.sh | sh
 
+# mise
+mise use -g github:wwwyo/syokan@latest
+```
+
+```bash
 syokan --help   # コマンド確認（機械可読は --help --json）
 ```
 
-インストーラは OS/arch を判別し、release の `checksums.txt` と照合して `~/.local/bin` に配置する（sudo 不要、`SYOKAN_INSTALL_DIR` で変更可）。バージョン固定は `... | sh -s -- v0.2.0`。
-
-> 他の install: `mise use -g github:wwwyo/syokan@latest`（mise github backend）、[Releases](https://github.com/wwwyo/syokan/releases) から `syokan-<os>-<arch>` を直接 download、または source build（[ビルド](#ビルド-単体バイナリ)）。brew / curl / mise 経由は quarantine 属性が付かない — ブラウザで直接 download したバイナリだけが macOS Gatekeeper に弾かれうるので、その場合は `codesign --sign - <path>`。
+> または [Releases](https://github.com/wwwyo/syokan/releases) から `syokan-<os>-<arch>` を直接 download、source build（[ビルド](#ビルド-単体バイナリ)）。ブラウザで download したバイナリは macOS Gatekeeper に弾かれうるので、その場合は `codesign --sign - <path>`。
 
 最初の召喚（server は自動で立ち上がり、view URL が返る）:
 
@@ -83,25 +88,27 @@ snapshot **envelope**（**JSON** のみ。markdown は描画されない — 文
 
 ```jsonc
 {
-  "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] }, // 必須: view tree
-  "title": "Today's RSS",                              // 任意
-  "idempotencyKey": "rss-2026-06-20"                   // POST では任意・PUT では必須: view に名前を付け、後から狙い撃てるようにする
+  "root": { "type": "Stack", "props": {}, "children": [ /* ... */ ] },
+  "title": "Today's RSS",
+  "idempotencyKey": "rss-2026-06-20"
 }
 ```
+
+これらのキーの SSOT は `GET /api/catalog` が返す `envelope` スキーマ（`syokan catalog` からも見られる）— フィールドを手で書き写さず、そこから引くこと。envelope 自身のキーだけを定義し、`root` は不透明にしてある。ノード側の契約は `items` にあるので、body 全体を検証するなら両方を見る。
 
 `POST` は常に新規作成(`201`)し、`idempotencyKey` は以後の `PUT` の的として登録するだけ。`PUT` は `idempotencyKey` 必須で既存の view を狙い撃つ: 一致すれば `root`/`title` をその場で置き換え(id/url は同じ、`createdAt` は初回のまま)`200`、一致が無ければ `404`(`not_found`)——`PUT` は新規作成しない(`allowMissing` のような逃げ道は無い。作りたいときは `POST` を使う)。検証エラーは `400`（`invalid_json` / `validation_failed`）。CLI コマンドは `syokan --help`。
 
 ## catalog
 
-`type` の SSOT は catalog（`apps/syokan/src/catalogs`）。manifest を取得して props 契約を引く:
+`type` の SSOT は catalog（`apps/syokan/src/catalogs`）。manifest を取得して props 契約と全 type 一覧を引く — `syokan catalog`（CLI）または:
 
 ```
-GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], mechanisms: { node, uiState, probe } }
+GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes }], envelope: <envelope 自身のキーの JSON Schema> }
 ```
 
-現在の type — container: `Stack` `Card` `Checklist` `Collapsible` `TagFilter` / leaf: `Heading` `Link` `Text` `Time` `Diff` `Code` `Badge` `Mermaid` `TreeDoc` `Table` `Stat` `Graph` `Probe`。Storybook（`bun run storybook`）で視覚的に確認できる。
+type は Storybook（`bun run storybook`）で視覚的に確認できる。
 
-すべての node は横断フィールド `id`（view 内 anchor。`Link href:"#<id>"` で移動でき、操作を持つ node が閲覧端末ローカルの状態を保持するための identity にもなる）と `tags`（祖先 `TagFilter` による絞り込み対象化）を受け付ける。操作状態（チェック・開閉・絞り込み選択・Probe 再実行）は閲覧側ブラウザに留まり、snapshot 本体は不変のまま。`Probe` は `mechanisms.probe.kinds` に公開された事前定義の読み取り専用 check だけを実行でき（`POST /api/probes/run`）、公開共有では再実行が無効化され、`shareVisible: true` を指定しない限り publish 時に引数と結果が envelope から削除される。
+すべての node は横断フィールド `id`（view 内 anchor。`Link href:"#<id>"` で移動でき、操作を持つ node が閲覧端末ローカルの状態を保持するための identity にもなる）を受け付ける。操作状態（チェック・開閉・Probe 再実行）は閲覧側ブラウザに留まり、snapshot 本体は不変のまま。`Probe` は自身の `check` props スキーマに公開された事前定義の読み取り専用 check だけを実行でき（`POST /api/probes/run`）、公開共有では再実行が無効化され、`shareVisible: true` を指定しない限り publish 時に引数と結果が envelope から削除される。
 
 `TreeDoc`（props: `path`、**絶対パスのみ**、URL 不可）は catalog tree JSON ファイルを参照する catalog ノード。サーバが内容を読み、クライアントが検証して live な subtree として描画し、ファイルの変更を view に追従させる（forward sync）。書きかけの不正な保存で view は消えない: ファイルが正常に戻るまで、直前の正常な描画を保ったまま控えめなエラーを添える。sync 対象の tree の中に `TreeDoc` は置けない（入れ子を拒否することで循環を仕組みごと排除）。サーバは localhost のみに bind し、監視は view を開いている間だけの一時状態（永続しない）。publish 時は各 `TreeDoc` がその時点の subtree に凍結され、公開 payload がファイルを参照することはない。
 
