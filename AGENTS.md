@@ -7,6 +7,7 @@
 ## Repo learning skills
 
 - Brand/logo/OGP changes should load `.agents/skills/brand-assets/` for repo-specific asset pitfalls maintained by session-retro.
+- Code, build, dev-server, and filesystem-watcher changes should load `.agents/skills/coding/` for repo-specific pitfalls maintained by session-retro.
 - Snapshot store / envelope / API compatibility changes should load `.agents/skills/coding/` for repo-specific migration pitfalls maintained by session-retro.
 
 ## Why build this
@@ -185,47 +186,6 @@ The global tool is **a single executable** (`bun run compile` → `apps/syokan/d
 - **Distribution**: `bun run compile:all` (= `build.ts --release`) cross-compiles each OS/arch and emits `apps/syokan/dist/syokan-<os>-<arch>` (names in a form mise's `github` backend can use to detect OS/arch). Cross-compilation downloads the target bun runtime each time. Pushing a `v*` tag runs the whole pipeline in `release.yml`: **build → smoke → publish → homebrew**. Publishing is gated on the smoke test so a broken artifact never ships, and the assets carry a `checksums.txt` that both downstream install paths verify against. The three install paths are `brew install wwwyo/tap/syokan` (formula regenerated per release by `scripts/generate-formula.ts` and pushed to the separate [wwwyo/homebrew-tap](https://github.com/wwwyo/homebrew-tap) repo — a one-directional flow, so the formula is never hand-edited there), `curl … | sh` ([install.sh](./install.sh), served from the repo's default branch so it updates independently of releases), and the pre-existing `mise use -g github:wwwyo/syokan@latest`. The tap push needs the `TAP_GITHUB_TOKEN` secret (fine-grained PAT scoped to that one repo); it runs *after* publish so a tap failure shows up red without holding back the release.
 - **Smoke test as the release gate**: `scripts/smoke.ts` drives a **compiled** binary end to end (post → view → summon a `TreeDoc` → receive the SSE change → refetch → stop) on both ubuntu and macos runners. It exists because `bun test` runs in dev mode and therefore never exercises lazy-spawn (re-exec of the binary itself), the embedded frontend, or the real file-watch path. Its file edit deliberately uses the atomic-save shape (write temp + rename) — the exact case that was broken on Linux (see the `fs.watch` pitfall). Keep it dependency-free and self-isolating (temp XDG dirs + an OS-assigned port) so it can never touch a real install.
 
-## Known pitfalls
-
-### Catalog `Code` / `Diff` collapse in dev (StrictMode) — fixed, keep the guard
-
-`@pierre/diffs`' `File` (the catalog's `Code` / `Diff`) used to **collapse to height 0 on first render in `bun run dev` (React StrictMode) when the grammar is cold** (deterministic in the home "usage" tab, intermittent on client transitions). It is fixed by an `onPostRender` guard in `src/catalogs/Code/index.tsx` — do not delete that hook, and re-check the tab render whenever the pierre version moves.
-
-- **Cause**: on a cold first render File paints an empty `<pre>` (one containing no `[data-code]` node) into its shadow DOM and fills it in when async highlighting completes. StrictMode unmounts before that lands; on remount, `shouldRenderCode()` only tests whether the `<pre>` exists, so the new instance adopts the stale empty one through the hydrate path, which registers no completion callback — the body never arrives.
-- **The fix**: drop an incomplete `<pre>` at unmount, so the remount takes the normal render path and re-highlights. Warm and production renders leave a completed `<pre>` untouched.
-- **Dead ends** (kept so they aren't retried): `disableWorkerPool`, delayed mount, removing the ResizeObserver patch, changing the default tab. The knob that matters is which DOM the remount inherits, not timing.
-- **Upstream**: a robustness bug on pierre's side — `shouldRenderCode()` treats a placeholder `<pre>` as rendered output. Candidate for an upstream issue; the guard above is a consumer-side workaround.
-- `components/CodeSnippet` (a bare `<pre>`) is no longer a fallback for this and stays only for the public share viewer, which renders doc snippets without pulling in the highlighter.
-
-### Bun (macOS) `fs.watch`: watching a parent directory does not fire on content changes inside it
-
-Hit while implementing the file-reference node's change watching (`server/fileSource.ts`; then `FileDoc`, now `TreeDoc`).
-
-- **The pitfall**: a "write temp → rename" save (editors' common atomic save) swaps the target file's inode, so a naive `fs.watch(path)` loses track of changes after the swap. The textbook fix is "watch the parent directory and filter by basename", but on **Bun (macOS), `fs.watch(dir)` does not fire on content changes of files inside it** — verified on a real machine (dir watch is unusable).
-- **Policy (macOS)**: watch the file itself; on a `rename` event (the signal for inode swap/deletion), re-arm a watch on the same path. If the replacement hasn't appeared yet, retry with a cap. This follows "rename save → subsequent in-place writes".
-- **Remaining limit (macOS)**: if a file is deleted and re-created at the same path only after a while, live updates stop once the re-arm retry cap is exceeded (the view shows not_found via GET). Accepted for MVP. Details in `.agent/prd/file-source-sync/decision.log` #7.
-- **Linux is the mirror image** (verified in an oven/bun container, Bun 1.3.12): watching the file itself is *silent* on an inode swap (rename-over never fires, and the re-arm never triggers), while watching the parent directory works. So `fileSource.ts` branches per platform: Linux watches the parent dir, macOS watches the file. Two extra Linux traps: (1) events in a burst (create tmp → write → rename) are coalesced down to as little as **one** event, and the survivor may carry the *temp file's* name — so do not filter dir events by basename, or atomic saves get dropped; (2) a freshly armed watcher exhibits this most reliably, so "arm then immediately rename" tests fail under a basename filter even though spaced-out events look fine.
-
-### `bunfig.toml` is read from cwd only, so the dev server's Tailwind plugin needs a per-package copy
-
-Hit after the monorepo split: the dev server rendered completely unstyled (served CSS had zero utility classes).
-
-- **The pitfall**: the dev server bundles the frontend via the `index.html` import, and the Tailwind expansion comes from `[serve.static] plugins = ["bun-plugin-tailwind"]` in `bunfig.toml`. Bun reads `bunfig.toml` **from `$cwd` only** (it does not walk up to the workspace root, and `bun --config <path>` silently no-ops for `bun run`). The root `dev` script runs each package's dev via `bun --filter`, so the syokan server starts with cwd `apps/syokan/` — where the root `bunfig.toml` is invisible, so the plugin never loads.
-- **Fix**: `apps/syokan/bunfig.toml` is a **symlink to `../../bunfig.toml`** so the same config (plugin + the supply-chain `[install]` settings) resolves from the package cwd without duplication. If the app ever renders unstyled in dev, check that symlink first.
-
-### Bun dev server serves a stale module bundle after an edit
-
-Hit while wiring the brand `Logo` into `Home.tsx` and the sidebar.
-
-- **The pitfall**: after editing a source file, `bun run dev` (the HTML-import bundler + HMR) can keep serving the *previous* bundle of the edited module — the DOM still shows the old code — even though an unrelated sibling edited in the same batch reloads fine. `touch`-ing the file and reloading the browser do **not** clear it.
-- **Policy**: when an edit doesn't appear in the preview, restart the dev server (stop → start) for a clean bundle instead of chasing HMR. `tsc` stays green regardless, so a source-vs-DOM mismatch (not the type checker) is the signal.
-
-### Favicon / OG live in two HTML heads, and `<meta>`-only assets aren't bundled
-
-Hit while adding the brand favicon + OG image.
-
-- **Two entrypoints**: `apps/syokan/index.html` (main app) and `apps/share/viewer/index.html` (public share) are independent heads. The shared favicon (`<link rel="icon">` SVG data URI) must be added to **both** and kept in sync by hand. OG/Twitter `<meta>` and the raster icon fallbacks (`.ico` / apple-touch) live on the **public share head only** — the main app is a localhost bind, never unfurled or home-screened, so it stays SVG-favicon-only.
-- **Bundler blind spot**: Bun's HTML-entry build (`apps/share/build.ts`) only follows `<script>` / `<link rel=stylesheet>` imports. A static file referenced *only* from `<meta property="og:image">` is **not** copied into `dist` — `build.ts` must copy it explicitly. It also tries to *resolve* file-path `<link href>` (favicon `.ico` / apple-touch), which fails the build, so those links are injected post-build instead of living in the source HTML. Inline `data:` URIs (the SVG favicon) survive minify, so they need no copy.
 
 ## Communication policy
 
