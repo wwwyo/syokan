@@ -162,6 +162,11 @@ export async function ensureServerRunning(
     await deps.sleep(READY_INTERVAL_MS);
     const polled = await probeServer(deps);
     if (polled.kind === "compatible") {
+      // A concurrent CLI can win the port first. Whoever answers is the one to record, and our
+      // own child is then surplus — reaping it is the whole point of this cleanup.
+      if (polled.pid !== undefined && polled.pid !== spawned.pid) {
+        deps.killServer(spawned.pid);
+      }
       deps.recordServer(polled.pid ?? spawned.pid);
       return { ok: true, spawned: true };
     }
@@ -415,7 +420,7 @@ export async function runStop(deps: CliDeps): Promise<CliResult> {
       `syokan: a syokan server answers at ${deps.baseUrl} but does not report its pid (older build); stop it manually`,
     );
   } else {
-    deps.stderr("syokan: no syokan-managed server to stop");
+    deps.stderr(`syokan: no syokan server is listening at ${deps.baseUrl}`);
   }
   return { exitCode: 0 };
 }
@@ -1071,16 +1076,21 @@ function realSpawnServer(baseUrl: string): SpawnResult {
   return { pid: proc.pid };
 }
 
-// The pidfile is only a hint: a corrupt or pid-less file reads as "unknown".
+// The pidfile is only a hint: a corrupt or pid-less file reads as "unknown" and is discarded on
+// the spot, since nothing can ever recover a pid from it and a leftover would outlive every path
+// that cleans up (a match is what triggers removal elsewhere).
 function pidFromFile(port: number): number | undefined {
   const file = pidFilePath(port);
   if (!existsSync(file)) return undefined;
+  let pid: unknown;
   try {
-    const pid = (JSON.parse(readFileSync(file, "utf8")) as { pid?: number }).pid;
-    return typeof pid === "number" ? pid : undefined;
+    pid = (JSON.parse(readFileSync(file, "utf8")) as { pid?: unknown }).pid;
   } catch {
-    return undefined;
+    pid = undefined;
   }
+  if (typeof pid === "number") return pid;
+  rmSync(file, { force: true });
+  return undefined;
 }
 
 // Overwrite the pidfile with the pid of the server that actually answered, so a stale entry

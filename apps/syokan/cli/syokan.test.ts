@@ -568,6 +568,23 @@ describe("ensureServerRunning (lazy-spawn)", () => {
     expect(h.killed).toEqual([4243]);
   });
 
+  // A concurrent CLI can bind the port first; our own child is then surplus.
+  test("reaps its own child when another server wins the port", async () => {
+    let checks = 0;
+    const h = makeDeps({
+      respond: () => okResponse(),
+      health: () => {
+        checks += 1;
+        return checks > 1;
+      },
+      healthPid: 31465,
+    });
+    const result = await ensureServerRunning(h.deps);
+    expect(result).toEqual({ ok: true, spawned: true });
+    expect(h.killed).toEqual([4243]);
+    expect(h.recorded).toEqual([31465]);
+  });
+
   test("reports a port conflict when a non-syokan process answers on the port", async () => {
     const h = makeDeps({ respond: () => okResponse(), foreignServer: true });
     const result = await ensureServerRunning(h.deps);
@@ -800,11 +817,11 @@ describe("cli main: stop", () => {
     expect(h.err[0]).toContain("stopped server");
   });
 
-  test("reports nothing-to-stop when no managed server exists", async () => {
+  test("reports nothing-to-stop when the port is free", async () => {
     const h = makeDeps({ respond: () => okResponse(), stopped: false });
     const result = await main(["stop"], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.err[0]).toContain("no syokan-managed server");
+    expect(h.err[0]).toContain("no syokan server is listening");
   });
 
   test("says the port belongs to something else instead of nothing-to-stop", async () => {
