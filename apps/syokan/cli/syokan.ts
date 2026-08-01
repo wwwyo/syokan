@@ -1,14 +1,5 @@
 #!/usr/bin/env bun
-import {
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, openSync, realpathSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +9,13 @@ import pkg from "../package.json";
 import { type Command, createRouter } from "./router";
 
 export type SpawnResult = { pid: number };
-export type StopResult = { stopped: boolean; pid?: number };
+// reason explains a non-stop so the CLI can say why instead of the flat "nothing to stop":
+// foreign=the port belongs to another app.
+export type StopResult = {
+  stopped: boolean;
+  pid?: number;
+  reason?: "none" | "foreign";
+};
 
 export type CliDeps = {
   fetch: typeof fetch;
@@ -36,7 +33,9 @@ export type CliDeps = {
   baseUrl: string;
   // For lazy-spawn: start the server detached
   spawnServer: () => SpawnResult;
-  // For `syokan stop`: stop the lazy-spawned server
+  // Terminate a server we spawned ourselves (readiness-timeout cleanup, so failures leave no orphan)
+  killServer: (pid: number) => void;
+  // For `syokan stop`: stop whichever syokan server holds the port (not merely one we spawned)
   stopServer: () => StopResult | Promise<StopResult>;
   // Wait for the readiness poll (tests inject an immediate resolve)
   sleep: (ms: number) => Promise<void>;
@@ -53,54 +52,87 @@ type PostResult = { ok: boolean; status: number; data: unknown };
 const READY_RETRIES = 150;
 const READY_INTERVAL_MS = 100;
 
-// absent=none / compatible=same lineage as this build / incompatible=an old build is running.
-// An old build doesn't return a version in health. If a new CLI silently reuses it,
-// catalog/templates 404 and stop can't kill it (it looks at a different pidfile), so distinguish them.
-type ServerProbe = "absent" | "compatible" | "incompatible";
+// The port answers for itself: absent=nothing listening / syokan=our health contract, pid included
+// / foreign=something answers but isn't us. foreign is its own state because "spawn and wait" can
+// never succeed against it — the child cannot take the port — and calling that a readiness timeout
+// points at the wrong cause.
+export type ServerProbe =
+  | { kind: "absent" }
+  | { kind: "syokan"; pid: number }
+  | { kind: "foreign" };
 
-async function probeServer(deps: CliDeps): Promise<ServerProbe> {
+async function readJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+export async function probeServer(
+  deps: Pick<CliDeps, "fetch" | "baseUrl">,
+): Promise<ServerProbe> {
   let res: Response;
   try {
     res = await deps.fetch(`${deps.baseUrl}/api/health`);
   } catch {
-    return "absent";
+    // Unreachable (refused / reset / DNS): nothing usable is there, so treat the port as free.
+    // Spawning against a port that merely looks unreachable is safe — a real occupant makes the
+    // child fail to bind and the readiness timeout reaps it.
+    return { kind: "absent" };
   }
-  if (!res.ok) return "absent";
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    body = null;
+  if (!res.ok) return { kind: "foreign" };
+  const body = (await readJson(res)) as {
+    version?: unknown;
+    pid?: unknown;
+  } | null;
+  // version + pid IS the health contract. Anything else answering this route is not a syokan we
+  // can drive: we could neither trust its API nor name the process to stop.
+  if (typeof body?.version !== "string" || typeof body.pid !== "number") {
+    return { kind: "foreign" };
   }
-  const version = (body as { version?: unknown } | null)?.version;
-  return typeof version === "string" ? "compatible" : "incompatible";
+  return { kind: "syokan", pid: body.pid };
+}
+
+function portConflictError(baseUrl: string): string {
+  return `${baseUrl} is held by a process that is not this syokan build; stop that process, or point SYOKAN_BASE_URL at a free port`;
 }
 
 // lazy-spawn: use the server if it's already running; otherwise start it and wait until ready.
-// If an old build occupies the same port, don't silently reuse it — return an error prompting a stop.
+// Whether a server exists is answered by the port alone — no record on disk is consulted, so
+// there is nothing that can go stale and send the CLI chasing a server that isn't there.
 export async function ensureServerRunning(
   deps: CliDeps,
 ): Promise<{ ok: true; spawned: boolean } | { ok: false; error: string }> {
   const probe = await probeServer(deps);
-  if (probe === "compatible") return { ok: true, spawned: false };
-  if (probe === "incompatible") {
-    return {
-      ok: false,
-      error: `an older syokan server is already running at ${deps.baseUrl}; stop it first (kill the process on its port, or run the previous build's 'syokan stop')`,
-    };
+  if (probe.kind === "syokan") return { ok: true, spawned: false };
+  if (probe.kind === "foreign") {
+    return { ok: false, error: portConflictError(deps.baseUrl) };
   }
-  deps.spawnServer();
+  const spawned = deps.spawnServer();
   for (let i = 0; i < READY_RETRIES; i++) {
     await deps.sleep(READY_INTERVAL_MS);
-    if ((await probeServer(deps)) === "compatible") {
+    const polled = await probeServer(deps);
+    if (polled.kind === "syokan") {
+      // A concurrent CLI can win the port first; our own child is then surplus, and leaving it
+      // running is the accumulation this cleanup exists to prevent.
+      if (polled.pid !== spawned.pid) deps.killServer(spawned.pid);
       return { ok: true, spawned: true };
     }
+    // Someone else won the port while we were starting: waiting out the timeout cannot help.
+    if (polled.kind === "foreign") {
+      deps.killServer(spawned.pid);
+      return { ok: false, error: portConflictError(deps.baseUrl) };
+    }
   }
+  // Reap our own child. Leaving it behind means every retry adds another server that can
+  // never serve, which is exactly how a repeatedly-invoking agent piles up processes.
+  deps.killServer(spawned.pid);
   return {
     ok: false,
     error: `server did not become ready within ${
       (READY_RETRIES * READY_INTERVAL_MS) / 1000
-    }s`,
+    }s; the spawned process (pid ${spawned.pid}) was terminated`,
   };
 }
 
@@ -325,11 +357,15 @@ export async function runOpen(
 }
 
 export async function runStop(deps: CliDeps): Promise<CliResult> {
-  const { stopped, pid } = await deps.stopServer();
+  const { stopped, pid, reason } = await deps.stopServer();
   if (stopped) {
     deps.stderr(`syokan: stopped server (pid ${pid})`);
+  } else if (reason === "foreign") {
+    deps.stderr(
+      `syokan: ${deps.baseUrl} is held by a process that is not syokan; leaving it alone`,
+    );
   } else {
-    deps.stderr("syokan: no syokan-managed server to stop");
+    deps.stderr(`syokan: no syokan server is listening at ${deps.baseUrl}`);
   }
   return { exitCode: 0 };
 }
@@ -743,7 +779,7 @@ const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
   {
     name: "stop",
     usage: "syokan stop",
-    summary: "Stop the lazy-spawned server",
+    summary: "Stop the syokan server on this port",
     run: (_rest, deps) => runStop(deps),
   },
   {
@@ -851,7 +887,7 @@ export const helpManifest = {
     {
       name: "XDG_STATE_HOME",
       summary:
-        "State root (default ~/.local/state); snapshots, pidfile, and log live under <root>/syokan",
+        "State root (default ~/.local/state); snapshots and the server log live under <root>/syokan",
     },
   ],
   output:
@@ -936,15 +972,16 @@ function portFromBaseUrl(baseUrl: string): number {
   }
 }
 
-function pidFilePath(port: number): string {
-  return join(runtimeDir(), `server-${port}.json`);
-}
-
 // In the single binary process.execPath points at our own binary; in dev it points at the bun runtime.
 // Used to decide how to spawn (re-exec ourselves, or start the source via bun).
 function isCompiledBinary(): boolean {
   return basename(process.execPath).replace(/\.exe$/i, "") !== "bun";
 }
+
+// Held so a readiness-timeout cleanup can kill through the child handle instead of the bare pid:
+// a pid can be recycled between spawn and cleanup, and `process.kill` on a recycled pid would
+// signal a stranger. Bun's handle only ever signals our own child.
+let spawnedProc: Bun.Subprocess | null = null;
 
 function realSpawnServer(baseUrl: string): SpawnResult {
   const port = portFromBaseUrl(baseUrl);
@@ -972,50 +1009,42 @@ function realSpawnServer(baseUrl: string): SpawnResult {
   });
   // Drop the reference from the parent's event loop so the CLI can exit immediately
   proc.unref();
-  writeFileSync(
-    pidFilePath(port),
-    JSON.stringify({ pid: proc.pid, port, baseUrl }),
-  );
+  spawnedProc = proc;
   return { pid: proc.pid };
 }
 
+// Only ever reaps a child of this process, so a pid recycled since spawn cannot be signalled.
+function realKillServer(_baseUrl: string, pid: number): void {
+  if (spawnedProc?.pid === pid) spawnedProc.kill();
+}
+
+export type StopPlan =
+  | { action: "kill"; pid: number }
+  | { action: "none"; reason: "none" | "foreign" };
+
+// The pid to stop comes from the server that just answered on the port. Nothing is read from
+// disk, so there is no record to go stale — the reason the CLI could previously believe in a
+// server that was gone, or fail to find the one that was there.
+export async function planStop(
+  deps: Pick<CliDeps, "fetch" | "baseUrl">,
+): Promise<StopPlan> {
+  const probe = await probeServer(deps);
+  if (probe.kind === "absent") return { action: "none", reason: "none" };
+  if (probe.kind === "foreign") return { action: "none", reason: "foreign" };
+  return { action: "kill", pid: probe.pid };
+}
+
 async function realStopServer(baseUrl: string): Promise<StopResult> {
-  const port = portFromBaseUrl(baseUrl);
-  const file = pidFilePath(port);
-  if (!existsSync(file)) return { stopped: false };
-  let pid: number | undefined;
-  try {
-    pid = (JSON.parse(readFileSync(file, "utf8")) as { pid?: number }).pid;
-  } catch {
-    // A pidfile corrupted by a broken / interrupted write. Clean it up and treat as nothing-to-stop
-    rmSync(file, { force: true });
-    return { stopped: false };
-  }
-  if (typeof pid !== "number") {
-    rmSync(file, { force: true });
-    return { stopped: false };
-  }
-  // To avoid killing an unrelated process due to PID reuse, kill only when a syokan server
-  // actually responds at the recorded baseUrl. If it's down, just clean up the
-  // pidfile (= nothing-to-stop) to avoid a mistaken kill.
-  let healthy = false;
-  try {
-    const res = await fetch(`${baseUrl}/api/health`);
-    healthy = res.ok;
-  } catch {
-    healthy = false;
-  }
-  if (!healthy) {
-    rmSync(file, { force: true });
-    return { stopped: false };
+  const plan = await planStop({ fetch: globalThis.fetch, baseUrl });
+  if (plan.action === "none") {
+    return { stopped: false, reason: plan.reason };
   }
   try {
-    process.kill(pid);
+    process.kill(plan.pid);
   } catch {
-    // Clean up the pidfile even if it's already dead
+    // It answered a moment ago; if it is already gone, the goal is met either way
   }
-  rmSync(file, { force: true });
-  return { stopped: true, pid };
+  return { stopped: true, pid: plan.pid };
 }
 
 // Assemble the runtime deps and run the CLI. Called from both entry.ts (the single binary's
@@ -1051,6 +1080,7 @@ export async function runCli(): Promise<void> {
     },
     baseUrl,
     spawnServer: () => realSpawnServer(baseUrl),
+    killServer: (pid) => realKillServer(baseUrl, pid),
     stopServer: () => realStopServer(baseUrl),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     openUrl: (url) => {

@@ -3,7 +3,7 @@
 // Guards "the distributed artifact itself works": lazy-spawn via re-exec, the embedded frontend's
 // server, and TreeDoc file-follow over SSE — paths a dev-mode `bun test` never exercises.
 // Runs fully isolated (temp XDG dirs + its own port), so it can't touch a real install.
-import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -138,6 +138,17 @@ try {
     const res = await fetch(`${baseUrl}/api/files?path=${encodeURIComponent(treePath)}`);
     const body = (await res.json()) as { content?: string };
     if (!res.ok || !body.content?.includes("smoke v2")) throw new Error(`status=${res.status} body=${JSON.stringify(body)}`);
+  });
+
+  // The running server is found by asking the port, with no state on disk to consult — the whole
+  // reason a duplicate spawn (which could never bind, and used to be left running) cannot arise.
+  await step("a later call adopts the running server instead of spawning", async () => {
+    const r = await run(["catalog"]);
+    if (r.code !== 0 || !r.out.includes("envelope")) throw new Error(`exit=${r.code} out=${r.out.slice(0, 200)}\n${r.err}`);
+    if (r.err.includes("started server")) throw new Error("spawned a second server despite a live one");
+    const stateDir = join(work, "state", "syokan");
+    const stale = readdirSync(stateDir).filter((f) => f.endsWith(".json") && f.startsWith("server-"));
+    if (stale.length > 0) throw new Error(`server state files should not exist: ${stale.join(", ")}`);
   });
 
   await step("syokan stop shuts the server down", async () => {
