@@ -5,6 +5,14 @@ import { z } from "zod";
  * Because trees from the API / files / LLMs are rendered, a dangerous protocol like
  * javascript:/data:/file: slipping into href could become XSS. Restrict the protocol explicitly.
  */
+/**
+ * The scheme restriction stated for producers. A prop that adds its own `.describe()` on
+ * `httpUrl` replaces the description wholesale, so prefix this constant instead of retyping
+ * the clause — otherwise the restriction silently disappears from that prop's manifest entry.
+ */
+export const httpUrlDescription =
+  "An absolute http(s) URL. Other schemes (javascript:, data:, file:, mailto:) are rejected at ingest.";
+
 export const httpUrl = z
   .url()
   .refine(
@@ -20,6 +28,4 @@ export const httpUrl = z
   )
   // the protocol restriction is a .refine, so it cannot survive into `format: "uri"`;
   // state it here or a producer only learns of it from a 400
-  .describe(
-    "An absolute http(s) URL. Other schemes (javascript:, data:, file:, mailto:) are rejected at ingest.",
-  );
+  .describe(httpUrlDescription);

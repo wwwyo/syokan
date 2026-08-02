@@ -1,6 +1,19 @@
 import { describe, expect, test } from "bun:test";
+import { parseTreeContent } from "../lib/treeSource";
+import { graphPropsSchema } from "./Graph";
 import { components } from "./index";
+import { markdownPropsSchema } from "./Markdown";
 import { catalogEnvelopeSchema, catalogManifest } from "./manifest";
+import { tablePropsSchema } from "./Table";
+
+/** Every `format: "uri"` subschema anywhere in an emitted props schema (httpUrl's footprint). */
+function collectUriSchemas(node: unknown): { description?: string }[] {
+  if (node === null || typeof node !== "object") return [];
+  if (Array.isArray(node)) return node.flatMap(collectUriSchemas);
+  const record = node as Record<string, unknown>;
+  const self = record.format === "uri" ? [record as { description?: string }] : [];
+  return [...self, ...Object.values(record).flatMap(collectUriSchemas)];
+}
 
 describe("catalogManifest", () => {
   test("covers every registered catalog type exactly once", () => {
@@ -37,18 +50,56 @@ describe("catalogManifest", () => {
 
   // A constraint enforced by superRefine / .refine never reaches the emitted JSON Schema,
   // so a producer reading only `syokan catalog` would discover it from a 400. Each one
-  // must be restated in a prop `.describe()` or the type's notes.
+  // must be restated in a prop `.describe()` or the type's notes. Each case asserts the
+  // constraint *and* its wording together: asserting the wording alone would stay green
+  // while a dropped refine turned the published note into a lie.
   test("constraints invisible in JSON Schema are restated in notes/description", () => {
     const byType = new Map(catalogManifest().map((e) => [e.type, e]));
+
     // Table: rows longer than columns are rejected (superRefine)
+    expect(
+      tablePropsSchema.safeParse({ columns: ["A"], rows: [["a", "b"]] }).success,
+    ).toBe(false);
     expect(byType.get("Table")?.notes).toContain("rejected at ingest");
+
     // Graph: node id uniqueness + edge endpoints resolving to a node (superRefine)
+    expect(
+      graphPropsSchema.safeParse({ nodes: [{ id: "a" }, { id: "a" }] }).success,
+    ).toBe(false);
+    expect(
+      graphPropsSchema.safeParse({
+        nodes: [{ id: "a" }],
+        edges: [{ from: "a", to: "missing" }],
+      }).success,
+    ).toBe(false);
     expect(byType.get("Graph")?.notes).toContain("unique within the graph");
     expect(byType.get("Graph")?.notes).toContain("every edge from/to");
+
     // Markdown: the rejected block constructs (superRefine over the marked token tree)
-    expect(byType.get("Markdown")?.notes).toContain("rejected");
+    expect(markdownPropsSchema.safeParse({ body: "# heading" }).success).toBe(
+      false,
+    );
+    expect(markdownPropsSchema.safeParse({ body: "<b>raw</b>" }).success).toBe(
+      false,
+    );
+    expect(byType.get("Markdown")?.notes).toContain("raw HTML");
+    expect(byType.get("Markdown")?.notes).toContain("are rejected");
+
     // TreeDoc: bare-tree requirement + the nested-TreeDoc ban (parseTreeContent)
+    expect(
+      parseTreeContent(JSON.stringify({ root: { type: "Text", props: {} } })).ok,
+    ).toBe(false);
+    expect(
+      parseTreeContent(
+        JSON.stringify({
+          type: "Stack",
+          props: {},
+          children: [{ type: "TreeDoc", props: { path: "/tmp/x.json" } }],
+        }),
+      ).ok,
+    ).toBe(false);
     expect(byType.get("TreeDoc")?.notes).toContain("nesting is rejected");
+    expect(byType.get("TreeDoc")?.notes).toContain("not a snapshot envelope");
   });
 
   test("Heading.href documents that it links the heading itself", () => {
@@ -57,17 +108,24 @@ describe("catalogManifest", () => {
     };
     // the affordance that keeps producers from degrading an article title to a bare Link
     expect(props.properties?.href?.description).toContain("heading semantics");
-    expect(props.properties?.href?.description).toContain("http(s)");
   });
 
-  test("httpUrl props state the http(s)-only restriction (a .refine, not a format)", () => {
-    const link = catalogManifest().find((e) => e.type === "Link")?.props as {
-      properties?: { href?: { anyOf?: { description?: string }[] } };
-    };
-    const descriptions = (link.properties?.href?.anyOf ?? []).map(
-      (branch) => branch.description ?? "",
+  // Swept over every uri-formatted prop rather than a sampled one: a prop that adds its own
+  // `.describe()` on httpUrl replaces the shared description, silently dropping the clause.
+  test("every httpUrl prop states the http(s)-only restriction (a .refine, not a format)", () => {
+    const uriSchemas = catalogManifest().flatMap((entry) =>
+      collectUriSchemas(entry.props).map(
+        (schema) => [entry.type, schema] as const,
+      ),
     );
-    expect(descriptions.some((d) => d.includes("http(s)"))).toBe(true);
+    // guards the sweep itself: an empty match set would make every assertion below vacuous
+    expect(uriSchemas.length).toBeGreaterThanOrEqual(2);
+    for (const [type, schema] of uriSchemas) {
+      expect(`${type}: ${schema.description ?? ""}`).toContain("http(s)");
+      expect(`${type}: ${schema.description ?? ""}`).toContain(
+        "rejected at ingest",
+      );
+    }
   });
 
   test("interactive types publish usage notes", () => {
