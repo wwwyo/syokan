@@ -7,7 +7,11 @@ export const headingPropsSchema = z
     text: z.string().min(1),
     level: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
     // If href is present, make the heading a link (expresses an article title etc. in one node)
-    href: httpUrl.optional(),
+    href: httpUrl
+      .optional()
+      .describe(
+        "An http(s) URL that turns the whole heading into a link opening in a new tab, keeping heading semantics — an article title and its destination in one node. Omit for a plain heading; never emit a separate Link node just to make a title clickable.",
+      ),
   })
   .strict();
 

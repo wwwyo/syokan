@@ -39,7 +39,7 @@ const rootPlaceholder = z
   .object({})
   .loose()
   .describe(
-    'The view tree: a catalog node `{ type, props, children? }`. Types and their props are in `items`. Any node also accepts `key` (React list identity) and `id` — an in-view anchor (a Link with href "#<id>" scrolls to it, revealing it if inside a closed Collapsible or a checked-folded Checklist item) and the identity that lets Checklist / Collapsible / Probe keep their viewer-local state across reloads.',
+    'The view tree: a catalog node `{ type, props, children? }`. Types and their props are in `items`. Any node also accepts `key` (React list identity) and `id` — an in-view anchor (a Link with href "#<id>" scrolls to it, revealing it if inside a closed Collapsible or a checked-folded Checklist item) and the identity that lets Checklist / Collapsible / Probe keep their viewer-local state across reloads. An id must be unique across the whole tree; a duplicate is rejected at ingest.',
   );
 
 export function catalogEnvelopeSchema(): Record<string, unknown> {

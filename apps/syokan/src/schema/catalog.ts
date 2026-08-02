@@ -95,7 +95,7 @@ function buildUnion(
           .string()
           .min(1)
           .describe(
-            "In-view anchor and UI-state identity. A Link with href \"#<id>\" scrolls to the node, temporarily highlighting it and revealing it if inside a closed Collapsible or a checked-folded Checklist item. Interactive nodes (Checklist/Collapsible/Probe) persist their state across reloads only when they carry an id.",
+            "In-view anchor and UI-state identity. A Link with href \"#<id>\" scrolls to the node, temporarily highlighting it and revealing it if inside a closed Collapsible or a checked-folded Checklist item. Interactive nodes (Checklist/Collapsible/Probe) persist their state across reloads only when they carry an id. Must be unique across the whole tree — a duplicate id is rejected at ingest.",
           )
           .optional(),
       })
