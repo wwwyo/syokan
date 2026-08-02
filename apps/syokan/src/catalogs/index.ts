@@ -82,12 +82,14 @@ const entries: readonly ViewComponentEntry[] = [
   }),
   defineViewComponent("TreeDoc", treeDocPropsSchema, TreeDoc, {
     childrenTypes: [],
+    notes:
+      "Live-synced subtree: the server reads and watches `path` (an absolute local path, never a URL) and the view re-renders as the file changes. The file must hold a bare catalog node `{ type, props, children? }` — not a snapshot envelope — with tree-wide unique ids and no TreeDoc anywhere inside it (nesting is rejected outright). A save that is momentarily invalid keeps the last valid render.",
   }),
   // composite leaves: cells / labels embed the inline subset via props (see inline.tsx)
   defineViewComponent("Table", tablePropsSchema, Table, {
     childrenTypes: [],
     notes:
-      "Display-only. Cells accept a string, one inline node (Text/Link/Badge/Time), or an array of them.",
+      "Display-only. Cells accept a string, one inline node (Text/Link/Badge/Time), or an array of them. `columns` fixes the column count: a row with fewer cells is padded with empty cells on render, and a row with more cells than columns is rejected at ingest rather than silently truncated.",
   }),
   defineViewComponent("Stat", statPropsSchema, Stat, {
     childrenTypes: [],
@@ -105,7 +107,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Graph", graphPropsSchema, Graph, {
     childrenTypes: [],
     notes:
-      "Static directed graph. role→color/stroke is fixed by the renderer (added=green, removed=red+dashed, hotspot=amber+bold, neutral=muted). Put two side by side for a before/after contrast.",
+      "Static directed graph. role→color/stroke is fixed by the renderer (added=green, removed=red+dashed, hotspot=amber+bold, neutral=muted). Put two side by side for a before/after contrast. node ids must be unique within the graph and every edge from/to must name one of them; both are rejected at ingest.",
   }),
   defineViewComponent("Probe", probePropsSchema, Probe, {
     childrenTypes: [],

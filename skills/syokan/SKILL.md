@@ -60,7 +60,7 @@ For complete examples combining the components, see [references/examples.md](ref
 
 ## Cross-cutting node field (id)
 
-Besides `type` / `props` / `children` / `key`, any node may carry `id`: it makes the node addressable. A `Link` with `href: "#<id>"` jumps to it inside the view (revealing it if folded). It is also the identity for viewer-local UI state — **give an `id` to every `Checklist` / `Collapsible` / `Probe`** so checks, folds, and probe reruns survive reloads.
+Besides `type` / `props` / `children` / `key`, any node may carry `id`: it makes the node addressable. A `Link` with `href: "#<id>"` jumps to it inside the view (revealing it if folded). It is also the identity for viewer-local UI state — **give an `id` to every `Checklist` / `Collapsible` / `Probe`** so checks, folds, and probe reruns survive reloads. An `id` must be unique tree-wide; a duplicate 400s.
 
 Interaction state (checks, folds, probe re-runs) lives in the viewer's browser, never in the envelope — post the *initial* state (`checked`, `defaultOpen`, `result`) and let the reader take it from there.
 
