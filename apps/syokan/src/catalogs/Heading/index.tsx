@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { httpUrl } from "../../lib/url";
+import { httpUrl, httpUrlDescription } from "../../lib/url";
 import { cn } from "../../lib/utils";
 
 export const headingPropsSchema = z
@@ -10,7 +10,7 @@ export const headingPropsSchema = z
     href: httpUrl
       .optional()
       .describe(
-        "An http(s) URL that turns the whole heading into a link opening in a new tab, keeping heading semantics — an article title and its destination in one node. Omit for a plain heading; never emit a separate Link node just to make a title clickable.",
+        `${httpUrlDescription} It turns the whole heading into a link opening in a new tab, keeping heading semantics — an article title and its destination in one node. Omit for a plain heading; never emit a separate Link node just to make a title clickable.`,
       ),
   })
   .strict();

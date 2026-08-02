@@ -83,7 +83,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("TreeDoc", treeDocPropsSchema, TreeDoc, {
     childrenTypes: [],
     notes:
-      "Live-synced subtree: the server reads and watches `path` (an absolute local path, never a URL) and the view re-renders as the file changes. The file must hold a bare catalog node `{ type, props, children? }` — not a snapshot envelope — with tree-wide unique ids and no TreeDoc anywhere inside it (nesting is rejected outright). A save that is momentarily invalid keeps the last valid render.",
+      "Live-synced subtree: the server reads and watches `path` (an absolute local path, never a URL) and the view re-renders as the file changes. The file must hold a bare catalog node `{ type, props, children? }` — not a snapshot envelope — with ids unique within that file's own tree and no TreeDoc anywhere inside it (nesting is rejected outright). A save that is momentarily invalid keeps the last valid render.",
   }),
   // composite leaves: cells / labels embed the inline subset via props (see inline.tsx)
   defineViewComponent("Table", tablePropsSchema, Table, {
