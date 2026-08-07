@@ -21,7 +21,7 @@ export const ja: Messages = {
     usage: {
       step1Title: "1. snapshot を作る — POST /api/snapshots",
       step1Body: "root に catalog の type で組んだ tree を渡す。応答に id が返る。",
-      step1Code: `curl -X POST http://localhost:5173/api/snapshots \\
+      step1Code: `curl -X POST http://localhost:5773/api/snapshots \\
   -H "content-type: application/json" \\
   -d '{
     "title": "今日のRSS",

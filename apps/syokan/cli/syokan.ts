@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runtimeDir } from "../src/lib/paths";
+import { DEFAULT_BASE_URL, DEFAULT_PORT } from "../src/lib/port";
 // At compile time the whole JSON is embedded into the binary (= that binary's version)
 import pkg from "../package.json";
 import { type Command, createRouter } from "./router";
@@ -867,7 +868,7 @@ export const helpManifest = {
   env: [
     {
       name: "SYOKAN_BASE_URL",
-      summary: "Server base URL (default http://localhost:5173)",
+      summary: `Server base URL (default ${DEFAULT_BASE_URL})`,
     },
     {
       name: "SYOKAN_SHARE_API",
@@ -966,9 +967,9 @@ export async function main(
 function portFromBaseUrl(baseUrl: string): number {
   try {
     const p = new URL(baseUrl).port;
-    return p ? Number(p) : 5173;
+    return p ? Number(p) : DEFAULT_PORT;
   } catch {
-    return 5173;
+    return DEFAULT_PORT;
   }
 }
 
@@ -1050,7 +1051,7 @@ async function realStopServer(baseUrl: string): Promise<StopResult> {
 // Assemble the runtime deps and run the CLI. Called from both entry.ts (the single binary's
 // dual-mode) and direct execution (`bun cli/syokan.ts`).
 export async function runCli(): Promise<void> {
-  const baseUrl = process.env.SYOKAN_BASE_URL ?? "http://localhost:5173";
+  const baseUrl = process.env.SYOKAN_BASE_URL ?? DEFAULT_BASE_URL;
   const deps: CliDeps = {
     fetch: globalThis.fetch,
     readFile: (path) => readFile(path, "utf8"),

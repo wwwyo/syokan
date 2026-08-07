@@ -54,7 +54,7 @@ function makeDeps(opts: {
   const healthFn = opts.health ?? (() => true);
 
   const deps: CliDeps = {
-    baseUrl: "http://localhost:5173",
+    baseUrl: "http://localhost:5773",
     stdout: (l) => out.push(l),
     stderr: (l) => err.push(l),
     sleep: async () => {},
@@ -158,8 +158,8 @@ describe("cli main: post (default action)", () => {
     });
     const result = await main(["items.json"], deps);
     expect(result.exitCode).toBe(0);
-    expect(out).toEqual(["http://localhost:5173/snapshots/xyz"]);
-    expect(calls[0]?.url).toBe("http://localhost:5173/api/snapshots");
+    expect(out).toEqual(["http://localhost:5773/snapshots/xyz"]);
+    expect(calls[0]?.url).toBe("http://localhost:5773/api/snapshots");
     const body = calls[0]?.body as { root: { type: string } };
     expect(body.root.type).toBe("Heading");
   });
@@ -174,7 +174,7 @@ describe("cli main: post (default action)", () => {
     });
     const result = await main([], deps);
     expect(result.exitCode).toBe(0);
-    expect(out).toEqual(["http://localhost:5173/snapshots/piped-1"]);
+    expect(out).toEqual(["http://localhost:5773/snapshots/piped-1"]);
     const body = calls[0]?.body as { root: { props: { text: string } } };
     expect(body.root.props.text).toBe("piped");
   });
@@ -215,7 +215,7 @@ describe("cli main: post (default action)", () => {
     });
     const result = await main(["dashboard.json"], deps);
     expect(result.exitCode).toBe(0);
-    expect(out).toEqual(["http://localhost:5173/snapshots/tree-1"]);
+    expect(out).toEqual(["http://localhost:5773/snapshots/tree-1"]);
     const body = calls[0]?.body as {
       title: string;
       root: { type: string; props: { path: string } };
@@ -241,7 +241,7 @@ describe("cli main: post (default action)", () => {
     });
     const result = await main(["dashboard.json"], deps);
     expect(result.exitCode).toBe(0);
-    expect(out).toEqual(["http://localhost:5173/snapshots/created-1"]);
+    expect(out).toEqual(["http://localhost:5773/snapshots/created-1"]);
     expect(calls.map((c) => c.method)).toEqual(["PUT", "POST"]);
     expect(calls[1]?.body).toEqual(calls[0]?.body);
   });
@@ -407,8 +407,8 @@ describe("cli main: bare invocation", () => {
     const h = makeDeps({ respond: () => okResponse() });
     const result = await main([], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.opened).toEqual(["http://localhost:5173"]);
-    expect(h.out[0]).toBe("http://localhost:5173");
+    expect(h.opened).toEqual(["http://localhost:5773"]);
+    expect(h.out[0]).toBe("http://localhost:5773");
     // Just opens home; no POST to /api/snapshots runs
     expect(h.calls.length).toBe(0);
   });
@@ -421,20 +421,20 @@ describe("cli main: bare invocation", () => {
     const result = await main([], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.opened).toEqual([]);
-    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/snapshots");
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/snapshots");
   });
 
   test("no args + empty/blank stdin opens home (not an invalid_json error)", async () => {
     const h = makeDeps({ stdin: "   \n", respond: () => okResponse() });
     const result = await main([], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.opened).toEqual(["http://localhost:5173"]);
+    expect(h.opened).toEqual(["http://localhost:5773"]);
     expect(h.calls.length).toBe(0);
   });
 });
 
 describe("resolveViewUrl", () => {
-  const base = "http://localhost:5173";
+  const base = "http://localhost:5773";
 
   test("builds a /snapshots/:id URL from a bare id", () => {
     expect(resolveViewUrl("abc123", base)).toBe(`${base}/snapshots/abc123`);
@@ -462,8 +462,8 @@ describe("cli main: open", () => {
     const h = makeDeps({ respond: () => okResponse() });
     const result = await main(["open", "abc123"], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.opened).toEqual(["http://localhost:5173/snapshots/abc123"]);
-    expect(h.out[0]).toBe("http://localhost:5173/snapshots/abc123");
+    expect(h.opened).toEqual(["http://localhost:5773/snapshots/abc123"]);
+    expect(h.out[0]).toBe("http://localhost:5773/snapshots/abc123");
   });
 
   test("lazy-spawns the server before opening when it is down", async () => {
@@ -479,15 +479,15 @@ describe("cli main: open", () => {
     const result = await main(["open", "abc123"], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.spawnCount()).toBe(1);
-    expect(h.opened).toEqual(["http://localhost:5173/snapshots/abc123"]);
+    expect(h.opened).toEqual(["http://localhost:5773/snapshots/abc123"]);
   });
 
   test("opens home when no id is given", async () => {
     const h = makeDeps({ respond: () => okResponse() });
     const result = await main(["open"], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.opened).toEqual(["http://localhost:5173"]);
-    expect(h.out[0]).toBe("http://localhost:5173");
+    expect(h.opened).toEqual(["http://localhost:5773"]);
+    expect(h.out[0]).toBe("http://localhost:5773");
   });
 });
 
@@ -609,11 +609,11 @@ describe("cli main: lazy-spawn integration", () => {
     const result = await main(["items.json"], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.spawnCount()).toBe(1);
-    expect(h.out).toEqual(["http://localhost:5173/snapshots/spawned-1"]);
+    expect(h.out).toEqual(["http://localhost:5773/snapshots/spawned-1"]);
     expect(h.err.some((l) => l.includes("started server"))).toBe(true);
     // health isn't pushed into calls; only the POST is recorded
     expect(h.calls.length).toBe(1);
-    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/snapshots");
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/snapshots");
   });
 
   test("post does not spawn when the server is already up", async () => {
@@ -625,7 +625,7 @@ describe("cli main: lazy-spawn integration", () => {
     const result = await main(["items.json"], h.deps);
     expect(result.exitCode).toBe(0);
     expect(h.spawnCount()).toBe(0);
-    expect(h.out).toEqual(["http://localhost:5173/snapshots/reuse-1"]);
+    expect(h.out).toEqual(["http://localhost:5773/snapshots/reuse-1"]);
   });
 
   test("post reports server_unavailable if it never comes up", async () => {
@@ -690,7 +690,7 @@ describe("cli main: catalog", () => {
     });
     const result = await main(["catalog"], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/catalog");
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/catalog");
     expect(h.calls[0]?.method).toBe("GET");
     const data = JSON.parse(h.out[0] as string) as { items: unknown[] };
     expect(data.items.length).toBe(1);
@@ -704,7 +704,7 @@ describe("cli main: templates", () => {
     });
     const result = await main(["templates"], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/templates");
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/templates");
     expect(h.calls[0]?.method).toBe("GET");
   });
 
@@ -719,7 +719,7 @@ describe("cli main: templates", () => {
     );
     expect(result.exitCode).toBe(0);
     expect(h.out).toEqual(["tmpl-1"]);
-    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/templates");
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/templates");
     expect(h.calls[0]?.method).toBe("POST");
     const body = h.calls[0]?.body as {
       title: string;
@@ -782,7 +782,7 @@ describe("cli main: templates", () => {
     });
     const result = await main(["templates", "get", "x"], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/templates/x");
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/templates/x");
     expect(h.calls[0]?.method).toBe("GET");
   });
 
@@ -790,7 +790,7 @@ describe("cli main: templates", () => {
     const h = makeDeps({ respond: () => Response.json({ ok: true }) });
     const result = await main(["templates", "rm", "x"], h.deps);
     expect(result.exitCode).toBe(0);
-    expect(h.calls[0]?.url).toBe("http://localhost:5173/api/templates/x");
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/templates/x");
     expect(h.calls[0]?.method).toBe("DELETE");
   });
 
@@ -830,7 +830,7 @@ describe("cli main: stop", () => {
 describe("planStop (what `stop` targets)", () => {
   function probeDeps(health?: Response): Pick<CliDeps, "fetch" | "baseUrl"> {
     return {
-      baseUrl: "http://localhost:5173",
+      baseUrl: "http://localhost:5773",
       fetch: (async () => {
         // No response at all = a refused connection, which rejects rather than returning a status.
         if (health === undefined) throw new Error("ECONNREFUSED");
@@ -992,7 +992,7 @@ describe("cli main: share commands (login / logout / publish / shares / unpublis
     expect(result.exitCode).toBe(0);
     expect(out).toEqual(["Logged out"]);
     expect(calls[0]?.method).toBe("DELETE");
-    expect(calls[0]?.url).toBe("http://localhost:5173/api/auth/login");
+    expect(calls[0]?.url).toBe("http://localhost:5773/api/auth/login");
   });
 
   test("publish: posts expiresIn (12h -> seconds) and prints url + expiry", async () => {
@@ -1014,7 +1014,7 @@ describe("cli main: share commands (login / logout / publish / shares / unpublis
       "Expires: 2026-07-11T00:00:00.000Z",
     ]);
     expect(calls[0]?.url).toBe(
-      "http://localhost:5173/api/snapshots/abc/publish",
+      "http://localhost:5773/api/snapshots/abc/publish",
     );
     expect(calls[0]?.method).toBe("POST");
     expect(calls[0]?.body).toEqual({ expiresIn: 43_200 });
@@ -1118,7 +1118,7 @@ describe("cli main: share commands (login / logout / publish / shares / unpublis
     expect(result.exitCode).toBe(0);
     expect(out).toEqual(["Unpublished s1"]);
     expect(calls[0]?.method).toBe("DELETE");
-    expect(calls[0]?.url).toBe("http://localhost:5173/api/shares/s1");
+    expect(calls[0]?.url).toBe("http://localhost:5773/api/shares/s1");
   });
 
   test("--help lists the share commands", async () => {

@@ -8,6 +8,7 @@ import {
   settingFile,
   templatesDir,
 } from "../src/lib/paths";
+import { DEFAULT_PORT } from "../src/lib/port";
 import index from "../index.html";
 // version is a compatibility marker so the CLI doesn't silently reuse a server from an old build.
 import pkg from "../package.json";
@@ -25,8 +26,6 @@ import { createShareApp } from "./share";
 import { shareApiOrigin } from "./shareService";
 import { createSnapshotStore } from "./store";
 import { createTemplateStore } from "./templates";
-
-const DEFAULT_PORT = 5173;
 
 function resolvePort(): number {
   const parsed = Number.parseInt(process.env.PORT ?? "", 10);

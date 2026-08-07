@@ -65,7 +65,7 @@ cp apps/syokan/dist/syokan ~/.local/bin/
 syokan --help            # command list
 ```
 
-`syokan` lazy-spawns the server automatically on post (port 5173 / `~/.config/syokan`). No explicit start needed.
+`syokan` lazy-spawns the server automatically on post (port 5773 / `~/.config/syokan`). No explicit start needed.
 
 ## 4. First snapshot
 

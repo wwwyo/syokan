@@ -77,10 +77,10 @@ bun run dev    # both apps: syokan server (Bun.serve + HMR) and the share Worker
 
 Root `dev` fans out to every workspace app (`bun --filter '@syokan/*' --parallel dev`); each app owns its own `dev` script. It brings up two processes:
 
-- **`@syokan/app`** on port `5273` (`https://syokan.localhost` via portless), writing to the repo-local `./.syokan-dev/` directory, so it never collides with a global install (port `5173` / standard XDG directories).
+- **`@syokan/app`** on port `5873` (`https://syokan.localhost` via portless), writing to the repo-local `./.syokan-dev/` directory, so it never collides with a global install (port `5773` / standard XDG directories).
 - **`@syokan/share`** on port `8787` (`wrangler dev`, local KV via miniflare). The viewer is bundled once at startup; worker code hot-reloads, but viewer edits need a re-run (no viewer HMR).
 
-In dev the syokan server points `SYOKAN_SHARE_API` at the local Worker (`http://localhost:8787`), so publishing/sharing is exercised against local KV — it never touches the production `syokan.dev` share service. Inside this repo the mise `[shell_alias]` likewise points the `syokan` CLI at the dev server (`SYOKAN_BASE_URL=http://localhost:5273`), so `syokan <file>` posts to dev, not production; outside the repo `syokan` is the global install. To skip portless, use `PORTLESS=0 bun run dev` (default port `5173`). To run just one app, use its own `dev` (e.g. `bun --filter @syokan/app dev`) — note `@syokan/app` alone still targets local share on `8787`, so publishing needs the share Worker up too.
+In dev the syokan server points `SYOKAN_SHARE_API` at the local Worker (`http://localhost:8787`), so publishing/sharing is exercised against local KV — it never touches the production `syokan.dev` share service. Inside this repo the mise `[shell_alias]` likewise points the `syokan` CLI at the dev server (`SYOKAN_BASE_URL=http://localhost:5873`), so `syokan <file>` posts to dev, not production; outside the repo `syokan` is the global install. To skip portless, use `PORTLESS=0 bun run dev` (default port `5773`). To run just one app, use its own `dev` (e.g. `bun --filter @syokan/app dev`) — note `@syokan/app` alone still targets local share on `8787`, so publishing needs the share Worker up too.
 
 ## Envelope
 
@@ -150,7 +150,7 @@ bun run compile       # → apps/syokan/dist/syokan (CLI + server + frontend in 
 bun run compile:all   # → apps/syokan/dist/syokan-<os>-<arch> (cross-compile, for Release distribution)
 ```
 
-Dual-mode ([entry.ts](./apps/syokan/entry.ts)): a normal launch is the CLI; the server re-execs the binary itself with `SYOKAN_SERVE=1`. The global binary uses port `5173`, and persistence follows the XDG base directories (settings = `~/.config/syokan/`, templates = `~/.local/share/syokan/`, snapshots + runtime/log = `~/.local/state/syokan/`). Override locations with `XDG_{CONFIG,DATA,STATE}_HOME` (absolute paths only; relative values are ignored). When upgrading from the old layout, templates are migrated to the new location automatically on startup. To distribute, push a version tag (`bun run release`): CI cross-compiles, gates on a smoke test of the compiled binaries (Linux + macOS), publishes the Release with `checksums.txt`, and bumps the Homebrew formula.
+Dual-mode ([entry.ts](./apps/syokan/entry.ts)): a normal launch is the CLI; the server re-execs the binary itself with `SYOKAN_SERVE=1`. The global binary uses port `5773`, and persistence follows the XDG base directories (settings = `~/.config/syokan/`, templates = `~/.local/share/syokan/`, snapshots + runtime/log = `~/.local/state/syokan/`). Override locations with `XDG_{CONFIG,DATA,STATE}_HOME` (absolute paths only; relative values are ignored). When upgrading from the old layout, templates are migrated to the new location automatically on startup. To distribute, push a version tag (`bun run release`): CI cross-compiles, gates on a smoke test of the compiled binaries (Linux + macOS), publishes the Release with `checksums.txt`, and bumps the Homebrew formula.
 
 ## More
 
