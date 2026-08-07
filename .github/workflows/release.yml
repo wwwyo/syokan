@@ -1,9 +1,10 @@
 name: release
 
-# `bun run release` (apps/syokan/scripts/release.ts) does bump + commit + v* tag + push.
-# That tag triggers this workflow: build → smoke → publish → homebrew.
+# The version bump in apps/syokan/package.json lands on main through an ordinary PR (the
+# main-required-checks ruleset rejects a direct push). `bun run release`
+# (apps/syokan/scripts/release.ts) then tags that merged commit and pushes the v* tag alone,
+# which triggers this workflow: build → smoke → publish → homebrew.
 # The human decides the version (tag); everything after is automated.
-# (package.json isn't at the git root, so npm version's built-in tagging can't be used — the script tags explicitly.)
 #
 # smoke gates publishing: the release only goes out if the compiled binaries themselves pass the
 # end-to-end smoke test (post → view → TreeDoc file-follow over SSE) on both Linux and macOS.
