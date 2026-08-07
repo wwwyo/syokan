@@ -1,62 +1,55 @@
 #!/usr/bin/env bun
-// bun run release — interactively pick the bump kind, then version bump + tag + push.
+// bun run release — tag the version already on main and push the tag.
 // .github/workflows/release.yml picks up the pushed tag and releases (publishes) the binary.
-import { fileURLToPath } from "node:url";
+//
+// Why this script does not bump the version: main is guarded by the `main-required-checks`
+// ruleset (required status checks, no bypass actors), so pushing a bump commit straight to main
+// is rejected with GH013 and leaves the bump stranded locally. The bump therefore rides an
+// ordinary PR like any other change; this script owns only the step a ruleset cannot block —
+// pushing an annotated `v*` tag at the merged commit.
 import { $ } from "bun";
 
-type Bump = "patch" | "minor" | "major";
-
-const choices: { key: Bump; desc: string }[] = [
-  { key: "patch", desc: "bug fix" },
-  { key: "minor", desc: "feature" },
-  { key: "major", desc: "breaking change" },
-];
+function fail(message: string): never {
+  console.error(`aborted: ${message}`);
+  process.exit(1);
+}
 
 const pkg = (await Bun.file(
   new URL("../package.json", import.meta.url),
 ).json()) as { version: string };
+const tag = `v${pkg.version}`;
 
-function bumped(version: string, type: Bump): string {
-  const [maj = 0, min = 0, pat = 0] = version.split(".").map(Number);
-  if (type === "major") return `${maj + 1}.0.0`;
-  if (type === "minor") return `${maj}.${min + 1}.0`;
-  return `${maj}.${min}.${pat + 1}`;
-}
+// --tags so the "already released" check below sees tags created on another machine.
+await $`git fetch --tags origin main`.quiet();
 
-console.log(`current: v${pkg.version}\n`);
-for (const [i, c] of choices.entries()) {
-  console.log(
-    `  ${i + 1}) ${c.key.padEnd(5)} v${pkg.version} → v${bumped(pkg.version, c.key)}  (${c.desc})`,
-  );
-}
+const branch = (await $`git rev-parse --abbrev-ref HEAD`.text()).trim();
+if (branch !== "main") fail(`on branch ${branch}, not main`);
+if ((await $`git status --porcelain`.text()).trim())
+  fail("working tree is dirty");
 
-const choice = choices[Number(prompt("\nselect bump [1-3]:")) - 1];
-if (!choice) {
-  console.error("aborted: invalid selection");
-  process.exit(1);
-}
+const head = (await $`git rev-parse HEAD`.text()).trim();
+const upstream = (await $`git rev-parse origin/main`.text()).trim();
+if (head !== upstream)
+  fail("main is not in sync with origin/main — pull the merged bump first");
 
-const nextVersion = bumped(pkg.version, choice.key);
-if (prompt(`\nbump v${pkg.version} → v${nextVersion} and push? [y/N]:`)?.trim().toLowerCase() !== "y") {
+const bumpFirst = "bump the version in apps/syokan/package.json via a PR first";
+if ((await $`git tag --list ${tag}`.text()).trim())
+  fail(`${tag} already exists locally — ${bumpFirst}`);
+if ((await $`git ls-remote --tags origin ${tag}`.text()).trim())
+  fail(`${tag} is already released — ${bumpFirst}`);
+
+const subject = (await $`git log -1 --format=%s`.text()).trim();
+console.log(`version: ${pkg.version} (apps/syokan/package.json)`);
+console.log(`tagging: ${head.slice(0, 7)} ${subject}\n`);
+if (prompt(`push ${tag}? [y/N]:`)?.trim().toLowerCase() !== "y") {
   console.log("aborted");
   process.exit(0);
 }
 
-// package.json lives in apps/syokan, not the git root, so bun pm / npm version's built-in
-// git commit/tag silently no-op. Do the bump with --no-git-tag-version and
-// make the commit and tag explicitly from the root. That also loses the built-in dirty-tree guard, so check it ourselves.
-const dirty = (await $`git status --porcelain`.text()).trim();
-if (dirty) {
-  console.error("aborted: working tree is dirty");
-  process.exit(1);
-}
-const tag = `v${nextVersion}`;
-// version SSOT is apps/syokan/package.json, but this script runs from the git root.
-// bun pm version operates on cwd's package.json, so pin cwd to this package's dir.
-const appDir = fileURLToPath(new URL("..", import.meta.url));
-await $`bun pm version --no-git-tag-version ${choice.key}`.cwd(appDir);
-await $`git commit -am ${tag}`;
-// annotated tag (-a): git push --follow-tags only carries annotated tags, not lightweight ones.
+// annotated tag (-a): release.yml is triggered by the tag, and an annotated tag records who
+// cut the release and when, which a lightweight tag does not.
 await $`git tag -a ${tag} -m ${tag}`;
-await $`git push --follow-tags`;
+// Push the tag ref alone. The bump commit is already on main via its PR, and a plain
+// `git push` from here would be rejected by the ruleset anyway.
+await $`git push origin refs/tags/${tag}`;
 console.log(`\n✓ pushed ${tag}. CI will publish the release.`);
