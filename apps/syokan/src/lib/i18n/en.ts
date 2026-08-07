@@ -20,7 +20,7 @@ export const en = {
       step1Title: "1. Create a snapshot — POST /api/snapshots",
       step1Body:
         "Pass a tree of catalog types as root. The response returns an id.",
-      step1Code: `curl -X POST http://localhost:5173/api/snapshots \\
+      step1Code: `curl -X POST http://localhost:5773/api/snapshots \\
   -H "content-type: application/json" \\
   -d '{
     "title": "Daily RSS",

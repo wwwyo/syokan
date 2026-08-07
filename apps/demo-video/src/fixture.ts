@@ -101,6 +101,6 @@ export const envelopeLines: string[] = [
   `}`,
 ];
 
-export const viewUrl = "http://localhost:5173/view/pr-review-queue";
+export const viewUrl = "http://localhost:5773/view/pr-review-queue";
 export const installCommand = "mise use -g github:wwwyo/syokan@latest";
 export const repoUrl = "github.com/wwwyo/syokan";
