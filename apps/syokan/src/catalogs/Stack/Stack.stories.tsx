@@ -39,6 +39,36 @@ export const Default: Story = {
   ),
 };
 
+// gap is omitted throughout: each level of nesting tightens it on its own (lg → md → sm)
+export const NestedGap: Story = {
+  args: { direction: "vertical" },
+  render: (args) => (
+    <Stack {...args}>
+      <Heading text="Outer stack — sections breathe" level={2} />
+      <Stack direction="vertical">
+        <Heading text="Inner stack — items group" level={3} />
+        {paneA}
+        {paneB}
+      </Stack>
+      <Stack direction="vertical">
+        <Heading text="Another group" level={3} />
+        {paneA}
+      </Stack>
+    </Stack>
+  ),
+};
+
+// an explicit gap overrides the depth default in both directions
+export const ExplicitGap: Story = {
+  args: { direction: "horizontal", gap: "none" },
+  render: (args) => (
+    <Stack {...args}>
+      {paneA}
+      {paneB}
+    </Stack>
+  ),
+};
+
 // horizontal (resizable). The handle appears only when hovering near the boundary
 export const ResizableHorizontal: Story = {
   args: { direction: "horizontal", resizable: true },

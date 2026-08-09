@@ -1,40 +1,113 @@
 import { describe, expect, test } from "bun:test";
-import { ResizablePanelGroup } from "../../components/ui/resizable";
-import { Stack } from ".";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
+import { Stack, type StackProps, stackPropsSchema } from ".";
+
+// Stack reads the nesting depth from context, so it has to be rendered rather than called.
+function render(props: StackProps) {
+  return renderToString(createElement(Stack, props));
+}
+
+/** classNames of every data-slot="stack", outermost first. */
+function stackClasses(html: string) {
+  return [
+    ...html.matchAll(/<div [^>]*data-slot="stack"[^>]*class="([^"]*)"/g),
+  ].map((m) => m[1] ?? "");
+}
+
+/** className of the outermost data-slot="stack" in the markup. */
+function outerStackClass(html: string) {
+  return stackClasses(html)[0] ?? "";
+}
+
+describe("stackPropsSchema", () => {
+  test("gap is optional and limited to the scale", () => {
+    expect(stackPropsSchema.safeParse({}).success).toBe(true);
+    expect(stackPropsSchema.safeParse({ gap: "sm" }).success).toBe(true);
+    expect(stackPropsSchema.safeParse({ gap: "8" }).success).toBe(false);
+    expect(stackPropsSchema.safeParse({ gap: 8 }).success).toBe(false);
+  });
+});
 
 describe("Stack", () => {
   test("defaults to a plain vertical flex stack", () => {
-    const el = Stack({ children: null });
-    expect(el.type).toBe("div");
-    expect((el.props as { className: string }).className).toContain("flex-col");
+    expect(outerStackClass(render({ children: null }))).toContain("flex-col");
   });
 
-  test("horizontal direction switches to flex-row", () => {
-    const el = Stack({ direction: "horizontal", children: null });
-    expect((el.props as { className: string }).className).toContain("flex-row");
+  test("horizontal direction switches to flex-row and scrolls instead of bursting", () => {
+    const cls = outerStackClass(render({ direction: "horizontal" }));
+    expect(cls).toContain("flex-row");
+    expect(cls).toContain("overflow-x-auto");
   });
 
-  test("resizable=true renders a ResizablePanelGroup with the matching orientation", () => {
-    const el = Stack({
+  test("gap tightens with each level of nesting", () => {
+    const html = render({
+      children: createElement(Stack, {
+        children: createElement(Stack, { children: null }),
+      }),
+    });
+    expect(stackClasses(html).map((c) => c.match(/gap-\d+/)?.[0])).toEqual([
+      "gap-8",
+      "gap-4",
+      "gap-2",
+    ]);
+  });
+
+  test("depth past the scale clamps to the tightest gap", () => {
+    const html = render({
+      children: createElement(Stack, {
+        children: createElement(Stack, {
+          children: createElement(Stack, { children: null }),
+        }),
+      }),
+    });
+    expect(stackClasses(html).at(-1)).toContain("gap-2");
+  });
+
+  test("an explicit gap wins over the depth default", () => {
+    const html = render({ gap: "none", children: null });
+    expect(outerStackClass(html)).toContain("gap-0");
+  });
+
+  test("an explicit gap does not change the depth its children see", () => {
+    const html = render({
+      gap: "none",
+      children: createElement(Stack, { children: null }),
+    });
+    expect(stackClasses(html).at(-1)).toContain("gap-4");
+  });
+
+  test("resizable=true renders a panel group whose handles replace the gap", () => {
+    const html = render({
       resizable: true,
       direction: "horizontal",
-      children: null,
+      children: [
+        createElement("p", { key: "a" }, "a"),
+        createElement("p", { key: "b" }, "b"),
+      ],
     });
-    expect(el.type).toBe(ResizablePanelGroup);
-    expect((el.props as { orientation: string }).orientation).toBe("horizontal");
+    expect(html).toContain('data-slot="resizable-panel-group"');
+    expect(html).toContain('data-slot="resizable-handle"');
+    expect(html).not.toContain('data-slot="stack"');
+  });
+
+  test("a stack inside a resizable panel still counts as nested", () => {
+    const html = render({
+      resizable: true,
+      children: createElement(Stack, { children: null }),
+    });
+    expect(outerStackClass(html)).toContain("gap-4");
   });
 
   test("vertical resizable gets a minimum height so panels do not collapse", () => {
-    const el = Stack({ resizable: true, direction: "vertical", children: null });
-    expect((el.props as { className: string }).className).toContain("min-h");
+    expect(render({ resizable: true, direction: "vertical" })).toContain(
+      "min-h-",
+    );
   });
 
   test("horizontal resizable forces no height (content-driven)", () => {
-    const el = Stack({
-      resizable: true,
-      direction: "horizontal",
-      children: null,
-    });
-    expect((el.props as { className: string }).className).not.toContain("min-h");
+    expect(render({ resizable: true, direction: "horizontal" })).not.toContain(
+      "min-h-",
+    );
   });
 });
