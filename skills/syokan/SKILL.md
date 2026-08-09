@@ -58,6 +58,10 @@ The output is `{ "items": [{ "type", "props", "childrenTypes", "notes" }], "enve
 
 For complete examples combining the components, see [references/examples.md](references/examples.md).
 
+## Spacing (Stack)
+
+`Stack` spaces its children by nesting depth: the outermost stack separates sections, and each level further in tightens the spacing (deeper than three levels stays at the tightest). **Leave `gap` unset** — that default is what keeps views from drifting apart visually. Set it (`none` / `sm` / `md` / `lg`) only when the depth-derived spacing is wrong for a specific group, e.g. `none` for a row of items meant to read as one strip. A horizontal `Stack` scrolls inside itself when its children exceed the width, so lining many up never breaks the page.
+
 ## Cross-cutting node field (id)
 
 Besides `type` / `props` / `children` / `key`, any node may carry `id`: it makes the node addressable. A `Link` with `href: "#<id>"` jumps to it inside the view (revealing it if folded). It is also the identity for viewer-local UI state — **give an `id` to every `Checklist` / `Collapsible` / `Probe`** so checks, folds, and probe reruns survive reloads. An `id` must be unique tree-wide; a duplicate 400s.
