@@ -19,8 +19,13 @@ export const stackPropsSchema = z
     direction: z.enum(["vertical", "horizontal"]).optional(),
     resizable: z.boolean().optional(),
     // A bounded scale, not a raw number: the producer says how tightly things belong
-    // together, the renderer owns the actual spacing. Omit it and the nesting depth decides.
-    gap: z.enum(["none", "sm", "md", "lg"]).optional(),
+    // together, the renderer owns the actual spacing.
+    gap: z
+      .enum(["none", "sm", "md", "lg"])
+      .optional()
+      .describe(
+        "How tightly the children belong together. Omit it — nesting depth then picks the spacing, which is what keeps views consistent. Set it only to override that for one group.",
+      ),
   })
   .strict();
 
@@ -41,7 +46,13 @@ const gapClasses = {
  */
 const gapByDepth = ["lg", "md", "sm"] as const;
 
-/** Counts enclosing Stacks. Only Stack writes to it, so a Card in between does not reset the scale. */
+/**
+ * Counts enclosing Stacks. Deliberately only Stack participates: it is the one container whose
+ * whole job is spacing siblings, so an intervening Card / Collapsible / Checklist must not reset
+ * the scale — nesting a Card is a grouping decision, not a reason to start spacing out again.
+ * Those containers keep owning their own internal spacing. If a second container ever needs the
+ * same idea, promote this to a shared layout module rather than importing it from Stack.
+ */
 const StackDepthContext = createContext(0);
 
 /**
@@ -58,6 +69,7 @@ export function Stack({
 }: StackProps) {
   const depth = useContext(StackDepthContext);
   const depthGap = gapByDepth[Math.min(depth, gapByDepth.length - 1)] ?? "sm";
+  const childDepth = depth + 1;
 
   if (resizable) {
     const panels = Children.toArray(children);
@@ -73,7 +85,7 @@ export function Stack({
             {index > 0 ? <ResizableHandle withHandle /> : null}
             <ResizablePanel className="p-4">
               {/* panels are separated by the handle, so gap does not apply — but the depth still has to advance */}
-              <StackDepthContext.Provider value={depth + 1}>
+              <StackDepthContext.Provider value={childDepth}>
                 {panel}
               </StackDepthContext.Provider>
             </ResizablePanel>
@@ -90,10 +102,14 @@ export function Stack({
         gapClasses[gap ?? depthGap],
         // A row whose children cannot shrink any further (Stat's min-w, a Card's min-content)
         // used to paint outside the page column. Scroll inside the stack instead of bursting.
+        // CSS gives no way to scroll one axis and overflow the other, so this also clips a few
+        // px of ring/shadow on a child stretched to the full row height. Accepted: menus and
+        // tooltips are portaled out, and the alternative (padding the scroll box) would eat
+        // into the gap scale above.
         direction === "horizontal" ? "flex-row overflow-x-auto" : "flex-col",
       )}
     >
-      <StackDepthContext.Provider value={depth + 1}>
+      <StackDepthContext.Provider value={childDepth}>
         {children}
       </StackDepthContext.Provider>
     </div>

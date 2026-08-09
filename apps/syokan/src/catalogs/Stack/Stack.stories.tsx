@@ -47,12 +47,11 @@ export const NestedGap: Story = {
       <Heading text="Outer stack — sections breathe" level={2} />
       <Stack direction="vertical">
         <Heading text="Inner stack — items group" level={3} />
-        {paneA}
-        {paneB}
-      </Stack>
-      <Stack direction="vertical">
-        <Heading text="Another group" level={3} />
-        {paneA}
+        <Stack direction="vertical">
+          <Heading text="Innermost stack — one block" level={3} />
+          {paneA}
+          {paneB}
+        </Stack>
       </Stack>
     </Stack>
   ),

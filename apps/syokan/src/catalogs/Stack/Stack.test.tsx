@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
+import { Render } from "../../Render";
 import { Stack, type StackProps, stackPropsSchema } from ".";
 
 // Stack reads the nesting depth from context, so it has to be rendered rather than called.
@@ -97,6 +98,30 @@ describe("Stack", () => {
       children: createElement(Stack, { children: null }),
     });
     expect(outerStackClass(html)).toContain("gap-4");
+  });
+
+  // Render is the path real snapshots take. Testing Stack alone would not catch a change there
+  // (how children are built, what wrappers are inserted) resetting the depth.
+  test("depth survives the recursive Render and an intervening Card", () => {
+    const html = renderToString(
+      createElement(Render, {
+        item: {
+          type: "Stack",
+          props: {},
+          children: [
+            {
+              type: "Card",
+              props: { title: "group" },
+              children: [{ type: "Stack", props: {}, children: [] }],
+            },
+          ],
+        },
+      }),
+    );
+    expect(stackClasses(html).map((c) => c.match(/gap-\d+/)?.[0])).toEqual([
+      "gap-8",
+      "gap-4",
+    ]);
   });
 
   test("vertical resizable gets a minimum height so panels do not collapse", () => {
