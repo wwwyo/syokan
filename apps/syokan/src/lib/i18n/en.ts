@@ -98,6 +98,7 @@ export const en = {
     staleNotice: "Showing the last valid content.",
   },
   mermaid: {
+    renderFailed: "This diagram could not be rendered (mermaid could not parse it).",
     expand: "Expand diagram",
   },
   diff: {

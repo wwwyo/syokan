@@ -39,6 +39,19 @@ async function renderMermaid(
   return svg;
 }
 
+// mermaid's parse errors run several lines (source excerpt + caret + expected tokens); keep enough
+// to locate the problem without letting a pathological message take over the view.
+const ERROR_MAX_LENGTH = 600;
+
+/** The reason to show alongside the fallback. Non-Error throws are stringified rather than dropped. */
+function errorMessage(e: unknown): string {
+  const raw = (e instanceof Error ? e.message : String(e)).trim();
+  const message = raw.length > 0 ? raw : "Unknown error";
+  return message.length > ERROR_MAX_LENGTH
+    ? `${message.slice(0, ERROR_MAX_LENGTH)}…`
+    : message;
+}
+
 /**
  * A catalog component that renders mermaid diagram source as a diagram.
  *
@@ -53,7 +66,8 @@ export function Mermaid({ code }: MermaidProps) {
   const scheme = useColorScheme();
   const id = useId().replace(/[^a-zA-Z0-9-]/g, "");
   const [svg, setSvg] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
+  // the parse message mermaid throws (line number + offending token). Doubles as the failure flag.
+  const [error, setError] = useState<string | null>(null);
   const [zoomed, setZoomed] = useState(false);
   const [zoomSvg, setZoomSvg] = useState<string | null>(null);
 
@@ -61,16 +75,16 @@ export function Mermaid({ code }: MermaidProps) {
     let cancelled = false;
     // keep the previous svg until the re-render completes. The most frequent re-render is a theme
     // switch; clearing svg here would briefly drop to the <pre> fallback and flicker, so swap the diagram in place.
-    setFailed(false);
+    setError(null);
     setZoomSvg(null);
     (async () => {
       try {
         const svg = await renderMermaid(code, `mermaid-${id}`, scheme);
         if (!cancelled) setSvg(svg);
-      } catch {
+      } catch (e) {
         if (!cancelled) {
           setSvg(null);
-          setFailed(true);
+          setError(errorMessage(e));
           // the fallback branch unmounts the dialog; a stale open flag would make it
           // pop back open on its own when a later render recovers
           setZoomed(false);
@@ -113,15 +127,32 @@ export function Mermaid({ code }: MermaidProps) {
     svgEl.style.width = natural ? `max(100%, ${natural})` : "100%";
   }, [zoomSvg, zoomed]);
 
-  if (failed || svg === null) {
+  if (error !== null || svg === null) {
+    // without the reason, an unrendered diagram is indistinguishable from one still loading,
+    // and the author has no way to tell which line mermaid choked on
     return (
-      <pre
+      <div
         data-slot="mermaid"
-        data-state={failed ? "error" : "loading"}
-        className="my-4 overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-6"
+        data-state={error !== null ? "error" : "loading"}
+        className="my-4"
       >
-        {code}
-      </pre>
+        {error !== null && (
+          <div
+            data-slot="mermaid-error"
+            className="mb-2 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+          >
+            <p>{t.mermaid.renderFailed}</p>
+            {/* mermaid points at the offending column with a caret line, so preserve
+                whitespace and scroll rather than wrap (wrapping misaligns the caret) */}
+            <pre className="mt-1 overflow-x-auto font-mono text-xs opacity-70">
+              {error}
+            </pre>
+          </div>
+        )}
+        <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-6">
+          {code}
+        </pre>
+      </div>
     );
   }
 
@@ -144,7 +175,11 @@ export function Mermaid({ code }: MermaidProps) {
         <Maximize2 className="size-4" aria-hidden />
       </button>
       <div
-        className="flex justify-center overflow-x-auto p-4 [&_svg]:max-w-full [&_svg]:h-auto"
+        // cap the inline height so one tall diagram cannot push the rest of the view off screen;
+        // overflow scrolls rather than shrinking, keeping labels readable (the zoom dialog shows the whole thing).
+        // a fixed rem cap, not dvh: the viewport can be 0-height (headless / measuring embeds), which would
+        // collapse the diagram to nothing
+        className="flex max-h-[32rem] items-start justify-center overflow-auto p-4 [&_svg]:max-w-full [&_svg]:h-auto"
         // embed the SVG mermaid generates as-is (labels are already sanitized by the default securityLevel 'strict')
         dangerouslySetInnerHTML={{ __html: svg }}
       />
