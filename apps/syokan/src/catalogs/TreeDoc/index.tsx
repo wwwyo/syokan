@@ -1,20 +1,13 @@
 import { useEffect, useState } from "react";
-import { z } from "zod";
+import { Notice, NoticeDetail } from "../../components/Notice";
 import { t } from "../../lib/i18n";
-import { absoluteLocalPath } from "../../lib/path";
 import { parseTreeContent } from "../../lib/treeSource";
 import { Render } from "../../Render";
 import type { Item } from "../../schema";
+import type { TreeDocProps } from "./schema";
 
-export const treeDocPropsSchema = z
-  .object({
-    // The CLI resolves this to an absolute local path before passing it. The server reads and
-    // watches this path as-is; relative paths and URLs are rejected at ingest.
-    path: absoluteLocalPath,
-  })
-  .strict();
-
-export type TreeDocProps = z.infer<typeof treeDocPropsSchema>;
+// The schema lives in ./schema so the registry can read it mid-import-cycle; see the note there.
+export { treeDocPropsSchema, type TreeDocProps } from "./schema";
 
 // File-level reasons match the error body (error field) of GET /api/files; tree-level reasons
 // (invalid_json / invalid_tree / nested_treedoc) come from parseTreeContent. Unknown / network
@@ -61,16 +54,13 @@ export function TreeDocBody({
   return (
     <div data-slot="tree-doc">
       {state.error !== null && (
-        <div
-          data-slot="tree-doc-error"
-          className="my-4 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
-        >
+        <Notice slot="tree-doc-error" className="my-4">
           <p>
             {ERROR_MESSAGE[state.error]}
             {state.root !== null && ` ${t.treeDoc.staleNotice}`}
           </p>
-          <p className="mt-1 break-all font-mono text-xs opacity-70">{path}</p>
-        </div>
+          <NoticeDetail wrap="break">{path}</NoticeDetail>
+        </Notice>
       )}
       {state.root !== null && <Render item={state.root} />}
     </div>

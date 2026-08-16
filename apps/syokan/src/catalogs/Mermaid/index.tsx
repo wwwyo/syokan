@@ -1,6 +1,7 @@
 import { Maximize2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { z } from "zod";
+import { Notice, NoticeDetail } from "../../components/Notice";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,40 @@ export function errorMessage(e: unknown): string {
   return message.length > ERROR_MAX_LENGTH
     ? `${message.slice(0, ERROR_MAX_LENGTH)}…`
     : message;
+}
+
+/**
+ * The raw source. Shown while loading and on failure alike, so the content never disappears —
+ * only the failure case puts a reason above it, which is what distinguishes the two states.
+ */
+function MermaidSource({ code }: { code: string }) {
+  return (
+    <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-6">
+      {code}
+    </pre>
+  );
+}
+
+/**
+ * The failed-render view. Split out because the error state is only reachable through the async
+ * render effect, which `renderToString` never runs — tests and stories drive this directly
+ * instead (the same reason `TreeDocBody` is separate from `TreeDoc`).
+ *
+ * `error` is the message from {@link errorMessage}, already trimmed and capped; it is "" when
+ * mermaid threw something blank, in which case only the localized headline shows.
+ */
+export function MermaidError({ code, error }: { code: string; error: string }) {
+  return (
+    <div data-slot="mermaid" data-state="error" className="my-4">
+      <Notice slot="mermaid-error" className="mb-2">
+        <p>{t.mermaid.renderFailed}</p>
+        {/* mermaid points at the offending column with a caret line, so preserve
+            whitespace and scroll rather than wrap (wrapping misaligns the caret) */}
+        {error !== "" && <NoticeDetail wrap="preserve">{error}</NoticeDetail>}
+      </Notice>
+      <MermaidSource code={code} />
+    </div>
+  );
 }
 
 /**
@@ -129,40 +164,14 @@ export function Mermaid({ code }: MermaidProps) {
     svgEl.style.width = natural ? `max(100%, ${natural})` : "100%";
   }, [zoomSvg, zoomed]);
 
-  // the source stays readable either way; only the failed case adds a reason above it, so that an
-  // unrendered diagram is distinguishable from one still loading and the author can see which line
-  // mermaid choked on
-  const source = (
-    <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-6">
-      {code}
-    </pre>
-  );
-
   if (error !== null) {
-    return (
-      <div data-slot="mermaid" data-state="error" className="my-4">
-        <div
-          data-slot="mermaid-error"
-          className="mb-2 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
-        >
-          <p>{t.mermaid.renderFailed}</p>
-          {/* mermaid points at the offending column with a caret line, so preserve
-              whitespace and scroll rather than wrap (wrapping misaligns the caret) */}
-          {error !== "" && (
-            <pre className="mt-1 overflow-x-auto font-mono text-xs opacity-70">
-              {error}
-            </pre>
-          )}
-        </div>
-        {source}
-      </div>
-    );
+    return <MermaidError code={code} error={error} />;
   }
 
   if (svg === null) {
     return (
       <div data-slot="mermaid" data-state="loading" className="my-4">
-        {source}
+        <MermaidSource code={code} />
       </div>
     );
   }

@@ -4,6 +4,7 @@ import { MessageSquare } from "lucide-react";
 import { useMemo } from "react";
 import { z } from "zod";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
+import { Notice } from "../../components/Notice";
 import { t } from "../../lib/i18n";
 import { useColorScheme } from "../../lib/useColorScheme";
 
@@ -124,12 +125,9 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
 
   if (files.length === 0) {
     return (
-      <div
-        data-slot="diff"
-        className="my-4 rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground"
-      >
+      <Notice slot="diff" className="my-4">
         {t.diff.unparsable}
-      </div>
+      </Notice>
     );
   }
 
@@ -145,6 +143,8 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
               so one file's failure doesn't take down the whole thing. */}
           <ErrorBoundary
             fallback={
+              // deliberately not a Notice: this fills a slot that is already bordered and
+              // rounded by the wrapper above, so a Notice would draw a second border inside it
               <div className="px-4 py-3 text-sm text-muted-foreground">
                 {t.diff.fileFailed}
               </div>
@@ -159,10 +159,11 @@ export function Diff({ patch, diffStyle = "split", comments }: DiffProps) {
           </ErrorBoundary>
         </div>
       ))}
+      {/* no margin: the parent's space-y-4 already separates this from the last file */}
       {unassigned.length > 0 ? (
-        <div className="rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground">
+        <Notice slot="diff-unassigned">
           {t.diff.unassignedComments(unassigned.length)}
-        </div>
+        </Notice>
       ) : null}
     </div>
   );
