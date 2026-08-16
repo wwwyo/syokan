@@ -26,9 +26,11 @@ describe("errorMessage", () => {
     expect(long.endsWith("…")).toBe(true);
   });
 
-  test("falls back to a reason for non-Error and blank throws", () => {
+  test("stringifies a non-Error throw, blanks an empty one", () => {
     expect(errorMessage("boom")).toBe("boom");
-    expect(errorMessage(new Error("   "))).toBe("Unknown error");
+    // the localized headline already says the diagram failed; an invented English
+    // detail line would add nothing
+    expect(errorMessage(new Error("   "))).toBe("");
   });
 });
 

@@ -43,10 +43,12 @@ async function renderMermaid(
 // to locate the problem without letting a pathological message take over the view.
 const ERROR_MAX_LENGTH = 600;
 
-/** The reason to show alongside the fallback. Non-Error throws are stringified rather than dropped. */
+/**
+ * The detail to show under the localized headline. Non-Error throws are stringified rather than
+ * dropped; a blank message yields "" so the caller can omit the detail line rather than invent one.
+ */
 export function errorMessage(e: unknown): string {
-  const raw = (e instanceof Error ? e.message : String(e)).trim();
-  const message = raw.length > 0 ? raw : "Unknown error";
+  const message = (e instanceof Error ? e.message : String(e)).trim();
   return message.length > ERROR_MAX_LENGTH
     ? `${message.slice(0, ERROR_MAX_LENGTH)}…`
     : message;
@@ -146,9 +148,11 @@ export function Mermaid({ code }: MermaidProps) {
           <p>{t.mermaid.renderFailed}</p>
           {/* mermaid points at the offending column with a caret line, so preserve
               whitespace and scroll rather than wrap (wrapping misaligns the caret) */}
-          <pre className="mt-1 overflow-x-auto font-mono text-xs opacity-70">
-            {error}
-          </pre>
+          {error !== "" && (
+            <pre className="mt-1 overflow-x-auto font-mono text-xs opacity-70">
+              {error}
+            </pre>
+          )}
         </div>
         {source}
       </div>
