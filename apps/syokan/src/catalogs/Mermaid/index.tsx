@@ -168,16 +168,17 @@ export function Mermaid({ code }: MermaidProps) {
       data-slot="mermaid"
       data-state="ready"
       // the same card surface as Code, so diagrams and code read as one family
-      className="group relative my-4 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
+      className="relative my-4 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10"
     >
-      {/* hidden while not hovered — also drop pointer events so the invisible button never
-          hijacks taps; on coarse pointers (no hover) it stays visible instead */}
+      {/* always visible: the diagram now scrolls inside the card, so zooming is the way to see a
+          capped diagram whole — a control that only appears on hover hides that escape hatch.
+          Inset far enough that it clears the scrollbar of the pane below it */}
       <button
         type="button"
         data-slot="mermaid-zoom"
         aria-label={t.mermaid.expand}
         onClick={() => setZoomed(true)}
-        className="pointer-events-none absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground opacity-0 outline-none transition-opacity hover:bg-muted hover:text-foreground focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring group-hover:pointer-events-auto group-hover:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100"
+        className="absolute right-4 top-2 z-10 flex size-7 items-center justify-center rounded-md bg-background/80 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Maximize2 className="size-4" aria-hidden />
       </button>
