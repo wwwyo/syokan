@@ -192,7 +192,10 @@ export function Mermaid({ code }: MermaidProps) {
         dangerouslySetInnerHTML={{ __html: svg }}
       />
       <Dialog open={zoomed} onOpenChange={setZoomed}>
-        <DialogContent className="h-[90dvh] p-4 sm:max-w-[calc(100%-2rem)]">
+        {/* the close button gets the same treatment as the zoom button: same top, and inset far
+            enough to clear the scrolling body's scrollbar. Here that takes an extra step because the
+            body starts one dialog padding (p-4) in, so its scrollbar sits where right-4 would land */}
+        <DialogContent className="h-[90dvh] p-4 sm:max-w-[calc(100%-2rem)] [&_[data-slot=dialog-close-button]]:top-2 [&_[data-slot=dialog-close-button]]:right-8">
           <DialogTitle className="sr-only">{t.mermaid.expand}</DialogTitle>
           {zoomSvg !== null ? (
             <div
