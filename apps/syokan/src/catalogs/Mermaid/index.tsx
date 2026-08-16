@@ -44,7 +44,7 @@ async function renderMermaid(
 const ERROR_MAX_LENGTH = 600;
 
 /** The reason to show alongside the fallback. Non-Error throws are stringified rather than dropped. */
-function errorMessage(e: unknown): string {
+export function errorMessage(e: unknown): string {
   const raw = (e instanceof Error ? e.message : String(e)).trim();
   const message = raw.length > 0 ? raw : "Unknown error";
   return message.length > ERROR_MAX_LENGTH
@@ -127,31 +127,38 @@ export function Mermaid({ code }: MermaidProps) {
     svgEl.style.width = natural ? `max(100%, ${natural})` : "100%";
   }, [zoomSvg, zoomed]);
 
-  if (error !== null || svg === null) {
-    // without the reason, an unrendered diagram is indistinguishable from one still loading,
-    // and the author has no way to tell which line mermaid choked on
+  // the source stays readable either way; only the failed case adds a reason above it, so that an
+  // unrendered diagram is distinguishable from one still loading and the author can see which line
+  // mermaid choked on
+  const source = (
+    <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-6">
+      {code}
+    </pre>
+  );
+
+  if (error !== null) {
     return (
-      <div
-        data-slot="mermaid"
-        data-state={error !== null ? "error" : "loading"}
-        className="my-4"
-      >
-        {error !== null && (
-          <div
-            data-slot="mermaid-error"
-            className="mb-2 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
-          >
-            <p>{t.mermaid.renderFailed}</p>
-            {/* mermaid points at the offending column with a caret line, so preserve
-                whitespace and scroll rather than wrap (wrapping misaligns the caret) */}
-            <pre className="mt-1 overflow-x-auto font-mono text-xs opacity-70">
-              {error}
-            </pre>
-          </div>
-        )}
-        <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-sm leading-6">
-          {code}
-        </pre>
+      <div data-slot="mermaid" data-state="error" className="my-4">
+        <div
+          data-slot="mermaid-error"
+          className="mb-2 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+        >
+          <p>{t.mermaid.renderFailed}</p>
+          {/* mermaid points at the offending column with a caret line, so preserve
+              whitespace and scroll rather than wrap (wrapping misaligns the caret) */}
+          <pre className="mt-1 overflow-x-auto font-mono text-xs opacity-70">
+            {error}
+          </pre>
+        </div>
+        {source}
+      </div>
+    );
+  }
+
+  if (svg === null) {
+    return (
+      <div data-slot="mermaid" data-state="loading" className="my-4">
+        {source}
       </div>
     );
   }
