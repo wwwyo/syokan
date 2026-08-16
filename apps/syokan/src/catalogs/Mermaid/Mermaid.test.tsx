@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { Mermaid, mermaidPropsSchema } from ".";
+import { errorMessage, Mermaid, mermaidPropsSchema } from ".";
 
 describe("mermaidPropsSchema", () => {
   test("accepts code, rejects empty / extra keys", () => {
@@ -13,6 +13,24 @@ describe("mermaidPropsSchema", () => {
     expect(
       mermaidPropsSchema.safeParse({ code: "graph TD", theme: "dark" }).success,
     ).toBe(false);
+  });
+});
+
+describe("errorMessage", () => {
+  test("keeps the parse message, truncates a runaway one", () => {
+    expect(errorMessage(new Error("Parse error on line 2:\n  ^"))).toBe(
+      "Parse error on line 2:\n  ^",
+    );
+    const long = errorMessage(new Error("x".repeat(1000)));
+    expect(long.length).toBeLessThan(1000);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
+  test("stringifies a non-Error throw, blanks an empty one", () => {
+    expect(errorMessage("boom")).toBe("boom");
+    // the localized headline already says the diagram failed; an invented English
+    // detail line would add nothing
+    expect(errorMessage(new Error("   "))).toBe("");
   });
 });
 

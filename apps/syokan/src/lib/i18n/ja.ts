@@ -99,6 +99,7 @@ export const ja: Messages = {
     staleNotice: "最後に正常だった内容を表示しています。",
   },
   mermaid: {
+    renderFailed: "この図を表示できませんでした。",
     expand: "図を拡大",
   },
   diff: {
