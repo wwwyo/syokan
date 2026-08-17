@@ -18,7 +18,11 @@ import { Stat, statPropsSchema } from "./Stat";
 import { Table, tablePropsSchema } from "./Table";
 import { Text, textPropsSchema } from "./Text";
 import { Time, timePropsSchema } from "./Time";
-import { TreeDoc, treeDocPropsSchema } from "./TreeDoc";
+import { TreeDoc } from "./TreeDoc";
+// TreeDoc closes an import cycle back to this module (TreeDoc → Render → catalogs). Its schema is
+// imported from the leaf so it is initialized whichever module the bundler enters first; see
+// ./TreeDoc/schema.ts.
+import { treeDocPropsSchema } from "./TreeDoc/schema";
 
 export type ItemComponent = ComponentType<
   Record<string, unknown> & { children?: ReactNode }

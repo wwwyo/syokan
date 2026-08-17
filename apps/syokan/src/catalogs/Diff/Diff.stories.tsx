@@ -128,3 +128,20 @@ export const WithComments: Story = {
     ],
   },
 };
+
+/** The patch could not be parsed at all — the whole component falls back to one notice. */
+export const Unparsable: Story = {
+  args: { patch: "not a diff at all" },
+};
+
+/**
+ * A comment naming no file, in a multi-file patch, belongs to nothing. It is surfaced in a
+ * notice under the diffs rather than dropped silently.
+ */
+export const UnassignedComments: Story = {
+  args: {
+    patch: MULTI_FILE_PATCH,
+    diffStyle: "unified",
+    comments: [{ side: "new", line: 1, body: "which file is this about?" }],
+  },
+};

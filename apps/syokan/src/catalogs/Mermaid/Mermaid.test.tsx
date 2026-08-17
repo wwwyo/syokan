@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
-import { errorMessage, Mermaid, mermaidPropsSchema } from ".";
+import { errorMessage, Mermaid, MermaidError, mermaidPropsSchema } from ".";
 
 describe("mermaidPropsSchema", () => {
   test("accepts code, rejects empty / extra keys", () => {
@@ -41,5 +41,28 @@ describe("Mermaid", () => {
     );
     expect(html).toContain('data-slot="mermaid"');
     expect(html).toContain("A --&gt; B");
+  });
+});
+
+describe("MermaidError", () => {
+  const html = (code: string, error: string) =>
+    renderToString(createElement(MermaidError, { code, error }));
+
+  test("shows the headline, the reason, and keeps the source readable", () => {
+    const out = html("graph TD\n  A --> call", "Parse error on line 2:\n  ^");
+    expect(out).toContain('data-state="error"');
+    expect(out).toContain('data-slot="mermaid-error"');
+    // the caret must sit in a <pre>, or it stops lining up with the token it points at
+    expect(out).toContain("<pre");
+    expect(out).toContain("  ^");
+    expect(out).toContain("A --&gt; call");
+  });
+
+  test("omits the reason line when mermaid threw a blank message", () => {
+    const out = html("graph TD", "");
+    expect(out).toContain('data-slot="mermaid-error"');
+    // only the source <pre> survives; the detail <pre> is gone
+    expect(out.match(/<pre/g)).toHaveLength(1);
+    expect(out).toContain("graph TD");
   });
 });
