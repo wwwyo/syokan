@@ -106,8 +106,8 @@
   border-radius: var(--radius);
 }
 
-/* Logo "summon" reveal: trace the two braces on (the incantation), then pop the spark in
-   (the view materializing). pathLength=100 normalizes the brace strokes so one dash fits. */
+/* Logo "summon" reveal: trace the two braces on (the incantation), then pop the tower in
+   (the structure materializing). pathLength=100 normalizes the brace strokes so one dash fits. */
 @keyframes syokan-summon {
   to {
     stroke-dashoffset: 0;
@@ -123,23 +123,22 @@
     opacity: 1;
   }
 }
-.summon-draw > path {
+.summon-draw > .summon-brace {
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
   animation: syokan-summon 0.9s ease-out forwards;
 }
-.summon-draw > .summon-spark {
-  stroke-dasharray: none;
+.summon-draw > .summon-tower {
   transform-box: fill-box;
   transform-origin: center;
   animation: syokan-pop 0.45s ease-out 0.7s both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .summon-draw > path {
+  .summon-draw > .summon-brace {
     animation: none;
     stroke-dashoffset: 0;
   }
-  .summon-draw > .summon-spark {
+  .summon-draw > .summon-tower {
     animation: none;
     transform: none;
     opacity: 1;

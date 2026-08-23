@@ -1,30 +1,41 @@
 import { cn } from "../../lib/utils";
 
 /**
- * syokan's brand mark: `{ ✦ }`. The two braces are the JSON incantation an LLM speaks —
- * syokan's only input — and the four-point spark is the view that materializes inside it.
- * The mark literally reads "JSON becomes magic": structured data summoned into a living
- * view. The single color is left to currentColor, so it follows the surrounding text color
- * (= --foreground) as-is.
+ * syokan's brand mark: `{ 塔 }`. The two braces are the JSON incantation an LLM speaks —
+ * syokan's only input — and the tower rising inside them (roof chevron + stacked blocks with
+ * knocked-out windows) is the structured view that materializes. The mark literally reads
+ * "JSON summons a structure". The single color is left to currentColor, so it follows the
+ * surrounding text color (= --foreground) as-is.
  *
- * Geometry lives in the constants below so the shape has one definition. The favicon in
- * index.html is a deliberate bold twin (thicker stroke so the thin brace curves stay legible
- * at 16px); keep the two in sync by eye.
+ * Geometry lives in the constants below so the shape has one definition. Hand-synced copies
+ * to update together with this file (all by eye): the favicon data URIs in apps/syokan/index.html
+ * and apps/share/viewer/index.html (a deliberate bold twin — thicker brace stroke + larger
+ * knockouts so it stays legible at 16px), the standalone sigil.svg / hero.svg next to this
+ * file, and apps/demo-video/src/theme.ts (Remotion cannot import across the app boundary).
  */
 export const BRACE_LEFT =
-  "M34 23 C27 23,27 29,27 39 C27 45,23 47,18 50 C23 53,27 55,27 61 C27 71,27 77,34 77";
+  "M32 15 C24 15,24 21,24 31 L24 42 C24 45,23 46.5,21 48 L13.5 53 L21 58 C23 59.5,24 61,24 64 L24 75 C24 85,24 91,32 91";
 export const BRACE_RIGHT =
-  "M66 23 C73 23,73 29,73 39 C73 45,77 47,82 50 C77 53,73 55,73 61 C73 71,73 77,66 77";
-export const SPARK =
-  "M50 38.5 C50.79 46.91,53.09 49.21,61.5 50 C53.09 50.79,50.79 53.09,50 61.5 C49.21 53.09,46.91 50.79,38.5 50 C46.91 49.21,49.21 46.91,50 38.5 Z";
-// Tight bounds of the braces+spark (with stroke), for the lockup where the square padding
-// would otherwise open an ugly gap to the wordmark.
-export const SIGIL_VIEWBOX_TIGHT = "16 21 68 58";
+  "M68 15 C76 15,76 21,76 31 L76 42 C76 45,77 46.5,79 48 L86.5 53 L79 58 C77 59.5,76 61,76 64 L76 75 C76 85,76 91,68 91";
+// One path, evenodd: outer boxes cut by their window subpaths. Top to bottom: roof chevron
+// (vertical-cut ends), shrine block + square window, two wide blocks + slot windows.
+export const TOWER =
+  "M50 13 L58.5 21.5 L58.5 28.5 L50 20 L41.5 28.5 L41.5 21.5 Z " +
+  "M41 31.5 H59 V49 H41 Z M47.25 37.5 H52.75 V43 H47.25 Z " +
+  "M36 53 H64 V70 H36 Z M41.5 58.5 H58.5 V64.5 H41.5 Z " +
+  "M36 74 H64 V91 H36 Z M41.5 79.5 H58.5 V85.5 H41.5 Z";
+/** Brace stroke width shared with the lockup so the mark reads identically in both. */
+export const BRACE_STROKE_WIDTH = 8;
+// Tight bounds of the braces+tower for the lockup, where the square padding would otherwise
+// open an ugly gap to the wordmark. The cusp miter tips reach x ≈ 6.3 / 93.7: the tip sits
+// 4/sin(33.7°) ≈ 7.2 outward of the vertex at x=13.5 (half the 8-wide stroke over half the
+// 67° cusp angle), so the horizontal bounds must start at 6, not at the vertex.
+export const SIGIL_VIEWBOX_TIGHT = "6 11 88 84";
 
 type LogoProps = {
   /** Accessible name. For decorative use (e.g. a wordmark sits beside it), pass "" to aria-hide. */
   title?: string;
-  /** Trace the braces on, then pop the spark — a "summon" reveal for empty/loading states. */
+  /** Trace the braces on, then pop the tower — a "summon" reveal for empty/loading states. */
   animated?: boolean;
   className?: string;
 };
@@ -41,14 +52,14 @@ export function Logo({ title = "syokan", animated = false, className }: LogoProp
       aria-hidden={decorative || undefined}
       fill="none"
       stroke="currentColor"
-      strokeWidth="3.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      strokeWidth={BRACE_STROKE_WIDTH}
+      strokeLinecap="butt"
+      strokeLinejoin="miter"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path d={BRACE_LEFT} pathLength={pathLength} />
-      <path d={BRACE_RIGHT} pathLength={pathLength} />
-      <path className="summon-spark" d={SPARK} fill="currentColor" stroke="none" />
+      <path className="summon-brace" d={BRACE_LEFT} pathLength={pathLength} />
+      <path className="summon-brace" d={BRACE_RIGHT} pathLength={pathLength} />
+      <path className="summon-tower" d={TOWER} fill="currentColor" fillRule="evenodd" stroke="none" />
     </svg>
   );
 }

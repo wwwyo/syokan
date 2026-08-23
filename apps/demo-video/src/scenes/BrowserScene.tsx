@@ -8,7 +8,7 @@ import {
 } from "remotion";
 import type { DemoPr } from "../fixture";
 import { diff, graph, prs, viewTitle, viewUrl } from "../fixture";
-import { color, font, logoPaths, radius } from "../theme";
+import { braceStrokeWidth, color, font, logoPaths, radius, sparkFx } from "../theme";
 
 const EASE = Easing.bezier(0.16, 1, 0.3, 1);
 const POP = Easing.bezier(0.34, 1.56, 0.64, 1);
@@ -78,18 +78,20 @@ const Logo = () => (
     <path
       d={logoPaths.braceLeft}
       stroke={color.foreground}
-      strokeWidth={3.2}
+      strokeWidth={braceStrokeWidth}
       fill="none"
-      strokeLinecap="round"
+      strokeLinecap="butt"
+      strokeLinejoin="miter"
     />
     <path
       d={logoPaths.braceRight}
       stroke={color.foreground}
-      strokeWidth={3.2}
+      strokeWidth={braceStrokeWidth}
       fill="none"
-      strokeLinecap="round"
+      strokeLinecap="butt"
+      strokeLinejoin="miter"
     />
-    <path d={logoPaths.spark} fill={color.foreground} />
+    <path d={logoPaths.tower} fill={color.foreground} fillRule="evenodd" />
   </svg>
 );
 
@@ -118,7 +120,7 @@ const SummonSpark = () => {
         viewBox="0 0 100 100"
         style={{ scale: String(scale), opacity }}
       >
-        <path d={logoPaths.spark} fill={color.foreground} />
+        <path d={sparkFx} fill={color.foreground} />
       </svg>
     </div>
   );

@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>syokan</title>
-    <!-- Brand mark `{ ✦ }`: JSON braces summoning a spark. prefers-color-scheme flips the
-         single color so it stays legible in both light/dark. A bolder stroke than the in-app
-         Logo keeps the thin brace curves readable at favicon size. SSOT is src/components/Logo
-         (the data URI is a minimal copy to keep the favicon build-independent). -->
+    <!-- Brand mark `{ 塔 }`: JSON braces summoning a tower. prefers-color-scheme flips the
+         single color so it stays legible in both light/dark. A bolder brace stroke and larger
+         window knockouts than the in-app Logo keep the mark readable at favicon size. SSOT is
+         src/components/Logo (the data URI is a minimal copy to keep the favicon build-independent). -->
     <link
       rel="icon"
       type="image/svg+xml"
-      href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Cstyle%3E*%7B--c:%23141414%7D@media(prefers-color-scheme:dark)%7B*%7B--c:%23fafafa%7D%7D%3C/style%3E%3Cg%20fill='none'%20stroke='var(--c)'%20stroke-width='4.5'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M34%2023%20C27%2023%2027%2029%2027%2039%20C27%2045%2023%2047%2018%2050%20C23%2053%2027%2055%2027%2061%20C27%2071%2027%2077%2034%2077'/%3E%3Cpath%20d='M66%2023%20C73%2023%2073%2029%2073%2039%20C73%2045%2077%2047%2082%2050%20C77%2053%2073%2055%2073%2061%20C73%2071%2073%2077%2066%2077'/%3E%3C/g%3E%3Cpath%20d='M50%2038.5%20C50.79%2046.91%2053.09%2049.21%2061.5%2050%20C53.09%2050.79%2050.79%2053.09%2050%2061.5%20C49.21%2053.09%2046.91%2050.79%2038.5%2050%20C46.91%2049.21%2049.21%2046.91%2050%2038.5%20Z'%20fill='var(--c)'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Cstyle%3E%2A%7B--c:%23141414%7D@media(prefers-color-scheme:dark)%7B%2A%7B--c:%23fafafa%7D%7D%3C/style%3E%3Cg%20fill='none'%20stroke='var(--c)'%20stroke-width='10'%20stroke-linecap='butt'%20stroke-linejoin='miter'%3E%3Cpath%20d='M32%2015%20C24%2015%2024%2021%2024%2031%20L24%2042%20C24%2045%2023%2046.5%2021%2048%20L13.5%2053%20L21%2058%20C23%2059.5%2024%2061%2024%2064%20L24%2075%20C24%2085%2024%2091%2032%2091'/%3E%3Cpath%20d='M68%2015%20C76%2015%2076%2021%2076%2031%20L76%2042%20C76%2045%2077%2046.5%2079%2048%20L86.5%2053%20L79%2058%20C77%2059.5%2076%2061%2076%2064%20L76%2075%20C76%2085%2076%2091%2068%2091'/%3E%3C/g%3E%3Cpath%20d='M50%2013%20L58.5%2021.5%20L58.5%2028.5%20L50%2020%20L41.5%2028.5%20L41.5%2021.5%20Z%20M41%2031.5%20H59%20V49%20H41%20Z%20M46.5%2036.5%20H53.5%20V44%20H46.5%20Z%20M36%2053%20H64%20V70%20H36%20Z%20M41%2057.5%20H59%20V65.5%20H41%20Z%20M36%2074%20H64%20V91%20H36%20Z%20M41%2078.5%20H59%20V86.5%20H41%20Z'%20fill='var(--c)'%20fill-rule='evenodd'/%3E%3C/svg%3E"
     />
     <script>
       // FOUC 防止: React 描画前に保存済み theme/font を <html> へ当てる。
