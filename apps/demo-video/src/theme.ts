@@ -67,6 +67,9 @@ export const logoPaths = {
     "M50 13 L58.5 21.5 L58.5 28.5 L50 20 L41.5 28.5 L41.5 21.5 Z M41 31.5 H59 V49 H41 Z M47.25 37.5 H52.75 V43 H47.25 Z M36 53 H64 V70 H36 Z M41.5 58.5 H58.5 V64.5 H41.5 Z M36 74 H64 V91 H36 Z M41.5 79.5 H58.5 V85.5 H41.5 Z",
 } as const;
 
+/** Brace stroke width paired with logoPaths (mirrors BRACE_STROKE_WIDTH in Logo/index.tsx). */
+export const braceStrokeWidth = 8;
+
 /** VFX-only four-point spark for the summon flash (not part of the brand mark). */
 export const sparkFx =
   "M50 38.5 C50.79 46.91,53.09 49.21,61.5 50 C53.09 50.79,50.79 53.09,50 61.5 C49.21 53.09,46.91 50.79,38.5 50 C46.91 49.21,49.21 46.91,50 38.5 Z";

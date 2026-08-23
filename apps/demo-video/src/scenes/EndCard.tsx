@@ -1,7 +1,7 @@
 import { loadFont } from "@remotion/google-fonts/Cormorant";
 import { AbsoluteFill, Easing, interpolate, useCurrentFrame } from "remotion";
 import { installCommand, repoUrl } from "../fixture";
-import { color, font, logoPaths } from "../theme";
+import { braceStrokeWidth, color, font, logoPaths } from "../theme";
 
 const { fontFamily: cormorant } = loadFont("normal", { weights: ["600"] });
 
@@ -78,7 +78,7 @@ export const EndCard = () => {
           height={170}
           fill="none"
           stroke={color.foreground}
-          strokeWidth={8}
+          strokeWidth={braceStrokeWidth}
           strokeLinecap="butt"
           strokeLinejoin="miter"
         >

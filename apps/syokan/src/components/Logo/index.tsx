@@ -7,10 +7,11 @@ import { cn } from "../../lib/utils";
  * "JSON summons a structure". The single color is left to currentColor, so it follows the
  * surrounding text color (= --foreground) as-is.
  *
- * Geometry lives in the constants below so the shape has one definition. The favicon in
- * index.html is a deliberate bold twin (thicker brace stroke + larger knockouts so it stays
- * legible at 16px); keep the two in sync by eye. apps/demo-video/src/theme.ts carries a copy
- * for Remotion — update it together with this file.
+ * Geometry lives in the constants below so the shape has one definition. Hand-synced copies
+ * to update together with this file (all by eye): the favicon data URIs in apps/syokan/index.html
+ * and apps/share/viewer/index.html (a deliberate bold twin — thicker brace stroke + larger
+ * knockouts so it stays legible at 16px), the standalone sigil.svg / hero.svg next to this
+ * file, and apps/demo-video/src/theme.ts (Remotion cannot import across the app boundary).
  */
 export const BRACE_LEFT =
   "M32 15 C24 15,24 21,24 31 L24 42 C24 45,23 46.5,21 48 L13.5 53 L21 58 C23 59.5,24 61,24 64 L24 75 C24 85,24 91,32 91";
@@ -54,8 +55,8 @@ export function Logo({ title = "syokan", animated = false, className }: LogoProp
       strokeLinejoin="miter"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <path d={BRACE_LEFT} pathLength={pathLength} />
-      <path d={BRACE_RIGHT} pathLength={pathLength} />
+      <path className="summon-brace" d={BRACE_LEFT} pathLength={pathLength} />
+      <path className="summon-brace" d={BRACE_RIGHT} pathLength={pathLength} />
       <path className="summon-tower" d={TOWER} fill="currentColor" fillRule="evenodd" stroke="none" />
     </svg>
   );

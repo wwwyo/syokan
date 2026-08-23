@@ -8,7 +8,7 @@ The README / X demo video, built with [Remotion](https://www.remotion.dev/). Thi
 |---|---|---|
 | Terminal | 0:00–0:10.7 | A Claude Code session. The user types "Show my PR review queue in syokan". Claude fetches reviews, then speaks the incantation: a snapshot envelope (JSON tree) streams by, `POST /api/snapshots` returns `201`, a view URL appears. |
 | Browser | 0:10–0:24 | The browser materializes over the terminal: the syokan shell (sidebar + view header) and the PR review queue view summon in. The first PR card carries a real `Diff` (with an inline review comment) and a role-colored dependency `Graph`; the camera scrolls the view top-to-bottom so the rich catalog components read at a glance, landing on the remaining cards. |
-| End card | 0:23.7–0:29 | The `{ ✦ }` logo traces in (the product's summon animation), wordmark, tagline, install command, repo URL. |
+| End card | 0:23.7–0:29 | The `{ 塔 }` logo traces in (the product's summon animation), wordmark, tagline, install command, repo URL. |
 
 ## Where things live
 

@@ -123,19 +123,18 @@
     opacity: 1;
   }
 }
-.summon-draw > path {
+.summon-draw > .summon-brace {
   stroke-dasharray: 100;
   stroke-dashoffset: 100;
   animation: syokan-summon 0.9s ease-out forwards;
 }
 .summon-draw > .summon-tower {
-  stroke-dasharray: none;
   transform-box: fill-box;
   transform-origin: center;
   animation: syokan-pop 0.45s ease-out 0.7s both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .summon-draw > path {
+  .summon-draw > .summon-brace {
     animation: none;
     stroke-dashoffset: 0;
   }
