@@ -6,7 +6,7 @@ import { color, font, logoPaths } from "../theme";
 const { fontFamily: cormorant } = loadFont("normal", { weights: ["600"] });
 
 const drawEase = Easing.bezier(0.16, 1, 0.3, 1);
-// Slight overshoot so the spark "pops" like the product's syokan-pop keyframe
+// Slight overshoot so the tower "pops" like the product's syokan-pop keyframe
 const popEase = Easing.bezier(0.34, 1.56, 0.64, 1);
 
 /** Fade + rise used by every text block below the logo. */
@@ -40,12 +40,12 @@ export const EndCard = () => {
   });
 
   // Port of syokan-pop (0.45s, delayed until the braces are mostly drawn)
-  const sparkScale = interpolate(frame, [33, 47], [0, 1], {
+  const towerScale = interpolate(frame, [33, 47], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: popEase,
   });
-  const sparkOpacity = interpolate(frame, [33, 47], [0, 1], {
+  const towerOpacity = interpolate(frame, [33, 47], [0, 1], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
@@ -78,9 +78,9 @@ export const EndCard = () => {
           height={170}
           fill="none"
           stroke={color.foreground}
-          strokeWidth={3.2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          strokeWidth={8}
+          strokeLinecap="butt"
+          strokeLinejoin="miter"
         >
           <path
             d={logoPaths.braceLeft}
@@ -91,13 +91,14 @@ export const EndCard = () => {
             style={{ strokeDasharray: 100, strokeDashoffset: braceDashoffset }}
           />
           <path
-            d={logoPaths.spark}
+            d={logoPaths.tower}
             fill={color.foreground}
+            fillRule="evenodd"
             stroke="none"
             style={{
-              scale: String(sparkScale),
-              opacity: sparkOpacity,
-              // fill-box + center guarantees the pop originates at the spark's middle
+              scale: String(towerScale),
+              opacity: towerOpacity,
+              // fill-box + center guarantees the pop originates at the tower's middle
               transformBox: "fill-box",
               transformOrigin: "center",
             }}
