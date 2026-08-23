@@ -26,9 +26,11 @@ export const TOWER =
   "M36 74 H64 V91 H36 Z M41.5 79.5 H58.5 V85.5 H41.5 Z";
 /** Brace stroke width shared with the lockup so the mark reads identically in both. */
 export const BRACE_STROKE_WIDTH = 8;
-// Tight bounds of the braces+tower (with stroke and miter tips), for the lockup where the
-// square padding would otherwise open an ugly gap to the wordmark.
-export const SIGIL_VIEWBOX_TIGHT = "8.5 11 83 84";
+// Tight bounds of the braces+tower for the lockup, where the square padding would otherwise
+// open an ugly gap to the wordmark. The cusp miter tips reach x ≈ 6.3 / 93.7: the tip sits
+// 4/sin(33.7°) ≈ 7.2 outward of the vertex at x=13.5 (half the 8-wide stroke over half the
+// 67° cusp angle), so the horizontal bounds must start at 6, not at the vertex.
+export const SIGIL_VIEWBOX_TIGHT = "6 11 88 84";
 
 type LogoProps = {
   /** Accessible name. For decorative use (e.g. a wordmark sits beside it), pass "" to aria-hide. */
