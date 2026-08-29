@@ -51,7 +51,14 @@ async function writeAuth(path: string, data: AuthData): Promise<void> {
   await chmod(path, 0o600);
 }
 
-async function readJsonSafe(res: Response): Promise<unknown> {
+/**
+ * What the response helpers below actually read. Not `Response`: hc's `ClientResponse` is a
+ * structural type of its own, so annotating with the ambient `Response` breaks whenever the
+ * runtime's type gains a member `ClientResponse` doesn't carry.
+ */
+type ReadableResponse = { readonly status: number; json(): Promise<unknown> };
+
+async function readJsonSafe(res: ReadableResponse): Promise<unknown> {
   try {
     return await res.json();
   } catch {
@@ -75,7 +82,7 @@ type WorkerFailure = {
   status: (typeof PASS_THROUGH_STATUSES)[number] | 502;
 };
 
-async function workerFailure(res: Response): Promise<WorkerFailure> {
+async function workerFailure(res: ReadableResponse): Promise<WorkerFailure> {
   const parsed = workerErrorBodySchema.safeParse(await readJsonSafe(res));
   return {
     body: parsed.success
@@ -99,7 +106,7 @@ export type ServiceFailure =
 
 // Parse a Worker success body; a broken proxy that returns non-JSON folds into bad_response.
 async function parseJson<T>(
-  res: Response,
+  res: ReadableResponse,
 ): Promise<{ ok: true; value: T } | ServiceFailure> {
   try {
     return { ok: true, value: (await res.json()) as T };
@@ -111,7 +118,9 @@ async function parseJson<T>(
 // A Worker 401 on an authenticated call = the stored token expired, so tell the client to log in
 // again; any other failure forwards verbatim. (login is exempt: its 401 is a GitHub-verification
 // failure and must pass through as worker_error.)
-async function workerFailureAsService(res: Response): Promise<ServiceFailure> {
+async function workerFailureAsService(
+  res: ReadableResponse,
+): Promise<ServiceFailure> {
   const failure = await workerFailure(res);
   if (failure.status === 401) return { ok: false, kind: "not_logged_in" };
   return { ok: false, kind: "worker_error", ...failure };
@@ -161,7 +170,7 @@ export function createShareService(deps: ShareServiceDeps): ShareService {
     },
 
     async login(githubAccessToken) {
-      let res: Response;
+      let res: Awaited<ReturnType<typeof client.api.v1.auth.token.$post>>;
       try {
         res = await client.api.v1.auth.token.$post({
           json: { githubAccessToken },
