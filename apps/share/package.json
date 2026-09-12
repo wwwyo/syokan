@@ -10,16 +10,16 @@
     "deploy": "bun build.ts && wrangler deploy"
   },
   "dependencies": {
-    "@hono/zod-validator": "0.9.0",
+    "@hono/zod-validator": "0.9.1",
     "@syokan/app": "workspace:*",
-    "hono": "4.13.5",
+    "hono": "4.13.7",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "zod": "4.5.1"
+    "zod": "4.5.4"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260828.1",
+    "@cloudflare/workers-types": "5.20260904.1",
     "bun-plugin-tailwind": "0.1.2",
-    "wrangler": "4.127.1"
+    "wrangler": "4.129.0"
   }
 }
