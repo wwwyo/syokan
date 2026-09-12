@@ -23,7 +23,7 @@ These are the reusable composition rules, checked against `syokan catalog` (run 
 - A shape change to a public model or interface goes in a `Diff` whose `patch` is a hand-cut unified diff of just the type definition — not the whole file, and not prose describing the change.
 - Literal values (new schema, an auth branch) go in `Code` with `filename` set so the reader sees provenance at a glance.
 - `Table` cells are plain strings or one of the inline nodes (`Text`/`Link`/`Badge`/`Time`) — never markdown syntax; it renders literally, not parsed.
-- `Checklist` items double as reviewer progress when their `children[i]` holds the foldable detail (why to check, a jump `Link`) — checking an item folds it to one line.
+- `Checklist` items double as reviewer progress when `children[i]` holds the foldable detail for `items[i]` (why to check, a jump `Link`) — checking an item folds it to one line. Each `children[i]` is one node, not an array; wrap several in a `Stack`.
 
 There is no `TagFilter` node and node-level `tags` are not a real field in this catalog (`syokan catalog` has neither) — don't carry either over from an older template. A cockpit `Table` stays fully visible; it isn't filterable.
 
@@ -74,7 +74,7 @@ A bare catalog tree (no envelope — write it to a file and `syokan <path>` for 
       "type": "Checklist",
       "id": "priority-checklist",
       "props": { "items": [ { "label": "{{IF_SHORT_ON_TIME_ITEM}}" } ] },
-      "children": [ [ { "type": "Link", "props": { "href": "#{{FINDING_ID}}", "text": "jump" } } ] ]
+      "children": [ { "type": "Link", "props": { "href": "#{{FINDING_ID}}", "text": "jump" } } ]
     },
     {
       "type": "Table",
