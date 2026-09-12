@@ -227,3 +227,5 @@ Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"
 ```
 
 Graph pairs (`role`: `added` / `removed` / `hotspot` / `neutral`; colors fixed by the renderer) go in a horizontal `Stack` for before/after dependency contrasts — see `syokan catalog` for props.
+
+For the full principles behind a panel like this (no false green, severity vs. confidence, zero-context readers) and a larger section skeleton, see [references/risk-panel.md](risk-panel.md).
