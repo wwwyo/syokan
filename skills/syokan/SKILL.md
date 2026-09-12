@@ -78,6 +78,8 @@ Typical composition for a review risk panel (condensed envelope in [references/e
 - `Graph` (roles: added/removed/hotspot/neutral, colors fixed by syokan) side by side in a horizontal `Stack` for before/after dependency contrasts. Prefer it over `Mermaid` when the diagram is a plain node/edge sketch — it cannot fail to parse.
 - `Checklist` for reviewer progress; checked items fold to one line.
 
+For any status/risk panel (not just PR review), see [references/risk-panel.md](references/risk-panel.md) for the full principles and a section skeleton: never show "None" without a `Probe` or a stated verification method (no false green), give `id` to every stateful node so state and jump targets survive a reload, and fold low-priority detail into `Collapsible` instead of deleting it.
+
 ## Posting
 
 Pass the assembled envelope as a file or via stdin; on success the view URL is printed to stdout (`syokan snapshot.json` / `cat snapshot.json | syokan` / `claude -p '…JSON…' | syokan`).

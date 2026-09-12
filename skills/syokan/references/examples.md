@@ -2,7 +2,7 @@
 
 Complete envelopes that can be POSTed as-is, shown as composition references.
 The exact definitions of types and props come from `syokan catalog`, which is the SSOT (including the DiffComment table below — always confirm there in the end).
-None of them include `id` or `createdAt` (the server assigns those).
+None of them include the envelope-level `id` or `createdAt` (the server assigns those); node-level `id` is a different field and does appear in Example 5.
 
 ## DiffComment shape
 
@@ -204,6 +204,7 @@ Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"
                   },
                   {
                     "type": "Probe",
+                    "id": "risk-1-probe",
                     "props": {
                       "label": "no auth header logged",
                       "check": { "kind": "search_count", "path": "/abs/path/to/app", "pattern": "console.log(auth", "expected": 0, "op": "max" },
@@ -227,3 +228,5 @@ Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"
 ```
 
 Graph pairs (`role`: `added` / `removed` / `hotspot` / `neutral`; colors fixed by the renderer) go in a horizontal `Stack` for before/after dependency contrasts — see `syokan catalog` for props.
+
+For the full principles behind a panel like this (no false green, severity vs. confidence, zero-context readers) and a larger section skeleton, see [references/risk-panel.md](risk-panel.md).
