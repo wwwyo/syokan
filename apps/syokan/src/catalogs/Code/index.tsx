@@ -47,7 +47,7 @@ export function dropIncompletePre(root: ShadowRoot | null | undefined): void {
 }
 
 const removeIncompleteRender: NonNullable<
-  FileOptions<undefined>["onPostRender"]
+  FileOptions<undefined, undefined>["onPostRender"]
 > = (node, _instance, phase) => {
   if (phase !== "unmount") return;
   dropIncompletePre(node.shadowRoot);
