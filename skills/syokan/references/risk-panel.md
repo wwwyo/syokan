@@ -10,6 +10,8 @@ Guidance for composing any panel whose verdict a reader trusts without re-checki
 
 **The reader has zero prior context.** Every High finding explains why it matters from first principles in a `Text`. `Diff.comments` supplement that `Text`, never replace it.
 
+**Self-similar at every depth.** The panel has the same shape at every zoom level, so the reader can stop at any depth and still hold a complete, consistent picture. The title is the whole panel in one line: `<subject> — <what changed> · <verdict>`. Each section heading is its body's conclusion, not a label ("Why: the old Graph could not draw an overview", not "Background"). Each finding repeats the panel's own order — what and where → why it matters → evidence → what to decide — and its heading is that finding in one line (`<severity> — <what> in <where>`). A cockpit `Table` row is the finding's heading split into cells. If a heading could be moved to a different body without becoming wrong, it is a label; rewrite it as the conclusion.
+
 **Working memory is tiny.** Show only what changes the decision; fold the rest into `Collapsible` instead of deleting it. No emoji, no decorative separators.
 
 ## Reading order: understanding before judgment
@@ -30,7 +32,7 @@ Sources this order is drawn from: Google's CL-description and reviewer-navigatio
 
 | Aspect | Include when | Express as | Must-have |
 | --- | --- | --- | --- |
-| Identification (what am I looking at) | always | horizontal `Stack` of `Badge`s (repo / branch as `outline`, state such as CI or deploy as `success` / `destructive`, size as `secondary`) plus a `Link` to the source | never a single muted `Text` line — the reader must be able to tell repo, target, and status at a glance |
+| Identification (what am I looking at) | always | `Heading` level 1 as the one-line panel (`<subject> — <what changed> · <verdict>`, `href` to the source), then a horizontal `Stack` of `Badge`s (repo / branch as `outline`, state such as CI or deploy as `success` / `destructive`, size as `secondary`) plus a `Link` to the source | never a single muted `Text` line — the reader must be able to tell repo, target, and status at a glance |
 | Context (why the change exists) | always | `Heading` "Why" + one `Text`: the problem, the constraint, the rejected alternative | no implementation detail, no verdict; if a design doc exists, `Link` it |
 | Architecture overview of the changed area | changes span 2+ modules, or the reader has not touched this code recently | `Graph` (nodes = modules/files, `groups` for module boundaries, `sub` for a one-line change note, `role: changed` for touched-but-clean, `hotspot` + `href:"#<finding id>"` where findings concentrate, `added`/`removed` for new/gone, `direction:"LR"` when the graph is wide), introduced by a `Heading` "What changed, where" | caption states the conclusion ("changes concentrate in routes + store"), not a label |
 | Reading guide (author's tour) | the reader will open the diff | `Heading` "How to read this" + numbered `Markdown` list: main files first, then the tests that state intended behavior, then the rest; one clause per item saying why it is in that position | `Link`s to files or `#id`s; never "see the diff" |
@@ -38,7 +40,7 @@ Sources this order is drawn from: Google's CL-description and reviewer-navigatio
 | Verdict | always, after the risk signals | `Heading` "Verdict", then a `Badge` (`variant` by severity: `success` / `warning` / `destructive`) and a `Text` stacked vertically | confidence qualifier in the Badge text; the `Text` says what the reader has to decide, not a restatement of the chip |
 | Counts | 3+ findings, directly under the verdict | lead `Text` naming what is counted ("Findings by severity"), then a horizontal `Stack` of `Stat` whose labels are self-describing ("High findings", "Verified none") | `Stat.tone` maps severity (High=danger, Med=warning, None (verified)=success, Unknown untoned); separate "None (verified)" and "Unknown" stats |
 | Cockpit (finding index) | 2+ findings | `Table`; one column is a `Link` with `href:"#<id>"` to the finding | cells are strings or inline nodes (`Text`/`Link`/`Badge`/`Time`), never markdown |
-| Finding detail | per finding | `Heading` (level 2 or 3) carrying the `id`, followed by the body nodes in the same `Stack`; `Card` only when findings must read as separate units side by side | High findings carry a why-it-matters `Text` |
+| Finding detail | per finding | `Heading` (level 2 or 3) carrying the `id`, text `<severity> — <what> in <where>`, then in order: `Text` why it matters, `Link` to where it lives, `Collapsible` evidence, `Text` "Decide: …"; `Card` only when findings must read as separate units side by side | the same order as the panel itself; High findings explain why from first principles |
 | Shape change (type / interface / dependency) | the shape of a public model, API, or dependency graph changed | `Diff` cut down to the definition, or two `Graph`s side by side in a horizontal `Stack` for before/after | `Graph` caption is the conclusion sentence; `Diff.patch` is the definition only, not the whole file |
 | Literal values (new schema, auth branch) | the reader must see the exact text | `Code` with `filename` | — |
 | Evidence / detection method | per finding | `Collapsible` (`defaultOpen:false`) holding `Code` (command) + muted `Text` (result) | has an `id` |
@@ -59,6 +61,6 @@ Sources this order is drawn from: Google's CL-description and reviewer-navigatio
 
 ## Before posting
 
-Check four things a schema validator cannot catch: the verdict and counts come after context, map, reading guide, and risk signals, never before them. every "None / OK" is backed by a `Probe` result or a stated verification method, and anything unverified is shown as Unknown instead. Severity is not downgraded for low confidence. Each High finding is readable by someone with zero context.
+Check five things a schema validator cannot catch: the title alone states subject, change, and verdict; every heading is a conclusion that would be wrong above a different body; the verdict and counts come after context, map, reading guide, and risk signals, never before them. every "None / OK" is backed by a `Probe` result or a stated verification method, and anything unverified is shown as Unknown instead. Severity is not downgraded for low confidence. Each High finding is readable by someone with zero context.
 
 `jq empty` checks syntax only — the real validation is `syokan catalog` for props and an actual post (the server returns 400 with the offending path). Once a composition earns reuse across more than one panel, save it with `syokan templates add` (see SKILL.md "Templates for reproducibility").
