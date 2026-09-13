@@ -66,6 +66,16 @@ function scrollAndFlash(wrapper: Element): void {
   flash(box);
 }
 
+/**
+ * User-initiated jump to a node: reflect the target in the URL (without a native jump)
+ * so the view stays shareable / reload-restorable (ViewStateProvider reads it on load),
+ * then navigate. Shared by every clickable "#<node id>" affordance (AnchorLink, Graph nodes).
+ */
+export function jumpToNode(nodeId: string): void {
+  history.replaceState(null, "", `#${encodeURIComponent(nodeId)}`);
+  navigateToNode(nodeId);
+}
+
 /** Navigate to the node carrying the given id. Returns false when no such node exists. */
 export function navigateToNode(nodeId: string): boolean {
   const target = document.querySelector(
