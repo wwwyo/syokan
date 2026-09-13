@@ -10,15 +10,17 @@ import {
   type NodeProps,
   type NodeTypes,
   Position,
-  type ReactFlowInstance,
   ReactFlow,
   getSmoothStepPath,
+  useReactFlow,
 } from "@xyflow/react";
 import {
+  type RefObject,
   createContext,
   memo,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -313,6 +315,85 @@ const PADDING = 16;
 // in headless/measurement embeds, which would collapse the diagram to nothing
 const MAX_HEIGHT_PX = 512; // 32rem at the app's 16px root
 
+// Same bounds the Controls fit button still uses via fitViewOptions.
+const MIN_ZOOM = 0.85;
+const MAX_ZOOM = 1;
+const FIT_VIEW_OPTIONS = { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM };
+
+const clamp = (value: number, lo: number, hi: number) => Math.min(Math.max(value, lo), hi);
+
+/**
+ * Computes and applies the initial viewport by hand, as a child of `<ReactFlow>`
+ * (rendering null): `useReactFlow` only resolves inside the ReactFlowProvider that
+ * `<ReactFlow>` creates internally, so this cannot live in the `Graph` component itself.
+ *
+ * Two mechanisms were tried and empirically failed before this one (verified against the
+ * compiled binary and against Storybook + agent-browser, not just by reading v12's docs):
+ * - `onInit` calling `setViewport` after reading fitView's result: v12 re-applies its own
+ *   fitView after `onInit` runs, clobbering the correction.
+ * - `fitView={false}` + `onInit`/`useNodesInitialized` calling `instance.fitView()` by
+ *   hand: `useNodesInitialized()` never turned true for these nodes (they already carry
+ *   explicit width/height from `layoutGraph`, so xyflow's own measurement pass — the
+ *   trigger for that hook — never has anything to do), so the sequence never ran; measured
+ *   transform stayed `translate(0,0) scale(1)`.
+ *
+ * This bypasses xyflow's fitView machinery entirely: `layoutGraph` already gives an exact,
+ * analytic `layout.width`/`layout.height` (dagre's layout, not a DOM measurement), so the
+ * zoom that fits the container is computable directly with no dependency on xyflow ever
+ * "seeing" the nodes as measured. Re-applied via ResizeObserver so a container that
+ * resizes after mount (e.g. Storybook's canvas reflow) gets the same treatment.
+ */
+function InitialViewport({
+  layout,
+  containerRef,
+}: {
+  layout: ReturnType<typeof layoutGraph>;
+  containerRef: RefObject<HTMLDivElement | null>;
+}) {
+  const instance = useReactFlow();
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null) return;
+
+    const apply = () => {
+      const { width: containerWidth, height: containerHeight } =
+        container.getBoundingClientRect();
+      if (containerWidth === 0 || containerHeight === 0) return;
+      const zoom = clamp(
+        Math.min(
+          (containerWidth - PADDING * 2) / layout.width,
+          (containerHeight - PADDING * 2) / layout.height,
+        ),
+        MIN_ZOOM,
+        MAX_ZOOM,
+      );
+      const corrected = initialViewport(
+        layout.width,
+        layout.height,
+        containerWidth,
+        containerHeight,
+        zoom,
+        PADDING,
+      );
+      const viewport =
+        corrected ??
+        {
+          x: (containerWidth - layout.width * zoom) / 2,
+          y: (containerHeight - layout.height * zoom) / 2,
+        };
+      instance.setViewport({ ...viewport, zoom });
+    };
+
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [layout, instance, containerRef]);
+
+  return null;
+}
+
 /**
  * Interactive architecture diagram: nodes = modules/files (optionally grouped into
  * module-boundary boxes), edges = relationships, role → color/stroke fixed by the renderer
@@ -417,33 +498,6 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
   }, []);
   const handleNodeMouseLeave = useCallback(() => setHoveredId(null), []);
 
-  // fitView (below) clamps zoom-out at fitViewOptions.minZoom and, once the graph no
-  // longer fits at that clamped zoom, still centers it — cutting off both edges and
-  // starting the reader in the middle. Called from onInit, which xyflow v12 invokes
-  // synchronously after the initial fitView is applied (same layout-effect pass, before
-  // paint), so this correction lands with no visible jump.
-  const handleInit = useCallback(
-    (instance: ReactFlowInstance) => {
-      const container = containerRef.current;
-      if (container === null) return;
-      const { zoom } = instance.getViewport();
-      const { width: containerWidth, height: containerHeight } =
-        container.getBoundingClientRect();
-      const corrected = initialViewport(
-        layout.width,
-        layout.height,
-        containerWidth,
-        containerHeight,
-        zoom,
-        PADDING,
-      );
-      if (corrected !== null) {
-        instance.setViewport({ ...corrected, zoom });
-      }
-    },
-    [layout],
-  );
-
   const containerHeight = Math.min(layout.height + PADDING * 2, MAX_HEIGHT_PX);
 
   // Roles resolved by layoutGraph (unset -> "neutral"), not the raw props, so an
@@ -479,21 +533,26 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
             // page, not zoom the diagram (pinch and the Controls buttons still zoom)
             zoomOnScroll={false}
             preventScrolling={false}
-            fitView
+            // Initial fit is driven by hand in InitialViewport (below), not this prop:
+            // fitView-on-mount centers a graph that overflows the clamped zoom, cutting
+            // off both edges instead of starting the reader at the top-left. The Controls
+            // fit button still uses fitViewOptions as its default and keeps centering —
+            // that's an explicit user action, unlike the initial view.
+            fitView={false}
             // An overview must be legible before any interaction: unbounded fitView
             // shrinks a wide graph until labels are unreadable. Capping how far it can
             // zoom out trades "the whole graph visible at once" for "readable", leaving
             // the rest reachable by pan (or the Controls fit button, which respects the
             // same bounds).
-            fitViewOptions={{ minZoom: 0.85, maxZoom: 1 }}
+            fitViewOptions={FIT_VIEW_OPTIONS}
             proOptions={{ hideAttribution: true }}
             colorMode={scheme}
-            onInit={handleInit}
             onNodeClick={handleNodeClick}
             onNodeMouseEnter={handleNodeMouseEnter}
             onNodeMouseLeave={handleNodeMouseLeave}
           >
             <Controls showInteractive={false} />
+            <InitialViewport layout={layout} containerRef={containerRef} />
           </ReactFlow>
         </HoverContext.Provider>
       </div>
