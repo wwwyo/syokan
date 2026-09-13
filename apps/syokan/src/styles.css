@@ -34,6 +34,7 @@
   --graph-added: #059669;
   --graph-removed: rgba(239, 68, 68, 0.7);
   --graph-hotspot: #d97706;
+  --graph-changed: #0284c7;
 
   /* 表示フォントの既定 (= system)。JS 起動前 / フォント未選択時のフォールバック。
      実際の切替はプリセット表 (src/lib/fonts.ts) が --app-font-* を直接書き換える。 */
@@ -67,6 +68,7 @@
   --graph-added: #34d399;
   --graph-removed: rgba(239, 68, 68, 0.7);
   --graph-hotspot: #fbbf24;
+  --graph-changed: #38bdf8;
 }
 
 @theme inline {

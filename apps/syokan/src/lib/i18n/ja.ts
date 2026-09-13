@@ -102,6 +102,15 @@ export const ja: Messages = {
     renderFailed: "この図を表示できませんでした。",
     expand: "図を拡大",
   },
+  graph: {
+    added: "追加",
+    removed: "削除",
+    hotspot: "指摘あり",
+    changed: "変更",
+    neutral: "関連",
+    group: "ディレクトリなどの境界",
+    edge: "矢印は参照する側 → される側",
+  },
   diff: {
     unparsable: "diff を表示できませんでした (patch を解釈できません)。",
     fileFailed: "この diff を表示できませんでした。",

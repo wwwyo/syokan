@@ -101,6 +101,15 @@ export const en = {
     renderFailed: "This diagram could not be rendered.",
     expand: "Expand diagram",
   },
+  graph: {
+    added: "added",
+    removed: "removed",
+    hotspot: "has findings",
+    changed: "changed",
+    neutral: "related",
+    group: "boundary",
+    edge: "arrow: from user to used",
+  },
   diff: {
     unparsable: "The diff could not be displayed (the patch could not be parsed).",
     fileFailed: "This diff could not be displayed.",

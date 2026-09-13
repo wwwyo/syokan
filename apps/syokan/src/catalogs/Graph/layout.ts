@@ -73,9 +73,11 @@ type GraphLayout = {
   height: number;
 };
 
-const NODE_HEIGHT = 40;
-const NODE_HEIGHT_WITH_SUB = 56;
-const CHAR_WIDTH = 6.5;
+// Label renders at text-sm (14px) and sub at text-xs (12px); dimensions sized for the
+// wider glyph so text-sm content still fits (was 40/56/6.5 for a 12px label).
+const NODE_HEIGHT = 44;
+const NODE_HEIGHT_WITH_SUB = 60;
+const CHAR_WIDTH = 7.5;
 const NODE_PADDING_X = 16;
 const MIN_NODE_WIDTH = 96;
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
+import { t } from "../../lib/i18n";
 import { Graph, graphPropsSchema } from ".";
 import { layoutGraph } from "./layout";
 
@@ -253,6 +254,23 @@ describe("Graph", () => {
     );
     expect(html).toContain('data-role="neutral"');
     expect(html).not.toContain("calls");
+  });
+
+  // Renderer-owned legend: producers should never need to explain colors themselves.
+  test("legend lists only the roles actually present, plus the edge label when edges exist", () => {
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: [
+          { id: "a", label: "a", role: "hotspot" as const },
+          { id: "b", label: "b", role: "changed" as const },
+        ],
+        edges: [{ from: "a", to: "b" }],
+      }),
+    );
+    expect(html).toContain(t.graph.hotspot);
+    expect(html).toContain(t.graph.changed);
+    expect(html).toContain(t.graph.edge);
+    expect(html).not.toContain(t.graph.removed);
   });
 });
 

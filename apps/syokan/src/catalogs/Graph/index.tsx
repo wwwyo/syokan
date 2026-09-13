@@ -23,6 +23,7 @@ import {
 } from "react";
 import { z } from "zod";
 import { jumpToNode } from "../../lib/anchor";
+import { t } from "../../lib/i18n";
 import { useColorScheme } from "../../lib/useColorScheme";
 import { cn } from "../../lib/utils";
 import { layoutGraph } from "./layout";
@@ -178,13 +179,19 @@ const roleStyles: Record<GraphRole, RoleStyle> = {
     marker: "var(--muted-foreground)",
   },
   changed: {
-    // touched-but-clean: the accent color, distinct from the added/removed/hotspot palette
-    node: "border-primary bg-primary/10 text-primary",
-    edge: "stroke-primary",
+    // touched-but-clean: a real hue (sky), distinct from added/removed/hotspot and from
+    // neutral — the accent token this used to ride collapses to near-white in dark mode
+    // and became indistinguishable from neutral.
+    node: "border-sky-500 bg-sky-500/10 text-sky-700 dark:border-sky-400 dark:text-sky-300",
+    edge: "stroke-sky-600 dark:stroke-sky-400",
     edgeDashed: false,
-    marker: "var(--primary)",
+    marker: "var(--graph-changed)",
   },
 };
+
+// Fixed reading order for the legend, independent of prop order (nodes[].role /
+// edges[].role appear in whatever order the producer listed them).
+const roleOrder: readonly GraphRole[] = ["added", "removed", "hotspot", "changed", "neutral"];
 
 // Hover state is delivered via context rather than baked into each node/edge's `data`, so
 // hovering doesn't force flowNodes/flowEdges (and the whole ReactFlow tree) to rebuild.
@@ -217,9 +224,9 @@ const RoleNode = memo(function RoleNode({ id, data }: NodeProps<Node<RoleNodeDat
       )}
     >
       <Handle type="target" position={targetPos} isConnectable={false} className="!opacity-0" />
-      <span className="line-clamp-1 w-full">{data.label}</span>
+      <span className="line-clamp-1 w-full text-sm">{data.label}</span>
       {data.sub !== undefined && (
-        <span className="line-clamp-1 w-full text-[10px] opacity-70">{data.sub}</span>
+        <span className="line-clamp-1 w-full text-xs opacity-70">{data.sub}</span>
       )}
       <Handle type="source" position={sourcePos} isConnectable={false} className="!opacity-0" />
     </div>
@@ -409,6 +416,15 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
 
   const containerHeight = Math.min(layout.height + PADDING * 2, MAX_HEIGHT_PX);
 
+  // Roles resolved by layoutGraph (unset -> "neutral"), not the raw props, so an
+  // omitted role still shows its actual (neutral) swatch and an unused role is omitted.
+  const usedRoles = useMemo(() => {
+    const present = new Set<GraphRole>();
+    for (const n of layout.nodes) present.add(n.role as GraphRole);
+    for (const e of layout.edges) present.add(e.role as GraphRole);
+    return roleOrder.filter((role) => present.has(role));
+  }, [layout]);
+
   return (
     <figure data-slot="graph" className="flex w-full max-w-full flex-col gap-2">
       <div
@@ -433,6 +449,12 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
             zoomOnScroll={false}
             preventScrolling={false}
             fitView
+            // An overview must be legible before any interaction: unbounded fitView
+            // shrinks a wide graph until labels are unreadable. Capping how far it can
+            // zoom out trades "the whole graph visible at once" for "readable", leaving
+            // the rest reachable by pan (or the Controls fit button, which respects the
+            // same bounds).
+            fitViewOptions={{ minZoom: 0.85, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}
             colorMode={scheme}
             onNodeClick={handleNodeClick}
@@ -442,6 +464,25 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
             <Controls showInteractive={false} />
           </ReactFlow>
         </HoverContext.Provider>
+      </div>
+      {/* Renderer-owned legend: producers never need to explain what a color means. One
+          item per role actually present (via `usedRoles`, resolved from the laid-out
+          graph so an unset role's "neutral" default is represented too), plus group and
+          edge-direction items only when those exist in this graph. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+        {usedRoles.map((role) => (
+          <span key={role} className="flex items-center gap-1">
+            <span className={cn("h-3 w-3 shrink-0 rounded border", roleStyles[role].node)} />
+            {t.graph[role]}
+          </span>
+        ))}
+        {layout.groups.length > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="h-3 w-3 shrink-0 rounded border border-dashed border-muted-foreground/40 bg-transparent" />
+            {t.graph.group}
+          </span>
+        )}
+        {layout.edges.length > 0 && <span>{t.graph.edge}</span>}
       </div>
       {caption !== undefined && (
         <figcaption className="text-xs text-muted-foreground">{caption}</figcaption>
