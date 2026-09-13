@@ -72,7 +72,7 @@ syokan dashboard.json   # tree を召喚。保存するたびに view が再描�
 
 ```bash
 mise install && bun install
-bun run dev    # 2 つの app: syokan サーバー（Bun.serve + HMR）と share Worker（wrangler dev）
+bun run dev    # 2 つの app: syokan サーバー（Bun.serve。frontend はリロード時に再バンドル、HMR は無効）と share Worker（wrangler dev）
 ```
 
 root の `dev` は全 workspace app に fan-out し（`bun --filter '@syokan/*' --parallel dev`）、各 app が自分の `dev` を持つ。2 プロセスが立ち上がる:

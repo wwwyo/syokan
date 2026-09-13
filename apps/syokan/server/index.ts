@@ -32,7 +32,7 @@ function resolvePort(): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_PORT;
 }
 
-// The frontend is supplied via the index.html import. Dev gets an on-the-fly bundle + HMR;
+// The frontend is supplied via the index.html import. Dev gets an on-the-fly bundle (rebundled per reload, HMR off — see `development` below);
 // at compile time Bun bundles the frontend and embeds it in the same binary (the same static
 // import serves both). Called from both entry.ts (the single binary) and direct startup.
 // Migrate templates from the old layout to the new data home exactly once. If the destination
@@ -116,7 +116,14 @@ export function startServer() {
       // SPA fallback: non-API requests return the frontend, and the client router branches rendering.
       "/*": index,
     },
-    development: process.env.NODE_ENV !== "production",
+    // HMR is off on purpose: Bun's HMR runtime links modules in a single phase, so inside an ESM
+    // import cycle a module that reads an import at top level gets `null` instead of the namespace
+    // (oven-sh/bun#40248; fix in oven-sh/bun#40259, unreleased as of bun 1.4.2). @tanstack/router-core
+    // >= 1.171.19 has exactly that shape (router.js <-> load-client.js, `replaceRouteChunk` read at
+    // module evaluation), which left the dev page blank with "Cannot read properties of null
+    // (reading 'replaceRouteChunk')". With hmr off the dev server still rebundles on every reload;
+    // only live hot-reload is lost. Drop this once the mise-pinned bun ships the fix.
+    development: process.env.NODE_ENV !== "production" ? { hmr: false } : false,
     port: resolvePort(),
     // Bind to localhost only, so /api/files (which reads arbitrary files) isn't exposed to the LAN
     // (PRD's trust boundary = localhost bind + user permissions).
