@@ -64,6 +64,7 @@ Drop a row when it has nothing to say; do not move a review-layer row above the 
 - There is no `TagFilter` node and no node-level `tags` field. Do not carry them over from older templates.
 - A horizontal `Stack` of chips or `Stat`s is never bare: a `Heading` or lead `Text` above it says what the row is. A row of numbers or badges with no referent is the most common "what is this" complaint.
 - The panel's own vocabulary stays out of the reader's text. Node names (`Probe`, `Stat`, `Badge`), role names (`hotspot`), and severity codes (High / Med / None / Unknown) are for the producer; the reader sees the claim in their own language ("verified clean, re-checkable here", "could not confirm"). A file or type that the change itself touches is the subject and may be named.
+- Each section is a `Heading` followed by one `Stack` holding the section body, and each finding inside it is again `Heading` + `Stack`. `Stack` spacing tightens with nesting depth, so this is what makes section gaps wide and paragraph gaps narrow; a flat root with every paragraph as a direct child spaces paragraphs like sections.
 - Parallel facts are never a sentence with slashes or commas: three or more items of the same kind go in a `Markdown` list, and items with two or more attributes (before / after, term / meaning, file / role) go in a `Table`. Prose is for one line of reasoning at a time.
 - Color is meaning: `Badge.variant` and `Stat.tone` carry the verdict; do not reach for muted `Text` where a colored chip says it faster, and do not color decoratively.
 
