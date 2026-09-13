@@ -74,6 +74,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@tanstack/router-core@1.171.27": "patches/@tanstack%2Frouter-core@1.171.27.patch",
+  },
   "catalog": {
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",

@@ -1,0 +1,15 @@
+diff --git a/dist/esm/router.js b/dist/esm/router.js
+index 8977cec9374c33ee6046924fff0cff1bf4d87fc9..5e99228d906a01e3362d16f0e8f5d33a0f93fe62 100644
+--- a/dist/esm/router.js
++++ b/dist/esm/router.js
+@@ -814,7 +814,9 @@ var RouterCore = class {
+ * dedicated to HMR.
+ */
+ if (process.env.NODE_ENV !== "production") {
+-	RouterCore.prototype._replaceRouteChunk = replaceRouteChunk;
++	RouterCore.prototype._replaceRouteChunk = function(route, lazyFn) {
++		return replaceRouteChunk(route, lazyFn);
++	};
+ 	RouterCore.prototype._refreshRoute = async function() {
+ 		this._serverResult = void 0;
+ 		this.updateLatestLocation();

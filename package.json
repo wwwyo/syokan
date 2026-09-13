@@ -23,5 +23,8 @@
     "typecheck": "tsc --noEmit -p apps/syokan && tsc --noEmit -p apps/share && tsc --noEmit -p apps/demo-video",
     "storybook": "cd apps/syokan && storybook dev -p 6006",
     "build-storybook": "cd apps/syokan && storybook build"
+  },
+  "patchedDependencies": {
+    "@tanstack/router-core@1.171.27": "patches/@tanstack%2Frouter-core@1.171.27.patch"
   }
 }
