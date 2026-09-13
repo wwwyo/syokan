@@ -1,6 +1,6 @@
 # Risk / status panels
 
-Guidance for composing any panel whose verdict a reader trusts without re-checking it — a PR risk panel, a deploy status board, an incident dashboard. This is not a review methodology; detection methodology is the caller's job. The panel structure is not fixed: pick the aspects below that apply to your data and skip the rest. What is fixed is the direction of the reading order — the reader must be given enough to understand the change before the panel asks them to accept a judgment about it (see "Reading order"). For a minimal working shape, see [examples.md](examples.md) Example 5. Do not transcribe props from here — `syokan catalog` is the SSOT.
+Guidance for composing any panel whose verdict a reader trusts without re-checking it — a PR risk panel, a deploy status board, an incident dashboard. This is not a review methodology; detection methodology is the caller's job. The panel structure is not fixed: pick the aspects below that apply to your data and skip the rest. What is fixed is the direction of the reading order: the PR description first, in its own section order, then the review layer (see "Reading order"). For a minimal working shape, see [examples.md](examples.md) Example 5. Do not transcribe props from here — `syokan catalog` is the SSOT.
 
 ## Principles
 
@@ -14,20 +14,23 @@ Guidance for composing any panel whose verdict a reader trusts without re-checki
 
 **Working memory is tiny.** Show only what changes the decision; fold the rest into `Collapsible` instead of deleting it. No emoji, no decorative separators.
 
-## Reading order: understanding before judgment
+## Reading order: the PR description, rendered rich, then the review layer
 
-A reviewer cannot judge risk in code they do not yet understand, and a verdict shown first anchors everything read afterwards into "confirming the verdict". So the panel pays down comprehension debt first and asks for judgment last. Default order (drop a step when it has nothing to say; do not move a later step ahead of an earlier one):
+A review panel is not a second document. Its first half is the PR description with the same sections in the same order, expressed with nodes instead of markdown; its second half is the review layer that a PR description does not carry. If a PR description exists, build the first half from it — same facts, same order — and do not restate them differently. Understanding comes before judgment: the review layer is placed after the description, never before it, because a verdict shown first anchors everything read afterwards into confirming it.
 
-1. **Identification** — what am I looking at (repo, target, state).
-2. **Background** — what the reader must already hold to follow the rest: the state of the code before the change, and the terms the panel will use (a node type, a library, a rule name). Calibrate the depth to the reader: for the repo's own author, one line per term they did not write themselves; for a newcomer, the module's role and how it is called. Write nothing the reader already knows, and nothing that is not used later in the panel.
-3. **Why** — the problem the change exists to solve, the constraint that shaped it, the alternative that was rejected. Two or three sentences in a `Text`; no implementation, no verdict. Every term here was introduced in Background.
-4. **Map of the change** — the architecture overview `Graph`, and, when a public API / type / schema changed, its `Diff` cut to the definition. Public contracts come before internals: they are where blast radius lives.
-5. **Reading guide** — the author's tour: which files to read first (the ones carrying the logic), which tests state the intended behavior, and why that order. A short numbered `Markdown` list with `Link`s. This is the step most panels skip; it is the one that turns a diff into something a reader can follow.
-6. **Risk signals** — the concrete facts a reviewer weighs: public-contract changes, schema / migration, auth or security surface, hot paths, new dependencies, size, missing tests, reversibility. State each as a fact with its evidence, not yet as a score.
-7. **Verdict and counts** — only now: the `Badge` + `Text` verdict, and the severity counts if there are enough findings to count. Placed here they summarize what the reader has just understood instead of pre-empting it.
-8. **Findings** — cockpit `Table`, then each finding's detail, probes for verified-none claims, Unknowns, the complete lists, reader progress.
+| PR section | Panel expression | What it buys over markdown |
+| --- | --- | --- |
+| Title | `Heading` level 1 = `<subject> — <what changed> · <verdict>`, `href` to the PR; a `Badge` row for target, CI / deploy state, size | verdict readable from the title alone; state as color |
+| What | the structure diagram as `Graph` (modules / files, `groups` for boundaries, `sub` for the one-line change, `hotspot` + `href` where findings are), plus the public-contract change as `Code` or `Diff` cut to the definition | a diagram the reader can pan, hover, and click into findings |
+| Background | "Before this change": the pre-change state and one line per term used later, at the depth this reader lacks; then "Why": problem, constraint, rejected alternative | terms defined before use; no forward references |
+| Screenshots / Videos | `Code` / `Diff` for textual before-after; images are not a catalog node, so `Link` to them | — |
+| Testing | `Probe` per verified claim with the measured `result`; `Text` naming the method where no check kind fits | claims the reader can re-run instead of trust |
+| Summary | the reading guide: numbered `Markdown` list of change chunks in the order to read them, main logic first, then the tests that state intended behavior, with `Link`s | tells the reader where to start |
+| (review layer) Risk signals | `Table` Signal / Present? / Evidence; "not present" rows stay visible | absence as a checked claim |
+| (review layer) Verdict and counts | `Heading` "Verdict", `Badge` by severity, `Text` saying what to decide; then a lead `Text` and toned `Stat`s | severity as color, after the reader can judge it |
+| (review layer) Findings | cockpit `Table` → each finding (`Heading` with `id`: what and where → why → `Link` to the place → evidence → decide) → Unknowns → complete lists → reader `Checklist` | jump targets, folds, progress that survives reload |
 
-Sources this order is drawn from: Google's CL-description and reviewer-navigation guides (why in the description; read the main files and the tests first), ADR structure (context → decision → consequences), CodeTour (author-written reading order), review-ordering studies showing file presentation order changes what reviewers find, and risk-based review checklists (blast radius, contracts, schema, security, reversibility).
+Drop a row when it has nothing to say; do not move a review-layer row above the description. Sources: Google's CL-description and reviewer-navigation guides, ADR structure (context → decision → consequences), CodeTour, review-ordering studies, risk-based review checklists.
 
 ## Aspects and how to express them
 
@@ -63,6 +66,6 @@ Sources this order is drawn from: Google's CL-description and reviewer-navigatio
 
 ## Before posting
 
-Check five things a schema validator cannot catch: the title alone states subject, change, and verdict; every heading is a conclusion that would be wrong above a different body; no term is used before Background introduces it; the verdict and counts come after background, why, map, reading guide, and risk signals, never before them. every "None / OK" is backed by a `Probe` result or a stated verification method, and anything unverified is shown as Unknown instead. Severity is not downgraded for low confidence. Each High finding is readable by someone with zero context.
+Check five things a schema validator cannot catch: the title alone states subject, change, and verdict; every heading is a conclusion that would be wrong above a different body; no term is used before Background introduces it; the review layer (risk signals, verdict, counts, findings) comes after the description sections, never before them. every "None / OK" is backed by a `Probe` result or a stated verification method, and anything unverified is shown as Unknown instead. Severity is not downgraded for low confidence. Each High finding is readable by someone with zero context.
 
 `jq empty` checks syntax only — the real validation is `syokan catalog` for props and an actual post (the server returns 400 with the offending path). Once a composition earns reuse across more than one panel, save it with `syokan templates add` (see SKILL.md "Templates for reproducibility").
