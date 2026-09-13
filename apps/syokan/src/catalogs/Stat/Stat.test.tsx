@@ -55,16 +55,18 @@ describe("Stat", () => {
     expect(html).not.toContain("stat-delta");
   });
 
-  test("renders tone classes on the value and border", () => {
+  test("renders tone classes on the value and card background/border", () => {
     const html = renderToString(
       createElement(Stat, { label: "High", value: 2, tone: "danger" }),
     );
     expect(html).toContain("text-red-700");
-    expect(html).toContain("border-l-red-600");
+    expect(html).toContain("bg-red-500/10");
+    expect(html).toContain("border-red-500/40");
   });
 
   test("omits tone classes when not given", () => {
     const html = renderToString(createElement(Stat, { label: "x", value: 1 }));
     expect(html).not.toContain("border-l-4");
+    expect(html).not.toContain("bg-red-500/10");
   });
 });
