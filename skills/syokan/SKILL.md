@@ -27,6 +27,8 @@ If syokan is not installed yet (`syokan --help` fails), or the user says "onboar
 3. Turn it into an envelope JSON (see "Envelope shape" below). Only `root` is required.
 4. Post it with the CLI (see "Posting" below). On success the view URL is printed.
 
+Write the view's own text (headings, verdicts, explanations, captions) in the language the user addressed you in. The docs and the catalog are English, but the view is for the reader, and an English panel handed to a Japanese-speaking reader is a defect, not a default.
+
 If you have built a similar view before, do not start from scratch — base it on a saved template (see "Templates for reproducibility" below).
 
 ## Envelope shape
