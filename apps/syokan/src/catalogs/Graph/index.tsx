@@ -34,6 +34,12 @@ import { initialViewport, layoutGraph } from "./layout";
 
 // role = semantic classification; color and stroke are fixed here so the reading of a
 // diagram never varies from generation to generation (the mermaid instability problem).
+// Color means exactly one thing in a Graph: how that module changed (the diff
+// convention: added / removed / changed / unchanged). "hotspot" is deprecated: it does
+// not name a change kind, only "has findings", which is not a color's job — a finding is
+// reached via `href` (shown by the trailing ↗), never by hue. Kept in the enum only for
+// backward compatibility with already-posted envelopes; it renders identically to
+// "changed" and is not offered as a separate legend entry.
 const roleSchema = z.enum(["added", "removed", "hotspot", "neutral", "changed"]);
 
 export type GraphRole = z.infer<typeof roleSchema>;
@@ -153,52 +159,52 @@ type RoleStyle = {
   marker: string;
 };
 
-// Color is minimal by design: hotspot is the only hue in the whole diagram (a figure
-// that colors everything communicates nothing — see the owner's rejection of the old
-// amber/sky/emerald/red palette). Every edge shares one muted stroke/marker; role is
-// otherwise conveyed by contrast (changed vs neutral), a +/- label prefix (added/removed,
-// applied by RoleNode, not the producer), and dashing (removed).
+// Color means one thing: the change kind, following the diff convention. Added=emerald,
+// removed=red (dashed, struck through), changed=amber, neutral=muted. "hotspot" is not a
+// change kind (see the roleSchema comment) — it renders exactly like "changed" so an
+// already-posted envelope still displays sensibly, but never appears as its own legend
+// entry or its own hue.
 const EDGE_STROKE = "stroke-muted-foreground/60";
 const EDGE_MARKER = "var(--muted-foreground)";
+// A new dependency edge is itself an addition, so it gets the added hue too.
+const EDGE_STROKE_ADDED = "stroke-[var(--graph-added)]";
+const EDGE_MARKER_ADDED = "var(--graph-added)";
+
+const CHANGED_STYLE: RoleStyle = {
+  node: "border-amber-600 bg-amber-500/15 text-amber-700 dark:border-amber-400 dark:text-amber-300",
+  edge: EDGE_STROKE,
+  edgeDashed: false,
+  marker: EDGE_MARKER,
+};
 
 const roleStyles: Record<GraphRole, RoleStyle> = {
   added: {
-    node: "border-foreground/60 bg-card text-foreground",
-    edge: EDGE_STROKE,
+    node: "border-emerald-600 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400 dark:text-emerald-300",
+    edge: EDGE_STROKE_ADDED,
     edgeDashed: false,
-    marker: EDGE_MARKER,
+    marker: EDGE_MARKER_ADDED,
   },
   removed: {
-    node: "border-dashed border-border/60 bg-card text-muted-foreground",
+    node: "border-red-500/70 text-red-600/80 dark:text-red-400/80",
     edge: EDGE_STROKE,
     edgeDashed: true,
     marker: EDGE_MARKER,
   },
-  hotspot: {
-    // the only colored role in the figure
-    node: "border-2 border-amber-600 bg-amber-500/15 text-amber-700 dark:border-amber-400 dark:text-amber-300",
-    edge: EDGE_STROKE,
-    edgeDashed: false,
-    marker: EDGE_MARKER,
-  },
+  // deprecated: rendered as "changed", never its own legend entry or hue (see roleSchema).
+  hotspot: CHANGED_STYLE,
   neutral: {
     node: "border-border/60 bg-card text-muted-foreground",
     edge: EDGE_STROKE,
     edgeDashed: false,
     marker: EDGE_MARKER,
   },
-  changed: {
-    // touched-but-clean: contrast (not hue) is what distinguishes it from neutral.
-    node: "border-foreground/60 bg-card text-foreground",
-    edge: EDGE_STROKE,
-    edgeDashed: false,
-    marker: EDGE_MARKER,
-  },
+  changed: CHANGED_STYLE,
 };
 
 // Fixed reading order for the legend, independent of prop order (nodes[].role /
-// edges[].role appear in whatever order the producer listed them).
-const roleOrder: readonly GraphRole[] = ["added", "removed", "hotspot", "changed", "neutral"];
+// edges[].role appear in whatever order the producer listed them). "hotspot" is
+// deliberately absent: it maps onto "changed" and must not get its own entry.
+const roleOrder: readonly GraphRole[] = ["added", "removed", "changed", "neutral"];
 
 // Hover state is delivered via context rather than baked into each node/edge's `data`, so
 // hovering doesn't force flowNodes/flowEdges (and the whole ReactFlow tree) to rebuild.
@@ -529,10 +535,13 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
 
   // Roles resolved by layoutGraph (unset -> "neutral"), not the raw props, so an
   // omitted role still shows its actual (neutral) swatch and an unused role is omitted.
+  // "hotspot" normalizes to "changed" here too, so a hotspot-only graph still surfaces
+  // the "changed" legend entry it visually renders as, instead of no entry at all.
   const usedRoles = useMemo(() => {
     const present = new Set<GraphRole>();
-    for (const n of layout.nodes) present.add(n.role as GraphRole);
-    for (const e of layout.edges) present.add(e.role as GraphRole);
+    const normalize = (role: GraphRole): GraphRole => (role === "hotspot" ? "changed" : role);
+    for (const n of layout.nodes) present.add(normalize(n.role as GraphRole));
+    for (const e of layout.edges) present.add(normalize(e.role as GraphRole));
     return roleOrder.filter((role) => present.has(role));
   }, [layout]);
 

@@ -104,12 +104,14 @@ export const en = {
   graph: {
     added: "added",
     removed: "removed",
-    hotspot: "has findings",
+    // kept for backward compatibility with already-posted envelopes; unused as a legend
+    // entry (hotspot renders and reads as "changed" — see catalogs/Graph/index.tsx).
+    hotspot: "changed",
     changed: "changed",
-    neutral: "related",
+    neutral: "unchanged",
     group: "boundary",
     edge: "arrow: from user to used",
-    clickable: "↗ jumps to a finding",
+    clickable: "↗ opens its detail",
   },
   diff: {
     unparsable: "The diff could not be displayed (the patch could not be parsed).",

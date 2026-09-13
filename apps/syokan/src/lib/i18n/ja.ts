@@ -105,12 +105,14 @@ export const ja: Messages = {
   graph: {
     added: "追加",
     removed: "削除",
-    hotspot: "指摘あり",
+    // 後方互換のため enum には残すが、凡例には出さない（hotspot は changed と同じ見た目
+    // で表示される。catalogs/Graph/index.tsx 参照）
+    hotspot: "変更",
     changed: "変更",
-    neutral: "関連",
+    neutral: "変更なし",
     group: "ディレクトリなどの境界",
     edge: "矢印は参照する側 → される側",
-    clickable: "↗ は指摘へ移動",
+    clickable: "↗ は詳細へ移動",
   },
   diff: {
     unparsable: "diff を表示できませんでした (patch を解釈できません)。",

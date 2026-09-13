@@ -218,7 +218,7 @@ describe("Graph", () => {
           {
             id: "graph",
             label: "Graph/index.tsx",
-            role: "hotspot" as const,
+            role: "changed" as const,
             sub: "React Flow renderer",
             href: "#finding-1",
             group: "catalogs",
@@ -226,7 +226,7 @@ describe("Graph", () => {
         ],
         edges: [
           { from: "skill", to: "panel", label: "imports" },
-          { from: "routes", to: "graph", role: "hotspot" as const },
+          { from: "routes", to: "graph", role: "changed" as const },
         ],
         groups: [
           { id: "skills", label: "skills/syokan" },
@@ -283,20 +283,54 @@ describe("Graph", () => {
     const html = renderToString(
       createElement(Graph, {
         nodes: [
-          { id: "a", label: "a", role: "hotspot" as const },
+          { id: "a", label: "a", role: "added" as const },
           { id: "b", label: "b", role: "changed" as const },
         ],
         edges: [{ from: "a", to: "b" }],
       }),
     );
-    expect(html).toContain(t.graph.hotspot);
+    expect(html).toContain(t.graph.added);
     expect(html).toContain(t.graph.changed);
     expect(html).toContain(t.graph.edge);
     expect(html).not.toContain(t.graph.removed);
   });
 
-  // Color is minimal (hotspot only); role is otherwise conveyed via label prefixes,
-  // strikethrough, and a trailing "↗" on any clickable node — asserted directly below.
+  // "hotspot" is deprecated: color means the change kind only, and "has findings" is not
+  // a change kind. A hotspot node must render exactly like "changed" (same border/bg/text
+  // classes) and must not add a separate legend entry alongside "changed".
+  test("a hotspot node renders with the changed classes and no separate legend entry", () => {
+    const hotspotHtml = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "a", role: "hotspot" as const }],
+      }),
+    );
+    const changedHtml = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "a", role: "changed" as const }],
+      }),
+    );
+    expect(hotspotHtml).toContain('data-role="hotspot"');
+    // strip the data-role attribute value so the remaining class list can be compared
+    // directly between the two renders.
+    const stripRole = (html: string) => html.replace(/data-role="[^"]*"/, "");
+    expect(stripRole(hotspotHtml)).toBe(stripRole(changedHtml));
+
+    const mixedHtml = renderToString(
+      createElement(Graph, {
+        nodes: [
+          { id: "a", label: "a", role: "hotspot" as const },
+          { id: "b", label: "b", role: "changed" as const },
+        ],
+      }),
+    );
+    // one "changed" legend entry, not one "changed" + one separate "hotspot" entry
+    // (strip data-role="..." attributes first so a node's own role text isn't counted)
+    const legendOnly = mixedHtml.replace(/data-role="[^"]*"/g, "");
+    expect(legendOnly.split(t.graph.changed).length - 1).toBe(1);
+  });
+
+  // A finding is reached via `href`, never via color; a trailing "↗" on any clickable
+  // node makes that reachable-ness visible in the figure itself — asserted directly below.
   test("a node with href gets a trailing ↗ in its label", () => {
     const html = renderToString(
       createElement(Graph, {

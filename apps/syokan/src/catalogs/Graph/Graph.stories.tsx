@@ -32,7 +32,7 @@ export const BeforeAfter: Story = {
       <Graph
         nodes={[
           { id: "fe", label: "frontend" },
-          { id: "share", label: "apps/share", role: "hotspot" },
+          { id: "share", label: "apps/share" },
         ]}
         edges={[{ from: "fe", to: "share", role: "removed" }]}
         caption="before: FE depends on apps/share directly"
@@ -59,17 +59,18 @@ export const AllRoles: Story = {
       { id: "a", label: "neutral node" },
       { id: "b", label: "added node", role: "added" },
       { id: "c", label: "removed node", role: "removed" },
-      { id: "d", label: "hotspot node", role: "hotspot" },
+      { id: "d", label: "hotspot node (deprecated)", role: "hotspot" },
       { id: "e", label: "changed node", role: "changed" },
     ],
     edges: [
       { from: "a", to: "b", role: "added" },
       { from: "a", to: "c", role: "removed" },
-      { from: "b", to: "d", role: "hotspot" },
+      { from: "b", to: "d" },
       { from: "c", to: "d" },
       { from: "d", to: "e", role: "changed" },
     ],
-    caption: "color is minimal: only hotspot is colored, the rest read via contrast/prefix",
+    caption:
+      "color means the change kind only (added/removed/changed/unchanged); the deprecated hotspot role renders identically to changed and gets no separate legend entry",
   },
 };
 
@@ -77,7 +78,7 @@ export const FanOut: Story = {
   args: {
     nodes: [
       { id: "cli", label: "cli" },
-      { id: "api", label: "POST /api/snapshots", role: "hotspot" },
+      { id: "api", label: "POST /api/snapshots", role: "changed" },
       { id: "store", label: "store" },
       { id: "render", label: "render" },
       { id: "sse", label: "SSE watch" },
@@ -113,7 +114,7 @@ export const Grouped: Story = {
   args: {
     direction: "TB",
     nodes: [
-      { id: "routes", label: "routes.ts", role: "hotspot", group: "server" },
+      { id: "routes", label: "routes.ts", role: "changed", group: "server" },
       { id: "store", label: "store.ts", group: "server" },
       { id: "share-service", label: "shareService.ts", group: "server" },
       { id: "render", label: "Render.tsx", group: "frontend" },
@@ -140,19 +141,19 @@ export const WithHrefAndSub: Story = {
       {
         id: "probe",
         label: "Probe/index.tsx",
-        role: "hotspot",
+        role: "changed",
         sub: "unchecked path in search_count",
         href: "#finding-1",
       },
     ],
-    edges: [{ from: "routes", to: "probe", role: "hotspot", label: "renders" }],
-    caption: "click the hotspot node to jump to its finding",
+    edges: [{ from: "routes", to: "probe", role: "changed", label: "renders" }],
+    caption: "href, not color, marks a finding: click the node to jump to it",
   },
 };
 
 /**
  * A realistic syokan review-panel example: the changed area is three modules, one node
- * per touched file, `sub` carrying the one-line "what changed", and the hotspot node's
+ * per touched file, `sub` carrying the one-line "what changed", and the changed node's
  * `href` jumping to a `Card` finding elsewhere in the same view (see risk-panel.md).
  */
 export const ChangedAreaOverview: Story = {
@@ -165,7 +166,7 @@ export const ChangedAreaOverview: Story = {
       {
         id: "graph",
         label: "Graph/index.tsx",
-        role: "hotspot",
+        role: "changed",
         sub: "React Flow renderer",
         href: "#finding-1",
         group: "catalogs",
