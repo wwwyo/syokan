@@ -63,7 +63,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Stack", stackPropsSchema, Stack),
   defineViewComponent("Card", cardPropsSchema, Card, {
     notes:
-      "Optional title fills the header slot; children fill the body. Wrap multiple body elements in a Stack for spacing (the body is a single padded slot with no inter-child gap of its own).",
+      "Not the default container: use it only when a unit needs a visible boundary to read as one thing (items compared side by side, a block set apart from the flow); otherwise Heading + body nodes in a Stack. Optional title fills the header slot; children fill the body. Wrap multiple body elements in a Stack for spacing (the body is a single padded slot with no inter-child gap of its own).",
   }),
   // leaf components have no children. childrenTypes: [] rejects stray children at
   // ingest time (when unspecified, children are silently dropped).
@@ -75,7 +75,11 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Time", timePropsSchema, Time, { childrenTypes: [] }),
   defineViewComponent("Diff", diffPropsSchema, Diff, { childrenTypes: [] }),
   defineViewComponent("Code", codePropsSchema, Code, { childrenTypes: [] }),
-  defineViewComponent("Badge", badgePropsSchema, Badge, { childrenTypes: [] }),
+  defineViewComponent("Badge", badgePropsSchema, Badge, {
+    childrenTypes: [],
+    notes:
+      "Variant carries meaning, not decoration: success = verified/pass, warning = medium/needs attention, destructive = high/fail, info = neutral fact worth noticing, secondary = low-emphasis label, outline = plain tag, default = no particular meaning.",
+  }),
   defineViewComponent("Mermaid", mermaidPropsSchema, Mermaid, {
     childrenTypes: [],
   }),
@@ -98,7 +102,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Stat", statPropsSchema, Stat, {
     childrenTypes: [],
     notes:
-      'Display-only labelled figure. Put several in a Stack direction="horizontal" for a dashboard row.',
+      'Display-only labelled figure. Put several in a Stack direction="horizontal" for a dashboard row. `tone` colors the value by meaning (success/warning/danger/info) — use it for count rows like High/Med/None so the reader sees severity before reading labels.',
   }),
   defineViewComponent("Checklist", checklistPropsSchema, Checklist, {
     notes:
@@ -111,7 +115,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Graph", graphPropsSchema, Graph, {
     childrenTypes: [],
     notes:
-      "Static directed graph. role→color/stroke is fixed by the renderer (added=green, removed=red+dashed, hotspot=amber+bold, neutral=muted). Put two side by side for a before/after contrast. node ids must be unique within the graph and every edge from/to must name one of them; both are rejected at ingest.",
+      "Interactive architecture diagram (React Flow + dagre, pan/zoom, auto-laid-out). role→color/stroke is fixed by the renderer (added=green, removed=red+dashed, hotspot=amber+bold, neutral=muted, changed=accent — touched with no finding). Use for an overview of a changed area: `groups` draw module/file boundaries (nodes reference one via `group`), `sub` is a one-line \"what changed\" per node, and `href:\"#<id>\"` on a node jumps to any node carrying that `id` (typically the finding's `Heading`). `direction:\"LR\"` widens instead of growing tall. node/group ids must be unique and every edge from/to or node group must name one that exists; both are rejected at ingest.",
   }),
   defineViewComponent("Probe", probePropsSchema, Probe, {
     childrenTypes: [],

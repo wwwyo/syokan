@@ -45,6 +45,35 @@ export const Dashboard: Story = {
   ),
 };
 
+export const ToneSuccess: Story = {
+  args: { label: "None (verified)", value: 9, tone: "success" },
+};
+
+export const ToneWarning: Story = {
+  args: { label: "Medium", value: 5, tone: "warning" },
+};
+
+export const ToneDanger: Story = {
+  args: { label: "High", value: 2, tone: "danger" },
+};
+
+export const ToneInfo: Story = {
+  args: { label: "Unknown", value: 1, tone: "info" },
+};
+
+export const AllTones: Story = {
+  args: { label: "", value: "" },
+  render: () => (
+    <div className="flex flex-row gap-4">
+      <Stat label="High" value={2} tone="danger" />
+      <Stat label="Medium" value={5} tone="warning" />
+      <Stat label="None (verified)" value={9} tone="success" />
+      <Stat label="Unknown" value={1} tone="info" />
+      <Stat label="No tone" value={3} />
+    </div>
+  ),
+};
+
 export const LongLabelAndValue: Story = {
   args: {
     label: "Longest running verification pipeline duration",
