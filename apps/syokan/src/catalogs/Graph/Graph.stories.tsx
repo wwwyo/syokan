@@ -69,7 +69,7 @@ export const AllRoles: Story = {
       { from: "c", to: "d" },
       { from: "d", to: "e", role: "changed" },
     ],
-    caption: "role → color/stroke mapping is fixed by syokan",
+    caption: "color is minimal: only hotspot is colored, the rest read via contrast/prefix",
   },
 };
 

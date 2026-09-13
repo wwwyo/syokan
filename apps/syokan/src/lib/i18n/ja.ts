@@ -110,6 +110,7 @@ export const ja: Messages = {
     neutral: "関連",
     group: "ディレクトリなどの境界",
     edge: "矢印は参照する側 → される側",
+    clickable: "↗ は指摘へ移動",
   },
   diff: {
     unparsable: "diff を表示できませんでした (patch を解釈できません)。",

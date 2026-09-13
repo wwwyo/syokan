@@ -294,6 +294,52 @@ describe("Graph", () => {
     expect(html).toContain(t.graph.edge);
     expect(html).not.toContain(t.graph.removed);
   });
+
+  // Color is minimal (hotspot only); role is otherwise conveyed via label prefixes,
+  // strikethrough, and a trailing "↗" on any clickable node — asserted directly below.
+  test("a node with href gets a trailing ↗ in its label", () => {
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "target file", href: "#finding-1" }],
+      }),
+    );
+    expect(html).toContain("target file ↗");
+  });
+
+  test("an added node's label is prefixed with '+ '", () => {
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "new file", role: "added" as const }],
+      }),
+    );
+    expect(html).toContain("+ new file");
+  });
+
+  test("a removed node's label is prefixed with '− ' and struck through", () => {
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "old file", role: "removed" as const }],
+      }),
+    );
+    expect(html).toContain("− old file");
+    expect(html).toContain("line-through");
+  });
+
+  test("legend includes the clickable item only when some node has href", () => {
+    const withHref = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "a", href: "#finding-1" }],
+      }),
+    );
+    expect(withHref).toContain(t.graph.clickable);
+
+    const withoutHref = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "a" }],
+      }),
+    );
+    expect(withoutHref).not.toContain(t.graph.clickable);
+  });
 });
 
 describe("layoutGraph group separation", () => {

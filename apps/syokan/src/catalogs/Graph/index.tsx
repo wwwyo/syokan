@@ -150,46 +150,49 @@ type RoleStyle = {
   node: string;
   edge: string;
   edgeDashed: boolean;
-  // SVG markers can't resolve dark: variants the way className can, so added/removed/
-  // hotspot ride app-level CSS custom properties (styles.css) with their own light/dark
-  // values instead of a raw tailwind color; neutral/changed lean on the app's existing
-  // theme-aware vars.
   marker: string;
 };
 
+// Color is minimal by design: hotspot is the only hue in the whole diagram (a figure
+// that colors everything communicates nothing — see the owner's rejection of the old
+// amber/sky/emerald/red palette). Every edge shares one muted stroke/marker; role is
+// otherwise conveyed by contrast (changed vs neutral), a +/- label prefix (added/removed,
+// applied by RoleNode, not the producer), and dashing (removed).
+const EDGE_STROKE = "stroke-muted-foreground/60";
+const EDGE_MARKER = "var(--muted-foreground)";
+
 const roleStyles: Record<GraphRole, RoleStyle> = {
   added: {
-    node: "border-emerald-600 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400 dark:text-emerald-300",
-    edge: "stroke-emerald-600 dark:stroke-emerald-400",
+    node: "border-foreground/60 bg-card text-foreground",
+    edge: EDGE_STROKE,
     edgeDashed: false,
-    marker: "var(--graph-added)",
+    marker: EDGE_MARKER,
   },
   removed: {
-    node: "border-dashed border-red-500/70 bg-transparent text-red-600/80 dark:text-red-400/80",
-    edge: "stroke-red-500/70",
+    node: "border-dashed border-border/60 bg-card text-muted-foreground",
+    edge: EDGE_STROKE,
     edgeDashed: true,
-    marker: "var(--graph-removed)",
+    marker: EDGE_MARKER,
   },
   hotspot: {
+    // the only colored role in the figure
     node: "border-2 border-amber-600 bg-amber-500/15 text-amber-700 dark:border-amber-400 dark:text-amber-300",
-    edge: "stroke-amber-600 dark:stroke-amber-400",
+    edge: EDGE_STROKE,
     edgeDashed: false,
-    marker: "var(--graph-hotspot)",
+    marker: EDGE_MARKER,
   },
   neutral: {
-    node: "border-border bg-card text-foreground",
-    edge: "stroke-muted-foreground/60",
+    node: "border-border/60 bg-card text-muted-foreground",
+    edge: EDGE_STROKE,
     edgeDashed: false,
-    marker: "var(--muted-foreground)",
+    marker: EDGE_MARKER,
   },
   changed: {
-    // touched-but-clean: a real hue (sky), distinct from added/removed/hotspot and from
-    // neutral — the accent token this used to ride collapses to near-white in dark mode
-    // and became indistinguishable from neutral.
-    node: "border-sky-500 bg-sky-500/10 text-sky-700 dark:border-sky-400 dark:text-sky-300",
-    edge: "stroke-sky-600 dark:stroke-sky-400",
+    // touched-but-clean: contrast (not hue) is what distinguishes it from neutral.
+    node: "border-foreground/60 bg-card text-foreground",
+    edge: EDGE_STROKE,
     edgeDashed: false,
-    marker: "var(--graph-changed)",
+    marker: EDGE_MARKER,
   },
 };
 
@@ -212,6 +215,16 @@ type RoleNodeData = {
 
 type GroupNodeData = { label?: string };
 
+// Role is conveyed in the label itself, not only by color, so the figure stays legible
+// with no accompanying prose: +/- prefixes added/removed, and a trailing "↗" marks any
+// node the reader can click (mirroring the cursor-pointer affordance below). The producer
+// never writes these — they're derived here so they can't drift from `role`/`href`.
+function displayLabel(label: string, role: GraphRole, href: string | undefined): string {
+  const prefixed =
+    role === "added" ? `+ ${label}` : role === "removed" ? `− ${label}` : label;
+  return href !== undefined ? `${prefixed} ↗` : prefixed;
+}
+
 /** Directed-graph node: rounded box, label + optional muted subtitle, role-colored border/fill. */
 const RoleNode = memo(function RoleNode({ id, data }: NodeProps<Node<RoleNodeData, "role">>) {
   const { hoveredId } = useContext(HoverContext);
@@ -228,9 +241,23 @@ const RoleNode = memo(function RoleNode({ id, data }: NodeProps<Node<RoleNodeDat
       )}
     >
       <Handle type="target" position={targetPos} isConnectable={false} className="!opacity-0" />
-      <span className="line-clamp-1 w-full text-sm">{data.label}</span>
+      <span
+        className={cn(
+          "line-clamp-1 w-full text-sm",
+          data.role === "removed" && "line-through",
+        )}
+      >
+        {displayLabel(data.label, data.role, data.href)}
+      </span>
       {data.sub !== undefined && (
-        <span className="line-clamp-1 w-full text-xs opacity-70">{data.sub}</span>
+        <span
+          className={cn(
+            "line-clamp-1 w-full text-xs opacity-70",
+            data.role === "removed" && "line-through",
+          )}
+        >
+          {data.sub}
+        </span>
       )}
       <Handle type="source" position={sourcePos} isConnectable={false} className="!opacity-0" />
     </div>
@@ -509,6 +536,11 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
     return roleOrder.filter((role) => present.has(role));
   }, [layout]);
 
+  const hasClickableNode = useMemo(
+    () => layout.nodes.some((n) => n.href !== undefined),
+    [layout],
+  );
+
   return (
     <figure data-slot="graph" className="flex w-full max-w-full flex-col gap-2">
       <div
@@ -574,6 +606,7 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
           </span>
         )}
         {layout.edges.length > 0 && <span>{t.graph.edge}</span>}
+        {hasClickableNode && <span>{t.graph.clickable}</span>}
       </div>
       {caption !== undefined && (
         <figcaption className="text-xs text-muted-foreground">{caption}</figcaption>

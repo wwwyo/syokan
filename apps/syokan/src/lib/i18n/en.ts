@@ -109,6 +109,7 @@ export const en = {
     neutral: "related",
     group: "boundary",
     edge: "arrow: from user to used",
+    clickable: "↗ jumps to a finding",
   },
   diff: {
     unparsable: "The diff could not be displayed (the patch could not be parsed).",
