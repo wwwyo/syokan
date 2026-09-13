@@ -72,7 +72,7 @@ syokan dashboard.json   # summons the tree; every save re-renders the view
 
 ```bash
 mise install && bun install
-bun run dev    # both apps: syokan server (Bun.serve; frontend rebundles on reload, HMR off) and the share Worker (wrangler dev)
+bun run dev    # both apps: syokan server (Bun.serve + HMR) and the share Worker (wrangler dev)
 ```
 
 Root `dev` fans out to every workspace app (`bun --filter '@syokan/*' --parallel dev`); each app owns its own `dev` script. It brings up two processes:
