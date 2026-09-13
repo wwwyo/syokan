@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { t } from "../../lib/i18n";
 import { Graph, graphPropsSchema } from ".";
-import { layoutGraph } from "./layout";
+import { initialViewport, layoutGraph } from "./layout";
 
 describe("graphPropsSchema", () => {
   test("accepts nodes with roles and edges", () => {
@@ -182,6 +182,28 @@ describe("layoutGraph", () => {
     const first = layoutGraph(input);
     const second = layoutGraph(input);
     expect(second).toEqual(first);
+  });
+});
+
+describe("initialViewport", () => {
+  // fitView clamps zoom-out and, once the graph no longer fits at that clamped zoom,
+  // still centers it. An overview should start at its beginning instead, so overflow on
+  // either axis must yield the top-left-corner viewport.
+  test("returns the top-left viewport when the graph overflows the container on x", () => {
+    expect(initialViewport(2000, 200, 800, 600, 0.85, 16)).toEqual({ x: 16, y: 16 });
+  });
+
+  test("returns the top-left viewport when the graph overflows the container on y", () => {
+    expect(initialViewport(200, 2000, 800, 600, 0.85, 16)).toEqual({ x: 16, y: 16 });
+  });
+
+  test("returns null when the graph fits within the container at the given zoom", () => {
+    expect(initialViewport(400, 300, 800, 600, 0.85, 16)).toBeNull();
+  });
+
+  test("returns null exactly at the fit boundary (no overflow)", () => {
+    // layoutWidth * zoom === containerWidth is "just fits", not overflow
+    expect(initialViewport(800, 300, 800, 600, 1, 16)).toBeNull();
   });
 });
 

@@ -103,6 +103,31 @@ function nodeDimensions(label: string, sub?: string): { width: number; height: n
 }
 
 /**
+ * Pure decision for the Graph catalog node's post-fitView viewport correction.
+ *
+ * fitView clamps zoom-out at `minZoom` (see index.tsx), and once the graph no longer fits
+ * at that clamped zoom, fitView still CENTERS it — cutting off both edges and starting the
+ * reader in the middle. An overview should start at its beginning instead: this returns the
+ * viewport that shows the graph's top-left corner (the layout is already normalized to
+ * (0,0) origin by `layoutGraph`, so `{x: padding, y: padding}` places it there at `zoom`).
+ * Returns `null` when the graph fits within the container at `zoom` on both axes, meaning
+ * fitView's centered result should be kept as-is.
+ */
+export function initialViewport(
+  layoutWidth: number,
+  layoutHeight: number,
+  containerWidth: number,
+  containerHeight: number,
+  zoom: number,
+  padding: number,
+): { x: number; y: number } | null {
+  const overflowsX = layoutWidth * zoom > containerWidth;
+  const overflowsY = layoutHeight * zoom > containerHeight;
+  if (!overflowsX && !overflowsY) return null;
+  return { x: padding, y: padding };
+}
+
+/**
  * Lay out nodes (optionally grouped into dagre compound clusters) and edges.
  * Deterministic: same input always produces the same output, since dagre's ranking/
  * ordering passes are seeded only by input order, never by iteration over a Set/Map with

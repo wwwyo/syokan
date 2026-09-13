@@ -10,6 +10,7 @@ import {
   type NodeProps,
   type NodeTypes,
   Position,
+  type ReactFlowInstance,
   ReactFlow,
   getSmoothStepPath,
 } from "@xyflow/react";
@@ -19,6 +20,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { z } from "zod";
@@ -26,7 +28,7 @@ import { jumpToNode } from "../../lib/anchor";
 import { t } from "../../lib/i18n";
 import { useColorScheme } from "../../lib/useColorScheme";
 import { cn } from "../../lib/utils";
-import { layoutGraph } from "./layout";
+import { initialViewport, layoutGraph } from "./layout";
 
 // role = semantic classification; color and stroke are fixed here so the reading of a
 // diagram never varies from generation to generation (the mermaid instability problem).
@@ -324,6 +326,7 @@ const MAX_HEIGHT_PX = 512; // 32rem at the app's 16px root
 export function Graph({ nodes, edges = [], groups = [], direction = "TB", caption }: GraphProps) {
   const scheme = useColorScheme();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // layoutGraph already drops dangling group/edge refs internally, so the component hands
   // the props straight through instead of re-filtering them here.
@@ -414,6 +417,33 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
   }, []);
   const handleNodeMouseLeave = useCallback(() => setHoveredId(null), []);
 
+  // fitView (below) clamps zoom-out at fitViewOptions.minZoom and, once the graph no
+  // longer fits at that clamped zoom, still centers it — cutting off both edges and
+  // starting the reader in the middle. Called from onInit, which xyflow v12 invokes
+  // synchronously after the initial fitView is applied (same layout-effect pass, before
+  // paint), so this correction lands with no visible jump.
+  const handleInit = useCallback(
+    (instance: ReactFlowInstance) => {
+      const container = containerRef.current;
+      if (container === null) return;
+      const { zoom } = instance.getViewport();
+      const { width: containerWidth, height: containerHeight } =
+        container.getBoundingClientRect();
+      const corrected = initialViewport(
+        layout.width,
+        layout.height,
+        containerWidth,
+        containerHeight,
+        zoom,
+        PADDING,
+      );
+      if (corrected !== null) {
+        instance.setViewport({ ...corrected, zoom });
+      }
+    },
+    [layout],
+  );
+
   const containerHeight = Math.min(layout.height + PADDING * 2, MAX_HEIGHT_PX);
 
   // Roles resolved by layoutGraph (unset -> "neutral"), not the raw props, so an
@@ -428,6 +458,7 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
   return (
     <figure data-slot="graph" className="flex w-full max-w-full flex-col gap-2">
       <div
+        ref={containerRef}
         className="w-full max-h-[32rem] overflow-hidden rounded-xl border border-border bg-card"
         style={{ height: containerHeight }}
       >
@@ -457,6 +488,7 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
             fitViewOptions={{ minZoom: 0.85, maxZoom: 1 }}
             proOptions={{ hideAttribution: true }}
             colorMode={scheme}
+            onInit={handleInit}
             onNodeClick={handleNodeClick}
             onNodeMouseEnter={handleNodeMouseEnter}
             onNodeMouseLeave={handleNodeMouseLeave}
