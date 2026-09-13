@@ -18,7 +18,7 @@ Each element of `Diff`'s `comments[]` takes this shape.
 
 ## Example 1: RSS or article list
 
-Stack Cards with a heading link, fetch time, and summary.
+One `Heading` (linked) + `Time` + `Text` per article, straight in the `Stack` — no `Card` per item (see SKILL.md "Card is not the default container").
 
 ```json
 {
@@ -29,21 +29,9 @@ Stack Cards with a heading link, fetch time, and summary.
     "props": { "direction": "vertical" },
     "children": [
       { "type": "Heading", "props": { "text": "Feed for 2026-06-28", "level": 1 } },
-      {
-        "type": "Card",
-        "props": {},
-        "children": [
-          {
-            "type": "Stack",
-            "props": {},
-            "children": [
-              { "type": "Heading", "props": { "text": "Article title", "level": 3, "href": "https://example.com/article" } },
-              { "type": "Time", "props": { "datetime": "2026-06-28T06:30:00Z", "muted": true } },
-              { "type": "Text", "props": { "body": "Put the article summary here." } }
-            ]
-          }
-        ]
-      }
+      { "type": "Heading", "props": { "text": "Article title", "level": 3, "href": "https://example.com/article" } },
+      { "type": "Time", "props": { "datetime": "2026-06-28T06:30:00Z", "muted": true } },
+      { "type": "Text", "props": { "body": "Put the article summary here." } }
     ]
   }
 }
@@ -150,7 +138,7 @@ To embed a synced subtree inside a larger static view, place the node yourself (
 
 ## Example 5: review risk panel (interactive primitives)
 
-Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"#<id>"`) → evidence folded in `Collapsible` → "no findings" claims backed by re-runnable `Probe`s → reviewer `Checklist`. Interaction state stays in the viewer's browser; post only the initial state.
+Stat row → Table cockpit whose rows jump to finding headings (`Link` with `href:"#<id>"`, the `id` on the `Heading`) → evidence folded in `Collapsible` → "no findings" claims backed by re-runnable `Probe`s → reviewer `Checklist`. Interaction state stays in the viewer's browser; post only the initial state.
 
 ```json
 {
@@ -185,35 +173,23 @@ Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"
               ]
             }
           },
+          { "type": "Heading", "props": { "text": "token could reach logs", "level": 3 }, "id": "risk-1" },
           {
-            "type": "Card",
-            "props": { "title": "token could reach logs" },
-            "id": "risk-1",
+            "type": "Collapsible",
+            "props": { "summary": "Evidence (1 hunk)" },
+            "id": "risk-1-evidence",
             "children": [
-              {
-                "type": "Stack",
-                "props": {},
-                "children": [
-                  {
-                    "type": "Collapsible",
-                    "props": { "summary": "Evidence (1 hunk)" },
-                    "id": "risk-1-evidence",
-                    "children": [
-                      { "type": "Diff", "props": { "patch": "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new" } }
-                    ]
-                  },
-                  {
-                    "type": "Probe",
-                    "id": "risk-1-probe",
-                    "props": {
-                      "label": "no auth header logged",
-                      "check": { "kind": "search_count", "path": "/abs/path/to/app", "pattern": "console.log(auth", "expected": 0, "op": "max" },
-                      "result": { "status": "pass", "detail": "0 matches", "ranAt": "2026-07-06T09:00:00Z" }
-                    }
-                  }
-                ]
-              }
+              { "type": "Diff", "props": { "patch": "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new" } }
             ]
+          },
+          {
+            "type": "Probe",
+            "id": "risk-1-probe",
+            "props": {
+              "label": "no auth header logged",
+              "check": { "kind": "search_count", "path": "/abs/path/to/app", "pattern": "console.log(auth", "expected": 0, "op": "max" },
+              "result": { "status": "pass", "detail": "0 matches", "ranAt": "2026-07-06T09:00:00Z" }
+            }
           }
         ]
       },
@@ -227,6 +203,6 @@ Stat row → Table cockpit whose rows jump to finding cards (`Link` with `href:"
 }
 ```
 
-Graph pairs (`role`: `added` / `removed` / `hotspot` / `neutral`; colors fixed by the renderer) go in a horizontal `Stack` for before/after dependency contrasts — see `syokan catalog` for props.
+Graph pairs (`role`: `added` / `removed` / `hotspot` / `neutral` / `changed`; colors fixed by the renderer) go in a horizontal `Stack` for before/after dependency contrasts — see `syokan catalog` for props. A grouped overview with `href` jumps into finding cards (`groups` for module boundaries, `hotspot` + `href:"#<id>"` where findings concentrate) is the recommended first section of a review panel — see [risk-panel.md](risk-panel.md).
 
-For the full principles behind a panel like this (no false green, severity vs. confidence, zero-context readers) and a larger section skeleton, see [references/risk-panel.md](risk-panel.md).
+This is the minimal working shape. [references/risk-panel.md](risk-panel.md) lists the other aspects worth adding (architecture overview, Unknown, vocabulary, complete lists) and how to express each.
