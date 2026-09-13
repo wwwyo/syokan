@@ -66,6 +66,28 @@ describe("graphPropsSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  // node ids and group ids share one flat id space in dagre's compound Graph and in React
+  // Flow's node list (see layout.ts), so a collision must be rejected at ingest rather than
+  // namespaced away downstream.
+  test("rejects a group id colliding with a node id", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "skill" }],
+      groups: [{ id: "skill" }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects duplicate edges with the same from/to pair", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a" }, { id: "b" }],
+      edges: [
+        { from: "a", to: "b" },
+        { from: "a", to: "b", role: "added" },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
   test("rejects href not starting with #", () => {
     const result = graphPropsSchema.safeParse({
       nodes: [{ id: "a", href: "https://example.com" }],
@@ -112,28 +134,6 @@ describe("layoutGraph", () => {
       expect(node.x + node.width).toBeLessThanOrEqual(group.x + group.width);
       expect(node.y + node.height).toBeLessThanOrEqual(group.y + group.height);
     }
-  });
-
-  // nodes[].id and groups[].id are independent id spaces in the schema (nothing forbids a
-  // node and a group sharing a string), but dagre's compound Graph keys both in one flat
-  // namespace internally; a node whose id equals its own group's id must not collapse into
-  // a self-parent cycle or corrupt the other node's position (regression: `groupKey`).
-  test("a node id equal to its own group id does not collide", () => {
-    const layout = layoutGraph({
-      nodes: [
-        { id: "skill", group: "skill" },
-        { id: "other", group: "skill" },
-      ],
-      groups: [{ id: "skill", label: "skills/syokan" }],
-    });
-    const group = layout.groups.find((g) => g.id === "skill");
-    expect(group).toBeDefined();
-    if (!group) throw new Error("unreachable");
-    expect(layout.nodes).toHaveLength(2);
-    const [a, b] = layout.nodes;
-    if (!a || !b) throw new Error("unreachable");
-    // both nodes must be distinct, non-overlapping boxes inside the group
-    expect(a.x !== b.x || a.y !== b.y).toBe(true);
   });
 
   test("LR spreads nodes mainly along x, TB mainly along y", () => {
@@ -223,21 +223,36 @@ describe("Graph", () => {
     ).not.toThrow();
   });
 
-  // regression: a node's id equal to its own group's id used to collapse both React Flow
-  // node-list entries into one, dropping the group box and corrupting sibling positions
-  test("renders both nodes when a node id equals its group id", () => {
+  // role → color/stroke is fixed by the renderer and read off `data-role`; this is the
+  // contract Storybook and any downstream styling rely on, so it gets an explicit assertion
+  // per role rather than only exercising it incidentally through other tests.
+  test("renders data-role for every role", () => {
+    const roles = ["added", "removed", "hotspot", "neutral", "changed"] as const;
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: roles.map((role) => ({ id: role, label: role, role })),
+      }),
+    );
+    for (const role of roles) {
+      expect(html).toContain(`data-role="${role}"`);
+    }
+  });
+
+  // React Flow v12 needs client-side measurement to place edges, so a plain renderToString
+  // pass renders nodes but not edge DOM; confirmed against the actual SSR output below, this
+  // asserts on nodes only rather than forcing edge assertions that would never pass under SSR.
+  test("does not render edge DOM under SSR (React Flow client-measures edges)", () => {
     const html = renderToString(
       createElement(Graph, {
         nodes: [
-          { id: "skill", label: "SKILL.md", group: "skill" },
-          { id: "other", label: "other.md", group: "skill" },
+          { id: "a", label: "a" },
+          { id: "b", label: "b" },
         ],
-        groups: [{ id: "skill", label: "skills/syokan" }],
+        edges: [{ from: "a", to: "b", role: "removed", label: "calls" }],
       }),
     );
-    expect(html).toContain("SKILL.md");
-    expect(html).toContain("other.md");
-    expect(html).toContain("skills/syokan");
+    expect(html).toContain('data-role="neutral"');
+    expect(html).not.toContain("calls");
   });
 });
 

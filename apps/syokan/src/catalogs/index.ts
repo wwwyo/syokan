@@ -111,7 +111,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Graph", graphPropsSchema, Graph, {
     childrenTypes: [],
     notes:
-      "Interactive architecture diagram (React Flow + dagre, pan/zoom, auto-laid-out). role→color/stroke is fixed by the renderer (added=green, removed=red+dashed, hotspot=amber+bold, neutral=muted, changed=accent — touched with no finding). Use for an overview of a changed area: `groups` draw module/file boundaries (nodes reference one via `group`), `sub` is a one-line \"what changed\" per node, and `href:\"#<id>\"` on a node jumps to that finding's `Card`. `direction:\"LR\"` widens instead of growing tall. node/group ids must be unique and every edge from/to or node group must name one that exists; both are rejected at ingest.",
+      "Interactive architecture diagram (React Flow + dagre, pan/zoom, auto-laid-out). role→color/stroke is fixed by the renderer (added=green, removed=red+dashed, hotspot=amber+bold, neutral=muted, changed=accent — touched with no finding). Use for an overview of a changed area: `groups` draw module/file boundaries (nodes reference one via `group`), `sub` is a one-line \"what changed\" per node, and `href:\"#<id>\"` on a node jumps to any node carrying that `id` (typically the finding's `Heading`). `direction:\"LR\"` widens instead of growing tall. node/group ids must be unique and every edge from/to or node group must name one that exists; both are rejected at ingest.",
   }),
   defineViewComponent("Probe", probePropsSchema, Probe, {
     childrenTypes: [],

@@ -159,7 +159,7 @@ export const ChangedAreaOverview: Story = {
   args: {
     direction: "LR",
     nodes: [
-      { id: "skill", label: "SKILL.md", role: "changed", sub: "pointer to risk-panel", group: "skill" },
+      { id: "skill-md", label: "SKILL.md", role: "changed", sub: "pointer to risk-panel", group: "skill" },
       { id: "risk-panel", label: "risk-panel.md", role: "changed", group: "skill" },
       { id: "routes", label: "routes.ts", role: "neutral", group: "server" },
       {
@@ -172,7 +172,7 @@ export const ChangedAreaOverview: Story = {
       },
     ],
     edges: [
-      { from: "skill", to: "risk-panel", label: "imports" },
+      { from: "skill-md", to: "risk-panel", label: "imports" },
       { from: "routes", to: "graph" },
     ],
     groups: [

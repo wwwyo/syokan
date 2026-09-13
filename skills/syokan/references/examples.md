@@ -203,6 +203,6 @@ Stat row → Table cockpit whose rows jump to finding headings (`Link` with `hre
 }
 ```
 
-Graph pairs (`role`: `added` / `removed` / `hotspot` / `neutral` / `changed`; colors fixed by the renderer) go in a horizontal `Stack` for before/after dependency contrasts — see `syokan catalog` for props. A grouped overview with `href` jumps into finding cards (`groups` for module boundaries, `hotspot` + `href:"#<id>"` where findings concentrate) is the recommended first section of a review panel — see [risk-panel.md](risk-panel.md).
+Graph pairs (`role`: `added` / `removed` / `hotspot` / `neutral` / `changed`; colors fixed by the renderer) go in a horizontal `Stack` for before/after dependency contrasts — see `syokan catalog` for props. A grouped overview with `href` jumps into findings (`groups` for module boundaries, `hotspot` + `href:"#<id>"` where findings concentrate) is the recommended first section of a review panel — see [risk-panel.md](risk-panel.md).
 
 This is the minimal working shape. [references/risk-panel.md](risk-panel.md) lists the other aspects worth adding (architecture overview, Unknown, vocabulary, complete lists) and how to express each.

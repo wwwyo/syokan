@@ -24,6 +24,12 @@
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
 
+  /* Graph catalog node role markers (arrowheads); SVG markers can't resolve tailwind's
+     dark: variant the way className can, so these ride the same light/dark token split. */
+  --graph-added: #059669;
+  --graph-removed: rgba(239, 68, 68, 0.7);
+  --graph-hotspot: #d97706;
+
   /* 表示フォントの既定 (= system)。JS 起動前 / フォント未選択時のフォールバック。
      実際の切替はプリセット表 (src/lib/fonts.ts) が --app-font-* を直接書き換える。 */
   --app-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
@@ -52,6 +58,10 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+
+  --graph-added: #34d399;
+  --graph-removed: rgba(239, 68, 68, 0.7);
+  --graph-hotspot: #fbbf24;
 }
 
 @theme inline {

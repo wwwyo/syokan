@@ -4,9 +4,9 @@
 // DFS/back-edge bookkeeping needed here, unlike the predecessor implementation).
 import dagre from "@dagrejs/dagre";
 
-export type LayoutRole = string;
+type LayoutRole = string;
 
-export type LayoutNodeInput = {
+type LayoutNodeInput = {
   id: string;
   label?: string;
   sub?: string;
@@ -15,28 +15,28 @@ export type LayoutNodeInput = {
   href?: string;
 };
 
-export type LayoutEdgeInput = {
+type LayoutEdgeInput = {
   from: string;
   to: string;
   role?: LayoutRole;
   label?: string;
 };
 
-export type LayoutGroupInput = { id: string; label?: string };
+type LayoutGroupInput = { id: string; label?: string };
 
 /**
  * Structural shape `layoutGraph` needs. `GraphProps` (the zod-inferred type in
  * `./index.tsx`) satisfies this without importing it — importing it here would create
  * the schema-eager-registry TDZ cycle documented in `.agents/skills/coding/references/pitfalls.md`.
  */
-export type LayoutProps = {
+type LayoutProps = {
   nodes: LayoutNodeInput[];
   edges?: LayoutEdgeInput[];
   groups?: LayoutGroupInput[];
   direction?: "TB" | "LR";
 };
 
-export type LaidOutNode = {
+type LaidOutNode = {
   id: string;
   label: string;
   sub?: string;
@@ -49,7 +49,7 @@ export type LaidOutNode = {
   height: number;
 };
 
-export type LaidOutGroup = {
+type LaidOutGroup = {
   id: string;
   label?: string;
   x: number;
@@ -58,14 +58,14 @@ export type LaidOutGroup = {
   height: number;
 };
 
-export type LaidOutEdge = {
+type LaidOutEdge = {
   from: string;
   to: string;
   role: LayoutRole;
   label?: string;
 };
 
-export type GraphLayout = {
+type GraphLayout = {
   nodes: LaidOutNode[];
   edges: LaidOutEdge[];
   groups: LaidOutGroup[];
@@ -79,19 +79,20 @@ const CHAR_WIDTH = 6.5;
 const NODE_PADDING_X = 16;
 const MIN_NODE_WIDTH = 96;
 
-// The group padding below is added after layout, so dagre's separations must exceed the
-// pads they can absorb (cross axis: TOP + BOTTOM in LR, 2 * X in TB) or two groups sharing
-// a rank overlap. Cluster borders are dummy nodes to dagre, spaced by EDGE_SEP (default 20)
-// rather than NODE_SEP, so it is raised to the same value.
-const NODE_SEP = 48;
-const EDGE_SEP = 48;
-const RANK_SEP = 64;
+// Group padding (below) is added AFTER dagre's layout pass, so dagre itself must already
+// leave room for it: separations are derived from the pads rather than hand-synced
+// constants, so the two can never drift apart. Cluster borders are dummy nodes to dagre,
+// spaced by edgesep (default 20), so EDGE_SEP is raised to match NODE_SEP too.
 const GRAPH_MARGIN = 16;
 // dagre sizes a cluster tightly around its children; pad further so a group's label
 // (rendered top-left, outside the child boxes) and border never sit flush on a node.
 const GROUP_PAD_X = 16;
 const GROUP_PAD_TOP = 28;
 const GROUP_PAD_BOTTOM = 16;
+const BASE_SEP = 32;
+const NODE_SEP = Math.max(BASE_SEP, 2 * GROUP_PAD_X, GROUP_PAD_TOP + GROUP_PAD_BOTTOM);
+const EDGE_SEP = NODE_SEP;
+const RANK_SEP = Math.max(64, 2 * GROUP_PAD_X, GROUP_PAD_TOP + GROUP_PAD_BOTTOM);
 
 function nodeDimensions(label: string, sub?: string): { width: number; height: number } {
   const longest = Math.max(label.length, sub?.length ?? 0);
@@ -103,25 +104,11 @@ function nodeDimensions(label: string, sub?: string): { width: number; height: n
  * Lay out nodes (optionally grouped into dagre compound clusters) and edges.
  * Deterministic: same input always produces the same output, since dagre's ranking/
  * ordering passes are seeded only by input order, never by iteration over a Set/Map with
- * non-deterministic key order — inputs here are arrays, walked in order.
+ * non-deterministic key order — inputs here are arrays, walked in order. A node id equal
+ * to a group id is rejected by the schema (`index.tsx`), so group ids can key dagre's
+ * compound Graph (which shares one flat id space between clusters and plain nodes)
+ * directly, with no namespacing.
  */
-// dagre's compound Graph keys clusters and plain nodes in the same namespace (setNode /
-// setParent take one flat string id space), so a node and a group sharing an id — nodes[]
-// and groups[] are independent id spaces in the public schema, nothing forbids overlap —
-// would collide into the same graph node and dagre reports a false self-parent cycle. A
-// control-character prefix, which no realistic posted id contains, keeps the two spaces apart.
-const GROUP_KEY_PREFIX = "\u0000group:";
-/**
- * Exported so `index.tsx` can namespace React Flow node ids the same way: nodes[].id and
- * groups[].id are independent id spaces in the public schema (nothing forbids a node and a
- * group sharing a string), but both dagre's compound Graph and React Flow's node list key
- * everything by one flat `id` -- without this, a colliding pair silently overwrites one
- * entry with the other.
- */
-export function groupKey(id: string): string {
-  return `${GROUP_KEY_PREFIX}${id}`;
-}
-
 export function layoutGraph(props: LayoutProps): GraphLayout {
   const { nodes, edges = [], groups = [], direction = "TB" } = props;
 
@@ -138,15 +125,25 @@ export function layoutGraph(props: LayoutProps): GraphLayout {
 
   const groupIds = new Set(groups.map((group) => group.id));
   for (const group of groups) {
-    g.setNode(groupKey(group.id), {});
+    g.setNode(group.id, {});
   }
 
   const nodeIds = new Set(nodes.map((node) => node.id));
+  // resolved once so both the dagre setup below and the laid-out-node mapping agree on
+  // which nodes have a valid group, instead of checking groupIds.has(...) in two places
+  const nodeGroup = new Map<string, string>();
+  for (const node of nodes) {
+    if (node.group !== undefined && groupIds.has(node.group)) {
+      nodeGroup.set(node.id, node.group);
+    }
+  }
+
   for (const node of nodes) {
     const { width, height } = nodeDimensions(node.label ?? node.id, node.sub);
     g.setNode(node.id, { width, height });
-    if (node.group !== undefined && groupIds.has(node.group)) {
-      g.setParent(node.id, groupKey(node.group));
+    const group = nodeGroup.get(node.id);
+    if (group !== undefined) {
+      g.setParent(node.id, group);
     }
   }
 
@@ -169,7 +166,7 @@ export function layoutGraph(props: LayoutProps): GraphLayout {
       sub: node.sub,
       role: node.role ?? "neutral",
       href: node.href,
-      group: node.group !== undefined && groupIds.has(node.group) ? node.group : undefined,
+      group: nodeGroup.get(node.id),
       x: (dn.x ?? 0) - width / 2,
       y: (dn.y ?? 0) - height / 2,
       width,
@@ -178,7 +175,7 @@ export function layoutGraph(props: LayoutProps): GraphLayout {
   });
 
   const laidOutGroups: LaidOutGroup[] = groups.map((group) => {
-    const dg = g.node(groupKey(group.id));
+    const dg = g.node(group.id);
     const width = (dg.width ?? 0) + GROUP_PAD_X * 2;
     const height = (dg.height ?? 0) + GROUP_PAD_TOP + GROUP_PAD_BOTTOM;
     return {
