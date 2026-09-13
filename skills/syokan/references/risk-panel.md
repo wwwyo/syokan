@@ -20,7 +20,8 @@ A review panel is not a second document. Its first half is the PR description's 
 
 | PR section | Panel expression | What it buys over markdown |
 | --- | --- | --- |
-| Title | `Heading` level 1 = `<subject>: <what changed>`, `href` to the PR; a `Badge` row for target, CI / deploy state, size | verdict readable from the title alone; state as color |
+| Title | `Heading` level 1 = `<subject>: <what changed>`, `href` to the PR; a `Badge` row whose first chip is the verdict, then target, CI / deploy state, size; then the Overview list | verdict and state as color, the whole panel in five lines before any section |
+| Overview (TL;DR) | right under the title row: a `Markdown` list of three to five lines, one per section below, each that section's conclusion; the reader who stops here has the whole panel at one zoom level below the title | the middle level of the self-similar structure; nothing here that a section below does not expand |
 | Background | "Before this change": a `Table` item / before / after for the touched code, a `Markdown` list for the pre-change state of documents, a `Table` term / meaning for every term used later, at the depth this reader lacks | terms defined before use; no forward references; never prose with slash-separated lists |
 | Issue | the problem the change exists to solve, the constraint that shaped it, the alternative that was rejected; two or three sentences, no implementation, no verdict | why before what |
 | What | the structure diagram as `Graph` (modules / files, `groups` for boundaries, `sub` for the one-line change, `hotspot` + `href` where findings are), plus the public-contract change as `Code` or `Diff` cut to the definition | a diagram the reader can pan, hover, and click into findings |
