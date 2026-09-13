@@ -25,11 +25,11 @@ A review panel is not a second document. Its first half is the PR description's 
 | Issue | the concrete obstacles this PR removes, deepening Background: what exactly the old code could not do, why the old document drifted, the alternative that was rejected and why | no implementation detail, no verdict |
 | What | a `Table` item / before / after for the touched code, the structure diagram as `Graph` (modules / files, `groups` for boundaries, `sub` for the one-line change, `hotspot` + `href` where findings are), and the public-contract change as `Diff` cut to the definition | a diagram the reader can pan, hover, and click into findings |
 | Screenshots / Videos | `Code` / `Diff` for textual before-after; images are not a catalog node, so `Link` to them | — |
-| Testing | `Probe` per verified claim with the measured `result`; `Text` naming the method where no check kind fits | claims the reader can re-run instead of trust |
+| Testing | how the change was verified, as the PR description means it: a `Table` what / how / result (unit tests, typecheck, builds, a real-device check); a `Probe` only where the claim is about the code itself and can be re-measured | never the review's own "verified none" claims — those are findings and belong to the review layer |
 | Summary | the reading guide: numbered `Markdown` list of change chunks in the order to read them, main logic first, then the tests that state intended behavior, with `Link`s | tells the reader where to start |
 | (review layer) Risk signals | `Table` Signal / Present? / Evidence; "not present" rows stay visible | absence as a checked claim |
 | (review layer) Verdict and counts | `Heading` "Verdict", `Badge` by severity, `Text` saying what to decide; then a lead `Text` and toned `Stat`s | severity as color, after the reader can judge it |
-| (review layer) Findings | cockpit `Table` → each finding (`Heading` with `id`: what and where → why → `Link` to the place → evidence → decide) → Unknowns → complete lists → reader `Checklist` | jump targets, folds, progress that survives reload |
+| (review layer) Findings | cockpit `Table` → each finding (`Heading` with `id`: what and where → why → `Link` to the place → evidence → decide) → a "verified none" section holding the `Probe`s the cockpit's clean rows link to → Unknowns → complete lists → reader `Checklist` | jump targets, folds, re-runnable claims, progress that survives reload |
 
 Drop a row when it has nothing to say; do not move a review-layer row above the description. Sources: Google's CL-description and reviewer-navigation guides, ADR structure (context → decision → consequences), CodeTour, review-ordering studies, risk-based review checklists.
 
