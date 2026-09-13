@@ -16,13 +16,13 @@ Guidance for composing any panel whose verdict a reader trusts without re-checki
 
 ## Reading order: the PR description, rendered rich, then the review layer
 
-A review panel is not a second document. Its first half is the PR description with the same sections in the same order, expressed with nodes instead of markdown; its second half is the review layer that a PR description does not carry. If a PR description exists, build the first half from it — same facts, same order — and do not restate them differently. Understanding comes before judgment: the review layer is placed after the description, never before it, because a verdict shown first anchors everything read afterwards into confirming it.
+A review panel is not a second document. Its first half is the PR description's sections expressed with nodes instead of markdown, with one reordering: Background comes before What, so the reader holds the pre-change state and the terms before the diagram uses them; its second half is the review layer that a PR description does not carry. If a PR description exists, build the first half from it — same facts, same order — and do not restate them differently. Understanding comes before judgment: the review layer is placed after the description, never before it, because a verdict shown first anchors everything read afterwards into confirming it.
 
 | PR section | Panel expression | What it buys over markdown |
 | --- | --- | --- |
 | Title | `Heading` level 1 = `<subject> — <what changed> · <verdict>`, `href` to the PR; a `Badge` row for target, CI / deploy state, size | verdict readable from the title alone; state as color |
-| What | the structure diagram as `Graph` (modules / files, `groups` for boundaries, `sub` for the one-line change, `hotspot` + `href` where findings are), plus the public-contract change as `Code` or `Diff` cut to the definition | a diagram the reader can pan, hover, and click into findings |
 | Background | "Before this change": the pre-change state and one line per term used later, at the depth this reader lacks; then "Why": problem, constraint, rejected alternative | terms defined before use; no forward references |
+| What | the structure diagram as `Graph` (modules / files, `groups` for boundaries, `sub` for the one-line change, `hotspot` + `href` where findings are), plus the public-contract change as `Code` or `Diff` cut to the definition | a diagram the reader can pan, hover, and click into findings |
 | Screenshots / Videos | `Code` / `Diff` for textual before-after; images are not a catalog node, so `Link` to them | — |
 | Testing | `Probe` per verified claim with the measured `result`; `Text` naming the method where no check kind fits | claims the reader can re-run instead of trust |
 | Summary | the reading guide: numbered `Markdown` list of change chunks in the order to read them, main logic first, then the tests that state intended behavior, with `Link`s | tells the reader where to start |
