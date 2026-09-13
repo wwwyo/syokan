@@ -62,6 +62,7 @@ Drop a row when it has nothing to say; do not move a review-layer row above the 
 - Prefer `Graph` over `Mermaid` for a plain node/edge sketch: `Mermaid` can fail to parse, `Graph` cannot. `Graph` `role` is meaning only — color/stroke are renderer-fixed. It pans and zooms, so 15+ nodes stay legible instead of shrinking to fit.
 - There is no `TagFilter` node and no node-level `tags` field. Do not carry them over from older templates.
 - A horizontal `Stack` of chips or `Stat`s is never bare: a `Heading` or lead `Text` above it says what the row is. A row of numbers or badges with no referent is the most common "what is this" complaint.
+- The panel's own vocabulary stays out of the reader's text. Node names (`Probe`, `Stat`, `Badge`), role names (`hotspot`), template section labels (What / Background / Summary), and severity codes (High / Med / None / Unknown) are for the producer; the reader sees the claim in their own language ("verified clean, re-checkable here", "could not confirm"). A file or type that the change itself touches is the subject and may be named.
 - Color is meaning: `Badge.variant` and `Stat.tone` carry the verdict; do not reach for muted `Text` where a colored chip says it faster, and do not color decoratively.
 
 ## Before posting
