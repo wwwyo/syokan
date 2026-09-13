@@ -313,7 +313,7 @@ const edgeTypes = { role: RoleEdge };
 const PADDING = 16;
 // a fixed rem cap, not dvh (see Mermaid's pitfall note): the viewport can report 0 height
 // in headless/measurement embeds, which would collapse the diagram to nothing
-const MAX_HEIGHT_PX = 512; // 32rem at the app's 16px root
+const MAX_HEIGHT_PX = 640; // 40rem at the app's 16px root; tall enough for a TB overview of ~4 ranks with subtitles
 
 // Same bounds the Controls fit button still uses via fitViewOptions.
 const MIN_ZOOM = 0.85;
@@ -513,7 +513,7 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
     <figure data-slot="graph" className="flex w-full max-w-full flex-col gap-2">
       <div
         ref={containerRef}
-        className="w-full max-h-[32rem] overflow-hidden rounded-xl border border-border bg-card"
+        className="w-full max-h-[40rem] overflow-hidden rounded-xl border border-border bg-card"
         style={{ height: containerHeight }}
       >
         {/* No mounted-gate needed: React Flow v12 renders under renderToString as long as
