@@ -13,11 +13,6 @@ import {
   ReactFlow,
   getSmoothStepPath,
 } from "@xyflow/react";
-// React Flow's base stylesheet (pane transforms, handle hit-boxes). Imported here rather
-// than via styles.css so the CSS travels with the component: Bun's bundler (dev server,
-// compiled binary, apps/share Bun.build) and Storybook's Vite all collect CSS reached
-// through JS imports.
-import "@xyflow/react/dist/style.css";
 import {
   createContext,
   memo,

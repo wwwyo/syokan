@@ -1,5 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* React Flow base styles for the Graph catalog node (pane transforms, handle hit-boxes).
+   Imported here rather than from Graph/index.tsx: TypeScript 7 rejects a side-effect
+   import of a .css module it cannot resolve, and an ambient "*.css" declaration does not
+   satisfy that check. */
+@import "@xyflow/react/dist/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
