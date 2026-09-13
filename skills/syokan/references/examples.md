@@ -152,8 +152,8 @@ Stat row → Table cockpit whose rows jump to finding headings (`Link` with `hre
         "type": "Stack",
         "props": { "direction": "horizontal" },
         "children": [
-          { "type": "Stat", "props": { "label": "High", "value": 1 } },
-          { "type": "Stat", "props": { "label": "None (verified)", "value": 2 } }
+          { "type": "Stat", "props": { "label": "High", "value": 1, "tone": "danger" } },
+          { "type": "Stat", "props": { "label": "None (verified)", "value": 2, "tone": "success" } }
         ]
       },
       {

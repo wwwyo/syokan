@@ -15,6 +15,9 @@ export const statPropsSchema = z
       })
       .strict()
       .optional(),
+    // colors the value by meaning (severity/verdict), independent of delta's up/down framing.
+    // Shares the emerald/amber/red/sky palette with Badge and Graph so the app reads as one system.
+    tone: z.enum(["success", "warning", "danger", "info"]).optional(),
   })
   .strict();
 
@@ -28,21 +31,48 @@ const deltaStyles = {
 
 const deltaArrows = { up: "↑", down: "↓", flat: "→" } as const;
 
+const toneStyles = {
+  success: {
+    value: "text-emerald-700 dark:text-emerald-300",
+    border: "border-l-emerald-600 dark:border-l-emerald-400",
+  },
+  warning: {
+    value: "text-amber-700 dark:text-amber-300",
+    border: "border-l-amber-600 dark:border-l-amber-400",
+  },
+  danger: {
+    value: "text-red-700 dark:text-red-400",
+    border: "border-l-red-600 dark:border-l-red-400",
+  },
+  info: {
+    value: "text-sky-700 dark:text-sky-300",
+    border: "border-l-sky-600 dark:border-l-sky-400",
+  },
+} as const;
+
 /**
  * A labelled figure that stands out from body text — the at-a-glance summary at the
  * top of dashboard-like views (unread count, pass rate, delta since yesterday).
  * Line several up horizontally with Stack direction="horizontal".
  */
-export function Stat({ label, value, delta }: StatProps) {
+export function Stat({ label, value, delta, tone }: StatProps) {
   const direction = delta?.direction ?? "flat";
   return (
     <div
       data-slot="stat"
-      className="min-w-32 rounded-lg border bg-card px-4 py-3 text-card-foreground"
+      className={cn(
+        "min-w-32 rounded-lg border bg-card px-4 py-3 text-card-foreground",
+        tone !== undefined && cn("border-l-4", toneStyles[tone].border),
+      )}
     >
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tabular-nums tracking-tight">
+        <span
+          className={cn(
+            "text-2xl font-semibold tabular-nums tracking-tight",
+            tone !== undefined && toneStyles[tone].value,
+          )}
+        >
           {value}
         </span>
         {delta && (

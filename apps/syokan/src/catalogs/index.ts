@@ -75,7 +75,11 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Time", timePropsSchema, Time, { childrenTypes: [] }),
   defineViewComponent("Diff", diffPropsSchema, Diff, { childrenTypes: [] }),
   defineViewComponent("Code", codePropsSchema, Code, { childrenTypes: [] }),
-  defineViewComponent("Badge", badgePropsSchema, Badge, { childrenTypes: [] }),
+  defineViewComponent("Badge", badgePropsSchema, Badge, {
+    childrenTypes: [],
+    notes:
+      "Variant carries meaning, not decoration: success = verified/pass, warning = medium/needs attention, destructive = high/fail, info = neutral fact worth noticing, secondary = low-emphasis label, outline = plain tag, default = no particular meaning.",
+  }),
   defineViewComponent("Mermaid", mermaidPropsSchema, Mermaid, {
     childrenTypes: [],
   }),
@@ -98,7 +102,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Stat", statPropsSchema, Stat, {
     childrenTypes: [],
     notes:
-      'Display-only labelled figure. Put several in a Stack direction="horizontal" for a dashboard row.',
+      'Display-only labelled figure. Put several in a Stack direction="horizontal" for a dashboard row. `tone` colors the value by meaning (success/warning/danger/info) — use it for count rows like High/Med/None so the reader sees severity before reading labels.',
   }),
   defineViewComponent("Checklist", checklistPropsSchema, Checklist, {
     notes:
