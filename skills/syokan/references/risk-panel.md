@@ -21,7 +21,7 @@ A review panel is not a second document. Its first half is the PR description's 
 | PR section | Panel expression | What it buys over markdown |
 | --- | --- | --- |
 | Title | `Heading` level 1 = `<subject> — <what changed> · <verdict>`, `href` to the PR; a `Badge` row for target, CI / deploy state, size | verdict readable from the title alone; state as color |
-| Background | "Before this change": the pre-change state of the touched code and one line per term used later, at the depth this reader lacks | terms defined before use; no forward references |
+| Background | "Before this change": a `Table` item / before / after for the touched code, a `Markdown` list for the pre-change state of documents, a `Table` term / meaning for every term used later, at the depth this reader lacks | terms defined before use; no forward references; never prose with slash-separated lists |
 | Issue | the problem the change exists to solve, the constraint that shaped it, the alternative that was rejected; two or three sentences, no implementation, no verdict | why before what |
 | What | the structure diagram as `Graph` (modules / files, `groups` for boundaries, `sub` for the one-line change, `hotspot` + `href` where findings are), plus the public-contract change as `Code` or `Diff` cut to the definition | a diagram the reader can pan, hover, and click into findings |
 | Screenshots / Videos | `Code` / `Diff` for textual before-after; images are not a catalog node, so `Link` to them | — |
@@ -64,6 +64,7 @@ Drop a row when it has nothing to say; do not move a review-layer row above the 
 - There is no `TagFilter` node and no node-level `tags` field. Do not carry them over from older templates.
 - A horizontal `Stack` of chips or `Stat`s is never bare: a `Heading` or lead `Text` above it says what the row is. A row of numbers or badges with no referent is the most common "what is this" complaint.
 - The panel's own vocabulary stays out of the reader's text. Node names (`Probe`, `Stat`, `Badge`), role names (`hotspot`), and severity codes (High / Med / None / Unknown) are for the producer; the reader sees the claim in their own language ("verified clean, re-checkable here", "could not confirm"). A file or type that the change itself touches is the subject and may be named.
+- Parallel facts are never a sentence with slashes or commas: three or more items of the same kind go in a `Markdown` list, and items with two or more attributes (before / after, term / meaning, file / role) go in a `Table`. Prose is for one line of reasoning at a time.
 - Color is meaning: `Badge.variant` and `Stat.tone` carry the verdict; do not reach for muted `Text` where a colored chip says it faster, and do not color decoratively.
 
 ## Before posting
