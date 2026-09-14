@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
+import { t } from "../../lib/i18n";
 import { Graph, graphPropsSchema } from ".";
-import { layoutGraph, NODE_HEIGHT } from "./layout";
+import { initialViewport, layoutGraph } from "./layout";
 
 describe("graphPropsSchema", () => {
   test("accepts nodes with roles and edges", () => {
@@ -13,6 +14,13 @@ describe("graphPropsSchema", () => {
       ],
       edges: [{ from: "a", to: "b", role: "removed" }],
       caption: "before",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts the changed role", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a", role: "changed" }],
     });
     expect(result.success).toBe(true);
   });
@@ -34,71 +42,413 @@ describe("graphPropsSchema", () => {
         .success,
     ).toBe(false);
   });
+
+  test("accepts a node referencing a declared group", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a", group: "g1" }],
+      groups: [{ id: "g1", label: "module a" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("rejects a node referencing an unknown group id", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a", group: "ghost" }],
+      groups: [{ id: "g1" }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects duplicate group ids", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a" }],
+      groups: [{ id: "g1" }, { id: "g1" }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  // node ids and group ids share one flat id space in dagre's compound Graph and in React
+  // Flow's node list (see layout.ts), so a collision must be rejected at ingest rather than
+  // namespaced away downstream.
+  test("rejects a group id colliding with a node id", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "skill" }],
+      groups: [{ id: "skill" }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects duplicate edges with the same from/to pair", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a" }, { id: "b" }],
+      edges: [
+        { from: "a", to: "b" },
+        { from: "a", to: "b", role: "added" },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects href not starting with #", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a", href: "https://example.com" }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts an in-view href", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a", href: "#finding-1" }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test("accepts edge labels", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a" }, { id: "b" }],
+      edges: [{ from: "a", to: "b", label: "imports" }],
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("layoutGraph", () => {
-  test("layers follow the longest path left to right", () => {
-    const layout = layoutGraph(
-      [{ id: "a" }, { id: "b" }, { id: "c" }],
-      [
-        { from: "a", to: "b" },
-        { from: "b", to: "c" },
-        { from: "a", to: "c" },
+  test("nodes inside a group get coordinates within the group's box", () => {
+    const layout = layoutGraph({
+      nodes: [
+        { id: "a", group: "g1" },
+        { id: "b", group: "g1" },
+        { id: "c" },
       ],
-    );
-    const byId = new Map(layout.nodes.map((n) => [n.id, n]));
-    const a = byId.get("a");
-    const b = byId.get("b");
-    const c = byId.get("c");
-    expect(a && b && a.x < b.x).toBe(true);
-    expect(b && c && b.x < c.x).toBe(true);
+      edges: [{ from: "a", to: "b" }],
+      groups: [{ id: "g1", label: "module" }],
+    });
+    const group = layout.groups.find((g) => g.id === "g1");
+    expect(group).toBeDefined();
+    if (!group) throw new Error("unreachable");
+    for (const id of ["a", "b"]) {
+      const node = layout.nodes.find((n) => n.id === id);
+      expect(node).toBeDefined();
+      if (!node) throw new Error("unreachable");
+      expect(node.x).toBeGreaterThanOrEqual(group.x);
+      expect(node.y).toBeGreaterThanOrEqual(group.y);
+      expect(node.x + node.width).toBeLessThanOrEqual(group.x + group.width);
+      expect(node.y + node.height).toBeLessThanOrEqual(group.y + group.height);
+    }
   });
 
-  test("cycles do not hang or stack nodes on one layer", () => {
-    const layout = layoutGraph(
-      [{ id: "a" }, { id: "b" }],
-      [
-        { from: "a", to: "b" },
-        { from: "b", to: "a" },
-      ],
-    );
-    const xs = new Set(layout.nodes.map((n) => n.x));
-    expect(xs.size).toBe(2);
-    expect(layout.edges.length).toBe(2);
+  test("LR spreads nodes mainly along x, TB mainly along y", () => {
+    const nodes = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    const edges = [
+      { from: "a", to: "b" },
+      { from: "b", to: "c" },
+    ];
+    const lr = layoutGraph({ nodes, edges, direction: "LR" });
+    const tb = layoutGraph({ nodes, edges, direction: "TB" });
+    const spread = (values: number[]) => Math.max(...values) - Math.min(...values);
+    const lrXSpread = spread(lr.nodes.map((n) => n.x));
+    const lrYSpread = spread(lr.nodes.map((n) => n.y));
+    const tbXSpread = spread(tb.nodes.map((n) => n.x));
+    const tbYSpread = spread(tb.nodes.map((n) => n.y));
+    expect(lrXSpread).toBeGreaterThan(lrYSpread);
+    expect(tbYSpread).toBeGreaterThan(tbXSpread);
   });
 
-  test("single node layout has sane dimensions", () => {
-    const layout = layoutGraph([{ id: "only" }], []);
-    expect(layout.height).toBe(NODE_HEIGHT);
-    expect(layout.width).toBeGreaterThan(0);
+  test("cycles do not throw", () => {
+    expect(() =>
+      layoutGraph({
+        nodes: [{ id: "a" }, { id: "b" }],
+        edges: [
+          { from: "a", to: "b" },
+          { from: "b", to: "a" },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  test("is deterministic for the same input", () => {
+    const input = {
+      nodes: [
+        { id: "a", label: "alpha", group: "g1" },
+        { id: "b", label: "beta", sub: "changed", group: "g1" },
+        { id: "c", label: "gamma" },
+      ],
+      edges: [
+        { from: "a", to: "b", role: "added" as const },
+        { from: "b", to: "c", label: "imports" },
+      ],
+      groups: [{ id: "g1", label: "module a" }],
+    };
+    const first = layoutGraph(input);
+    const second = layoutGraph(input);
+    expect(second).toEqual(first);
+  });
+});
+
+describe("initialViewport", () => {
+  // fitView clamps zoom-out and, once the graph no longer fits at that clamped zoom,
+  // still centers it. An overview should start at its beginning instead, so overflow on
+  // either axis must yield the top-left-corner viewport.
+  test("returns the top-left viewport when the graph overflows the container on x", () => {
+    expect(initialViewport(2000, 200, 800, 600, 0.85, 16)).toEqual({ x: 16, y: 16 });
+  });
+
+  test("returns the top-left viewport when the graph overflows the container on y", () => {
+    expect(initialViewport(200, 2000, 800, 600, 0.85, 16)).toEqual({ x: 16, y: 16 });
+  });
+
+  test("returns null when the graph fits within the container at the given zoom", () => {
+    expect(initialViewport(400, 300, 800, 600, 0.85, 16)).toBeNull();
+  });
+
+  test("returns null exactly at the fit boundary (no overflow)", () => {
+    // layoutWidth * zoom === containerWidth is "just fits", not overflow
+    expect(initialViewport(800, 300, 800, 600, 1, 16)).toBeNull();
   });
 });
 
 describe("Graph", () => {
-  test("renders labels and role-styled boxes", () => {
+  test("renders a full example (groups + sub + href + labels) and contains the caption", () => {
     const html = renderToString(
       createElement(Graph, {
         nodes: [
-          { id: "a", label: "frontend" },
-          { id: "b", label: "proxy", role: "added" as const },
+          { id: "skill", label: "SKILL.md", role: "changed" as const, sub: "risk-panel pointer", group: "skills" },
+          { id: "panel", label: "risk-panel.md", role: "changed" as const, group: "skills" },
+          { id: "routes", label: "routes.ts", role: "neutral" as const, group: "server" },
+          {
+            id: "graph",
+            label: "Graph/index.tsx",
+            role: "changed" as const,
+            sub: "React Flow renderer",
+            href: "#finding-1",
+            group: "catalogs",
+          },
         ],
-        edges: [{ from: "a", to: "b", role: "added" as const }],
-        caption: "after",
+        edges: [
+          { from: "skill", to: "panel", label: "imports" },
+          { from: "routes", to: "graph", role: "changed" as const },
+        ],
+        groups: [
+          { id: "skills", label: "skills/syokan" },
+          { id: "server", label: "apps/syokan/server" },
+          { id: "catalogs", label: "apps/syokan/src/catalogs" },
+        ],
+        direction: "LR",
+        caption: "changes concentrate in the Graph renderer",
       }),
     );
-    expect(html).toContain("frontend");
-    expect(html).toContain("proxy");
-    expect(html).toContain('data-role="added"');
-    expect(html).toContain("after");
-    expect(html).toContain("stroke-emerald-600");
+    expect(html).toContain("changes concentrate in the Graph renderer");
   });
 
-  test("removed role renders dashed", () => {
+  test("renders a minimal single-node graph without throwing", () => {
+    expect(() =>
+      renderToString(createElement(Graph, { nodes: [{ id: "only", label: "lonely node" }] })),
+    ).not.toThrow();
+  });
+
+  // role → color/stroke is fixed by the renderer and read off `data-role`; this is the
+  // contract Storybook and any downstream styling rely on, so it gets an explicit assertion
+  // per role rather than only exercising it incidentally through other tests.
+  test("renders data-role for every role", () => {
+    const roles = ["added", "removed", "hotspot", "neutral", "changed"] as const;
     const html = renderToString(
       createElement(Graph, {
-        nodes: [{ id: "x", label: "gone", role: "removed" as const }],
+        nodes: roles.map((role) => ({ id: role, label: role, role })),
       }),
     );
-    expect(html).toContain("stroke-dasharray");
+    for (const role of roles) {
+      expect(html).toContain(`data-role="${role}"`);
+    }
+  });
+
+  // React Flow v12 needs client-side measurement to place edges, so a plain renderToString
+  // pass renders nodes but not edge DOM; confirmed against the actual SSR output below, this
+  // asserts on nodes only rather than forcing edge assertions that would never pass under SSR.
+  test("does not render edge DOM under SSR (React Flow client-measures edges)", () => {
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: [
+          { id: "a", label: "a" },
+          { id: "b", label: "b" },
+        ],
+        edges: [{ from: "a", to: "b", role: "removed", label: "calls" }],
+      }),
+    );
+    expect(html).toContain('data-role="neutral"');
+    expect(html).not.toContain("calls");
+  });
+
+  // Renderer-owned legend: producers should never need to explain colors themselves.
+  test("legend lists only the roles actually present, plus the edge label when edges exist", () => {
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: [
+          { id: "a", label: "a", role: "added" as const },
+          { id: "b", label: "b", role: "changed" as const },
+        ],
+        edges: [{ from: "a", to: "b" }],
+      }),
+    );
+    expect(html).toContain(t.graph.added);
+    expect(html).toContain(t.graph.changed);
+    expect(html).toContain(t.graph.edge);
+    expect(html).not.toContain(t.graph.removed);
+  });
+
+  // "hotspot" is deprecated: color means the change kind only, and "has findings" is not
+  // a change kind. A hotspot node must render exactly like "changed" (same border/bg/text
+  // classes) and must not add a separate legend entry alongside "changed".
+  test("a hotspot node renders with the changed classes and no separate legend entry", () => {
+    const hotspotHtml = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "a", role: "hotspot" as const }],
+      }),
+    );
+    const changedHtml = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "a", role: "changed" as const }],
+      }),
+    );
+    expect(hotspotHtml).toContain('data-role="hotspot"');
+    // strip the data-role attribute value so the remaining class list can be compared
+    // directly between the two renders.
+    const stripRole = (html: string) => html.replace(/data-role="[^"]*"/, "");
+    expect(stripRole(hotspotHtml)).toBe(stripRole(changedHtml));
+
+    const mixedHtml = renderToString(
+      createElement(Graph, {
+        nodes: [
+          { id: "a", label: "a", role: "hotspot" as const },
+          { id: "b", label: "b", role: "changed" as const },
+        ],
+      }),
+    );
+    // one "changed" legend entry, not one "changed" + one separate "hotspot" entry
+    // (strip data-role="..." attributes first so a node's own role text isn't counted)
+    const legendOnly = mixedHtml.replace(/data-role="[^"]*"/g, "");
+    expect(legendOnly.split(t.graph.changed).length - 1).toBe(1);
+  });
+
+  // A finding is reached via `href`, never via color; a trailing "↗" on any clickable
+  // node makes that reachable-ness visible in the figure itself — asserted directly below.
+  test("a node with href gets a trailing ↗ in its label", () => {
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "target file", href: "#finding-1" }],
+      }),
+    );
+    expect(html).toContain("target file ↗");
+  });
+
+  test("an added node's label is prefixed with '+ '", () => {
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "new file", role: "added" as const }],
+      }),
+    );
+    expect(html).toContain("+ new file");
+  });
+
+  test("a removed node's label is prefixed with '− ' and struck through", () => {
+    const html = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "old file", role: "removed" as const }],
+      }),
+    );
+    expect(html).toContain("− old file");
+    expect(html).toContain("line-through");
+  });
+
+  test("legend includes the clickable item only when some node has href", () => {
+    const withHref = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "a", href: "#finding-1" }],
+      }),
+    );
+    expect(withHref).toContain(t.graph.clickable);
+
+    const withoutHref = renderToString(
+      createElement(Graph, {
+        nodes: [{ id: "a", label: "a" }],
+      }),
+    );
+    expect(withoutHref).not.toContain(t.graph.clickable);
   });
 });
+
+describe("layoutGraph group separation", () => {
+  const boxes = (
+    items: readonly { x: number; y: number; width: number; height: number }[],
+  ) => items.map((b) => ({ x1: b.x, y1: b.y, x2: b.x + b.width, y2: b.y + b.height }));
+  const overlaps = (
+    a: { x1: number; y1: number; x2: number; y2: number },
+    b: { x1: number; y1: number; x2: number; y2: number },
+  ) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+
+  test("adjacent groups whose members share a rank do not overlap (real overview shape)", () => {
+    // reproduces a posted review overview: "riskpanel" (group skill) and "registry"
+    // (group catalogs) land in the same rank, so their cluster borders sit side by side
+    const layout = layoutGraph({
+      direction: "LR",
+      groups: [{ id: "skill" }, { id: "catalogs" }, { id: "lib" }],
+      nodes: [
+        { id: "skillmd", sub: "s", group: "skill" },
+        { id: "riskpanel", sub: "s", group: "skill" },
+        { id: "examples", sub: "s", group: "skill" },
+        { id: "graph", sub: "s", group: "catalogs" },
+        { id: "layout", sub: "s", group: "catalogs" },
+        { id: "registry", sub: "s", group: "catalogs" },
+        { id: "anchor", sub: "s", group: "lib" },
+        { id: "xyflow", sub: "s" },
+        { id: "dagre", sub: "s" },
+      ],
+      edges: [
+        { from: "skillmd", to: "riskpanel" },
+        { from: "examples", to: "riskpanel" },
+        { from: "riskpanel", to: "graph" },
+        { from: "graph", to: "layout" },
+        { from: "graph", to: "anchor" },
+        { from: "graph", to: "xyflow" },
+        { from: "layout", to: "dagre" },
+        { from: "registry", to: "graph" },
+      ],
+    });
+    const groupBoxes = boxes(layout.groups);
+    for (let i = 0; i < groupBoxes.length; i++) {
+      for (let j = i + 1; j < groupBoxes.length; j++) {
+        expect(overlaps(groupBoxes[i]!, groupBoxes[j]!)).toBe(false);
+      }
+    }
+  });
+
+  for (const direction of ["TB", "LR"] as const) {
+    test(`groups sharing a rank do not overlap (${direction})`, () => {
+      // two groups whose members land in the same rank, plus an ungrouped node beside them
+      const layout = layoutGraph({
+        direction,
+        groups: [{ id: "g1", label: "one" }, { id: "g2", label: "two" }],
+        nodes: [
+          { id: "a", label: "a", sub: "s", group: "g1" },
+          { id: "b", label: "b", sub: "s", group: "g1" },
+          { id: "c", label: "c", sub: "s", group: "g2" },
+          { id: "d", label: "d", sub: "s", group: "g2" },
+          { id: "e", label: "e", sub: "s" },
+        ],
+        edges: [
+          { from: "a", to: "b" },
+          { from: "b", to: "c" },
+          { from: "c", to: "d" },
+          { from: "a", to: "e" },
+          { from: "e", to: "d" },
+        ],
+      });
+      const groupBoxes = boxes(layout.groups);
+      expect(overlaps(groupBoxes[0]!, groupBoxes[1]!)).toBe(false);
+      const ungrouped = boxes(layout.nodes.filter((n) => n.group === undefined));
+      for (const gb of groupBoxes) {
+        for (const nb of ungrouped) expect(overlaps(gb, nb)).toBe(false);
+      }
+    });
+  }
+});
+

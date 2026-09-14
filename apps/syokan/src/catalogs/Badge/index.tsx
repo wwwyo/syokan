@@ -7,7 +7,15 @@ export const badgePropsSchema = z
     // Expose only the shadcn badge variants meant for status display.
     // ghost/link are for interaction and carry no meaning as status chips, so they're excluded.
     variant: z
-      .enum(["default", "secondary", "destructive", "outline"])
+      .enum([
+        "default",
+        "secondary",
+        "destructive",
+        "outline",
+        "success",
+        "warning",
+        "info",
+      ])
       .optional(),
   })
   .strict();

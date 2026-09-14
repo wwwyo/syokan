@@ -1,5 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* React Flow base styles for the Graph catalog node (pane transforms, handle hit-boxes).
+   Imported here rather than from Graph/index.tsx: TypeScript 7 rejects a side-effect
+   import of a .css module it cannot resolve, and an ambient "*.css" declaration does not
+   satisfy that check. */
+@import "@xyflow/react/dist/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -23,6 +28,9 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
+  /* Graph catalog node: added-edge stroke/marker (a new dependency edge is itself an
+     addition, so it gets the same hue as an added node's label prefix). */
+  --graph-added: #059669;
 
   /* 表示フォントの既定 (= system)。JS 起動前 / フォント未選択時のフォールバック。
      実際の切替はプリセット表 (src/lib/fonts.ts) が --app-font-* を直接書き換える。 */
@@ -52,6 +60,7 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  --graph-added: #34d399;
 }
 
 @theme inline {

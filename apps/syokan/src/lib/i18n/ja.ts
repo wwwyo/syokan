@@ -102,6 +102,18 @@ export const ja: Messages = {
     renderFailed: "この図を表示できませんでした。",
     expand: "図を拡大",
   },
+  graph: {
+    added: "追加",
+    removed: "削除",
+    // 後方互換のため enum には残すが、凡例には出さない（hotspot は changed と同じ見た目
+    // で表示される。catalogs/Graph/index.tsx 参照）
+    hotspot: "変更",
+    changed: "変更",
+    neutral: "変更なし",
+    group: "ディレクトリなどの境界",
+    edge: "矢印は参照する側 → される側",
+    clickable: "↗ は詳細へ移動",
+  },
   diff: {
     unparsable: "diff を表示できませんでした (patch を解釈できません)。",
     fileFailed: "この diff を表示できませんでした。",

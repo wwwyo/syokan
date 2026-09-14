@@ -1,12 +1,52 @@
-import { useId } from "react";
+import {
+  BaseEdge,
+  Controls,
+  type Edge,
+  EdgeLabelRenderer,
+  type EdgeProps,
+  Handle,
+  MarkerType,
+  type Node,
+  type NodeProps,
+  type NodeTypes,
+  Position,
+  ReactFlow,
+  getSmoothStepPath,
+  useReactFlow,
+} from "@xyflow/react";
+import {
+  type RefObject,
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { z } from "zod";
-import { layoutGraph } from "./layout";
+import { jumpToNode } from "../../lib/anchor";
+import { t } from "../../lib/i18n";
+import { useColorScheme } from "../../lib/useColorScheme";
+import { cn } from "../../lib/utils";
+import { initialViewport, layoutGraph } from "./layout";
 
 // role = semantic classification; color and stroke are fixed here so the reading of a
 // diagram never varies from generation to generation (the mermaid instability problem).
-const roleSchema = z.enum(["added", "removed", "hotspot", "neutral"]);
+// Color means exactly one thing in a Graph: how that module changed (the diff
+// convention: added / removed / changed / unchanged). "hotspot" is deprecated: it does
+// not name a change kind, only "has findings", which is not a color's job — a finding is
+// reached via `href` (shown by the trailing ↗), never by hue. Kept in the enum only for
+// backward compatibility with already-posted envelopes; it renders identically to
+// "changed" and is not offered as a separate legend entry.
+const roleSchema = z.enum(["added", "removed", "hotspot", "neutral", "changed"]);
 
 export type GraphRole = z.infer<typeof roleSchema>;
+
+const anchorHref = z
+  .string()
+  .regex(/^#.+/, "href must be an in-view anchor \"#<node id>\" (no URLs)");
 
 export const graphPropsSchema = z
   .object({
@@ -17,6 +57,12 @@ export const graphPropsSchema = z
             id: z.string().min(1),
             label: z.string().min(1).optional(),
             role: roleSchema.optional(),
+            // one-line subtitle, e.g. "what changed" for this module/file
+            sub: z.string().min(1).optional(),
+            // must name one of groups[].id — enforced below, not by this field alone
+            group: z.string().min(1).optional(),
+            // in-view jump to a finding node ("#<node id>"); never a URL
+            href: anchorHref.optional(),
           })
           .strict(),
       )
@@ -28,10 +74,24 @@ export const graphPropsSchema = z
             from: z.string().min(1),
             to: z.string().min(1),
             role: roleSchema.optional(),
+            label: z.string().min(1).optional(),
           })
           .strict(),
       )
       .optional(),
+    // module/file group boundaries drawn as dashed boxes; referenced by nodes[].group
+    groups: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            label: z.string().min(1).optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    // layout axis; defaults to top-to-bottom when omitted
+    direction: z.enum(["TB", "LR"]).optional(),
     caption: z.string().min(1).optional(),
   })
   .strict()
@@ -40,6 +100,34 @@ export const graphPropsSchema = z
     if (ids.size !== value.nodes.length) {
       ctx.addIssue({ code: "custom", path: ["nodes"], message: "node ids must be unique" });
     }
+    const groupIds = new Set((value.groups ?? []).map((g) => g.id));
+    if (value.groups !== undefined && groupIds.size !== value.groups.length) {
+      ctx.addIssue({ code: "custom", path: ["groups"], message: "group ids must be unique" });
+    }
+    value.nodes.forEach((node, i) => {
+      if (node.group !== undefined && !groupIds.has(node.group)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["nodes", i, "group"],
+          message: `unknown group id "${node.group}"`,
+        });
+      }
+    });
+    // node ids and group ids share one flat id space in dagre's compound Graph and in
+    // React Flow's node list (see layout.ts); allowing overlap would silently drop one
+    // entry, so it is rejected here instead of namespaced away downstream.
+    (value.groups ?? []).forEach((group, i) => {
+      if (ids.has(group.id)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["groups", i, "id"],
+          message: `group id "${group.id}" collides with a node id`,
+        });
+      }
+    });
+    // dagre's setEdge(from, to) collapses same-pair duplicates with no name, so allowing
+    // them would only yield overlapping renders with no benefit.
+    const seenEdges = new Set<string>();
     value.edges?.forEach((edge, i) => {
       for (const key of ["from", "to"] as const) {
         if (!ids.has(edge[key])) {
@@ -50,142 +138,487 @@ export const graphPropsSchema = z
           });
         }
       }
+      const pairKey = `${edge.from}->${edge.to}`;
+      if (seenEdges.has(pairKey)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["edges", i],
+          message: `duplicate edge "${edge.from}" -> "${edge.to}"`,
+        });
+      }
+      seenEdges.add(pairKey);
     });
   });
 
 export type GraphProps = z.infer<typeof graphPropsSchema>;
 
-const nodeStyles: Record<GraphRole, { box: string; label: string; dashed: boolean }> = {
+type RoleStyle = {
+  node: string;
+  edge: string;
+  edgeDashed: boolean;
+  marker: string;
+};
+
+// Color means one thing: the change kind, following the diff convention. Added=emerald,
+// removed=red (dashed, struck through), changed=amber, neutral=muted. "hotspot" is not a
+// change kind (see the roleSchema comment) — it renders exactly like "changed" so an
+// already-posted envelope still displays sensibly, but never appears as its own legend
+// entry or its own hue.
+const EDGE_STROKE = "stroke-muted-foreground/60";
+const EDGE_MARKER = "var(--muted-foreground)";
+// A new dependency edge is itself an addition, so it gets the added hue too.
+const EDGE_STROKE_ADDED = "stroke-[var(--graph-added)]";
+const EDGE_MARKER_ADDED = "var(--graph-added)";
+
+const CHANGED_STYLE: RoleStyle = {
+  node: "border-amber-600 bg-amber-500/15 text-amber-700 dark:border-amber-400 dark:text-amber-300",
+  edge: EDGE_STROKE,
+  edgeDashed: false,
+  marker: EDGE_MARKER,
+};
+
+const roleStyles: Record<GraphRole, RoleStyle> = {
   added: {
-    box: "fill-emerald-500/10 stroke-emerald-600 dark:stroke-emerald-400",
-    label: "fill-emerald-700 dark:fill-emerald-300",
-    dashed: false,
+    node: "border-emerald-600 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400 dark:text-emerald-300",
+    edge: EDGE_STROKE_ADDED,
+    edgeDashed: false,
+    marker: EDGE_MARKER_ADDED,
   },
   removed: {
-    box: "fill-transparent stroke-red-500/70",
-    label: "fill-red-600/80 dark:fill-red-400/80",
-    dashed: true,
+    node: "border-red-500/70 text-red-600/80 dark:text-red-400/80",
+    edge: EDGE_STROKE,
+    edgeDashed: true,
+    marker: EDGE_MARKER,
   },
-  hotspot: {
-    box: "fill-amber-500/15 stroke-amber-600 dark:stroke-amber-400",
-    label: "fill-amber-700 dark:fill-amber-300",
-    dashed: false,
-  },
+  // deprecated: rendered as "changed", never its own legend entry or hue (see roleSchema).
+  hotspot: CHANGED_STYLE,
   neutral: {
-    box: "fill-card stroke-border",
-    label: "fill-foreground",
-    dashed: false,
+    node: "border-border/60 bg-card text-muted-foreground",
+    edge: EDGE_STROKE,
+    edgeDashed: false,
+    marker: EDGE_MARKER,
   },
+  changed: CHANGED_STYLE,
 };
 
-const edgeStyles: Record<GraphRole, { line: string; dashed: boolean }> = {
-  added: { line: "stroke-emerald-600 dark:stroke-emerald-400", dashed: false },
-  removed: { line: "stroke-red-500/70", dashed: true },
-  hotspot: { line: "stroke-amber-600 dark:stroke-amber-400", dashed: false },
-  neutral: { line: "stroke-muted-foreground/60", dashed: false },
+// Fixed reading order for the legend, independent of prop order (nodes[].role /
+// edges[].role appear in whatever order the producer listed them). "hotspot" is
+// deliberately absent: it maps onto "changed" and must not get its own entry.
+const roleOrder: readonly GraphRole[] = ["added", "removed", "changed", "neutral"];
+
+// Hover state is delivered via context rather than baked into each node/edge's `data`, so
+// hovering doesn't force flowNodes/flowEdges (and the whole ReactFlow tree) to rebuild.
+type HoverState = { hoveredId: string | null; incident: ReadonlySet<string> };
+const HoverContext = createContext<HoverState>({ hoveredId: null, incident: new Set() });
+
+type RoleNodeData = {
+  label: string;
+  sub?: string;
+  role: GraphRole;
+  href?: string;
+  direction: "TB" | "LR";
 };
 
-const arrowFill: Record<GraphRole, string> = {
-  added: "fill-emerald-600 dark:fill-emerald-400",
-  removed: "fill-red-500/70",
-  hotspot: "fill-amber-600 dark:fill-amber-400",
-  neutral: "fill-muted-foreground/60",
-};
+type GroupNodeData = { label?: string };
 
-const PADDING = 8;
+// Role is conveyed in the label itself, not only by color, so the figure stays legible
+// with no accompanying prose: +/- prefixes added/removed, and a trailing "↗" marks any
+// node the reader can click (mirroring the cursor-pointer affordance below). The producer
+// never writes these — they're derived here so they can't drift from `role`/`href`.
+function displayLabel(label: string, role: GraphRole, href: string | undefined): string {
+  const prefixed =
+    role === "added" ? `+ ${label}` : role === "removed" ? `− ${label}` : label;
+  return href !== undefined ? `${prefixed} ↗` : prefixed;
+}
+
+/** Directed-graph node: rounded box, label + optional muted subtitle, role-colored border/fill. */
+const RoleNode = memo(function RoleNode({ id, data }: NodeProps<Node<RoleNodeData, "role">>) {
+  const { hoveredId } = useContext(HoverContext);
+  const sourcePos = data.direction === "LR" ? Position.Right : Position.Bottom;
+  const targetPos = data.direction === "LR" ? Position.Left : Position.Top;
+  return (
+    <div
+      data-role={data.role}
+      className={cn(
+        "flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg border px-2 text-center text-xs",
+        roleStyles[data.role].node,
+        data.href !== undefined && "cursor-pointer",
+        hoveredId === id && "ring-2 ring-ring ring-offset-1 ring-offset-background",
+      )}
+    >
+      <Handle type="target" position={targetPos} isConnectable={false} className="!opacity-0" />
+      <span
+        className={cn(
+          "line-clamp-1 w-full text-sm",
+          data.role === "removed" && "line-through",
+        )}
+      >
+        {displayLabel(data.label, data.role, data.href)}
+      </span>
+      {data.sub !== undefined && (
+        <span
+          className={cn(
+            "line-clamp-1 w-full text-xs opacity-70",
+            data.role === "removed" && "line-through",
+          )}
+        >
+          {data.sub}
+        </span>
+      )}
+      <Handle type="source" position={sourcePos} isConnectable={false} className="!opacity-0" />
+    </div>
+  );
+});
+
+/** Group/cluster box: dashed border, transparent fill, label riding the top-left edge. */
+const GroupNode = memo(function GroupNode({ data }: NodeProps<Node<GroupNodeData, "group">>) {
+  return (
+    <div className="relative h-full w-full rounded-lg border border-dashed border-muted-foreground/40 bg-transparent">
+      {data.label !== undefined && (
+        <span className="-top-2.5 absolute left-2 rounded bg-background px-1 text-[10px] font-medium text-muted-foreground">
+          {data.label}
+        </span>
+      )}
+    </div>
+  );
+});
+
+const nodeTypes: NodeTypes = { role: RoleNode, group: GroupNode };
+
+type RoleEdgeData = { role: GraphRole; label?: string };
+
+/** Smoothstep edge with role-colored stroke, optional label, and hover highlighting. */
+const RoleEdge = memo(function RoleEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  data,
+  markerEnd,
+}: EdgeProps<Edge<RoleEdgeData, "role">>) {
+  const { incident } = useContext(HoverContext);
+  const role = data?.role ?? "neutral";
+  const style = roleStyles[role];
+  const highlighted = incident.has(id);
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+  return (
+    <>
+      <BaseEdge
+        id={id}
+        path={path}
+        markerEnd={markerEnd}
+        className={style.edge}
+        style={{
+          strokeWidth: highlighted ? 2.5 : 1.5,
+          strokeOpacity: highlighted ? 1 : 0.75,
+          strokeDasharray: style.edgeDashed ? "5 4" : undefined,
+        }}
+      />
+      {data?.label !== undefined && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+            }}
+            className="rounded bg-background px-1 text-[10px] text-muted-foreground"
+          >
+            {data.label}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+});
+
+const edgeTypes = { role: RoleEdge };
+
+const PADDING = 16;
+// a fixed rem cap, not dvh (see Mermaid's pitfall note): the viewport can report 0 height
+// in headless/measurement embeds, which would collapse the diagram to nothing
+const MAX_HEIGHT_PX = 640; // 40rem at the app's 16px root; tall enough for a TB overview of ~4 ranks with subtitles
+
+// Same bounds the Controls fit button still uses via fitViewOptions.
+const MIN_ZOOM = 0.85;
+const MAX_ZOOM = 1;
+const FIT_VIEW_OPTIONS = { minZoom: MIN_ZOOM, maxZoom: MAX_ZOOM };
+
+const clamp = (value: number, lo: number, hi: number) => Math.min(Math.max(value, lo), hi);
 
 /**
- * Static directed graph with fixed role semantics (added / removed / hotspot /
- * neutral) for dependency and flow sketches; put two side by side (Stack
- * direction="horizontal") for a before/after contrast. Deliberately not mermaid:
- * the layout is deterministic and role styling cannot drift per generation.
+ * Computes and applies the initial viewport by hand, as a child of `<ReactFlow>`
+ * (rendering null): `useReactFlow` only resolves inside the ReactFlowProvider that
+ * `<ReactFlow>` creates internally, so this cannot live in the `Graph` component itself.
+ *
+ * Two mechanisms were tried and empirically failed before this one (verified against the
+ * compiled binary and against Storybook + agent-browser, not just by reading v12's docs):
+ * - `onInit` calling `setViewport` after reading fitView's result: v12 re-applies its own
+ *   fitView after `onInit` runs, clobbering the correction.
+ * - `fitView={false}` + `onInit`/`useNodesInitialized` calling `instance.fitView()` by
+ *   hand: `useNodesInitialized()` never turned true for these nodes (they already carry
+ *   explicit width/height from `layoutGraph`, so xyflow's own measurement pass — the
+ *   trigger for that hook — never has anything to do), so the sequence never ran; measured
+ *   transform stayed `translate(0,0) scale(1)`.
+ *
+ * This bypasses xyflow's fitView machinery entirely: `layoutGraph` already gives an exact,
+ * analytic `layout.width`/`layout.height` (dagre's layout, not a DOM measurement), so the
+ * zoom that fits the container is computable directly with no dependency on xyflow ever
+ * "seeing" the nodes as measured. Re-applied via ResizeObserver so a container that
+ * resizes after mount (e.g. Storybook's canvas reflow) gets the same treatment.
  */
-export function Graph({ nodes, edges = [], caption }: GraphProps) {
-  const markerPrefix = useId();
-  const roleOf = new Map(nodes.map((n) => [n.id, n.role ?? "neutral"] as const));
-  // schema validation guarantees refs, but Storybook/direct use may not go through it;
-  // filtering keeps layout.edges index-aligned with this array
-  const validEdges = edges.filter((e) => roleOf.has(e.from) && roleOf.has(e.to));
-  const layout = layoutGraph(nodes, validEdges);
-  const width = layout.width + PADDING * 2;
-  const height = layout.height + PADDING * 2;
+function InitialViewport({
+  layout,
+  containerRef,
+}: {
+  layout: ReturnType<typeof layoutGraph>;
+  containerRef: RefObject<HTMLDivElement | null>;
+}) {
+  const instance = useReactFlow();
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (container === null) return;
+
+    const apply = () => {
+      const { width: containerWidth, height: containerHeight } =
+        container.getBoundingClientRect();
+      if (containerWidth === 0 || containerHeight === 0) return;
+      const zoom = clamp(
+        Math.min(
+          (containerWidth - PADDING * 2) / layout.width,
+          (containerHeight - PADDING * 2) / layout.height,
+        ),
+        MIN_ZOOM,
+        MAX_ZOOM,
+      );
+      const corrected = initialViewport(
+        layout.width,
+        layout.height,
+        containerWidth,
+        containerHeight,
+        zoom,
+        PADDING,
+      );
+      const viewport =
+        corrected ??
+        {
+          x: (containerWidth - layout.width * zoom) / 2,
+          y: (containerHeight - layout.height * zoom) / 2,
+        };
+      instance.setViewport({ ...viewport, zoom });
+    };
+
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [layout, instance, containerRef]);
+
+  return null;
+}
+
+/**
+ * Interactive architecture diagram: nodes = modules/files (optionally grouped into
+ * module-boundary boxes), edges = relationships, role → color/stroke fixed by the renderer
+ * so the reading of a diagram never drifts from generation to generation (the mermaid
+ * instability problem this catalog node was built to avoid). Layout is dagre
+ * (`./layout.ts`), deterministic and cycle-safe. `href:"#<id>"` on a node jumps to any node
+ * carrying that `id` (typically the finding's `Heading`), reusing the same navigation the
+ * `Link` catalog node uses. Pans/zooms, so dense graphs (15+ nodes) stay legible without
+ * shrinking node text.
+ */
+export function Graph({ nodes, edges = [], groups = [], direction = "TB", caption }: GraphProps) {
+  const scheme = useColorScheme();
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // layoutGraph already drops dangling group/edge refs internally, so the component hands
+  // the props straight through instead of re-filtering them here.
+  const layout = useMemo(
+    () => layoutGraph({ nodes, edges, groups, direction }),
+    [nodes, edges, groups, direction],
+  );
+
+  const flowNodes: Node[] = useMemo(() => {
+    const groupById = new Map(layout.groups.map((g) => [g.id, g]));
+    const groupNodes: Node[] = layout.groups.map((g) => ({
+      id: g.id,
+      type: "group",
+      position: { x: g.x, y: g.y },
+      width: g.width,
+      height: g.height,
+      data: { label: g.label } satisfies GroupNodeData,
+      draggable: false,
+      selectable: false,
+      zIndex: 0,
+    }));
+    const roleNodes: Node[] = layout.nodes.map((n) => {
+      const parent = n.group !== undefined ? groupById.get(n.group) : undefined;
+      return {
+        id: n.id,
+        type: "role",
+        position: parent ? { x: n.x - parent.x, y: n.y - parent.y } : { x: n.x, y: n.y },
+        width: n.width,
+        height: n.height,
+        parentId: parent?.id,
+        extent: parent ? ("parent" as const) : undefined,
+        data: {
+          label: n.label,
+          sub: n.sub,
+          role: n.role as GraphRole,
+          href: n.href,
+          direction,
+        } satisfies RoleNodeData,
+        draggable: false,
+        selectable: false,
+        zIndex: 1,
+      };
+    });
+    // parents must precede children in the array for React Flow to resolve parentId
+    return [...groupNodes, ...roleNodes];
+  }, [layout, direction]);
+
+  const flowEdges: Edge[] = useMemo(
+    () =>
+      layout.edges.map((e) => {
+        const role = e.role as GraphRole;
+        return {
+          id: `${e.from}->${e.to}`,
+          source: e.from,
+          target: e.to,
+          type: "role",
+          data: { role, label: e.label } satisfies RoleEdgeData,
+          markerEnd: { type: MarkerType.ArrowClosed, color: roleStyles[role].marker },
+        };
+      }),
+    [layout],
+  );
+
+  // ids of edges touching the hovered node, recomputed only when the hover target or the
+  // layout changes — not on every render.
+  const incidentEdges = useMemo(() => {
+    if (hoveredId === null) return new Set<string>();
+    const incident = new Set<string>();
+    for (const e of layout.edges) {
+      if (e.from === hoveredId || e.to === hoveredId) incident.add(`${e.from}->${e.to}`);
+    }
+    return incident;
+  }, [hoveredId, layout]);
+
+  const hoverValue = useMemo<HoverState>(
+    () => ({ hoveredId, incident: incidentEdges }),
+    [hoveredId, incidentEdges],
+  );
+
+  const handleNodeClick = useCallback((_event: unknown, node: Node) => {
+    const href = (node.data as Partial<RoleNodeData>).href;
+    if (href === undefined || !href.startsWith("#")) return;
+    jumpToNode(href.slice(1));
+  }, []);
+
+  const handleNodeMouseEnter = useCallback((_event: unknown, node: Node) => {
+    setHoveredId(node.id);
+  }, []);
+  const handleNodeMouseLeave = useCallback(() => setHoveredId(null), []);
+
+  const containerHeight = Math.min(layout.height + PADDING * 2, MAX_HEIGHT_PX);
+
+  // Roles resolved by layoutGraph (unset -> "neutral"), not the raw props, so an
+  // omitted role still shows its actual (neutral) swatch and an unused role is omitted.
+  // "hotspot" normalizes to "changed" here too, so a hotspot-only graph still surfaces
+  // the "changed" legend entry it visually renders as, instead of no entry at all.
+  const usedRoles = useMemo(() => {
+    const present = new Set<GraphRole>();
+    const normalize = (role: GraphRole): GraphRole => (role === "hotspot" ? "changed" : role);
+    for (const n of layout.nodes) present.add(normalize(n.role as GraphRole));
+    for (const e of layout.edges) present.add(normalize(e.role as GraphRole));
+    return roleOrder.filter((role) => present.has(role));
+  }, [layout]);
+
+  const hasClickableNode = useMemo(
+    () => layout.nodes.some((n) => n.href !== undefined),
+    [layout],
+  );
+
   return (
-    <figure data-slot="graph" className="flex max-w-full flex-col gap-2">
-      <div className="overflow-x-auto">
-        <svg
-          viewBox={`${-PADDING} ${-PADDING} ${width} ${height}`}
-          width={width}
-          height={height}
-          className="max-w-full"
-          role="img"
-          aria-label={caption ?? "graph"}
-        >
-          <defs>
-            {(Object.keys(arrowFill) as GraphRole[]).map((role) => (
-              <marker
-                key={role}
-                id={`${markerPrefix}-${role}`}
-                viewBox="0 0 8 8"
-                refX="7"
-                refY="4"
-                markerWidth="7"
-                markerHeight="7"
-                orient="auto-start-reverse"
-              >
-                <path d="M0,0 L8,4 L0,8 z" className={arrowFill[role]} />
-              </marker>
-            ))}
-          </defs>
-          {layout.edges.map((edge, i) => {
-            const role = validEdges[i]?.role ?? "neutral";
-            const style = edgeStyles[role];
-            const { x1, y1, c1x, c1y, c2x, c2y, x2, y2 } = edge.path;
-            return (
-              <path
-                // biome-ignore lint/suspicious/noArrayIndexKey: static content, order never changes
-                key={i}
-                d={`M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`}
-                fill="none"
-                strokeWidth={1.5}
-                strokeDasharray={style.dashed ? "5 4" : undefined}
-                className={style.line}
-                markerEnd={`url(#${markerPrefix}-${role})`}
-              />
-            );
-          })}
-          {layout.nodes.map((node) => {
-            const role = roleOf.get(node.id) ?? "neutral";
-            const style = nodeStyles[role];
-            return (
-              <g key={node.id} data-role={role}>
-                <rect
-                  x={node.x}
-                  y={node.y}
-                  width={node.width}
-                  height={node.height}
-                  rx={8}
-                  strokeWidth={role === "hotspot" ? 2 : 1.25}
-                  strokeDasharray={style.dashed ? "5 4" : undefined}
-                  className={style.box}
-                />
-                <text
-                  x={node.x + node.width / 2}
-                  y={node.y + node.height / 2}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  className={`${style.label} text-xs`}
-                >
-                  {node.label}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+    <figure data-slot="graph" className="flex w-full max-w-full flex-col gap-2">
+      <div
+        ref={containerRef}
+        className="w-full max-h-[40rem] overflow-hidden rounded-xl border border-border bg-card"
+        style={{ height: containerHeight }}
+      >
+        {/* No mounted-gate needed: React Flow v12 renders under renderToString as long as
+            every node carries explicit width/height (which layout.ts always provides), so
+            SSR tests (Graph.test.tsx) exercise the real tree, not a server-only fallback. */}
+        <HoverContext.Provider value={hoverValue}>
+          <ReactFlow
+            nodes={flowNodes}
+            edges={flowEdges}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            panOnDrag
+            // the graph sits inside a long scrolling view: the wheel must keep scrolling the
+            // page, not zoom the diagram (pinch and the Controls buttons still zoom)
+            zoomOnScroll={false}
+            preventScrolling={false}
+            // Initial fit is driven by hand in InitialViewport (below), not this prop:
+            // fitView-on-mount centers a graph that overflows the clamped zoom, cutting
+            // off both edges instead of starting the reader at the top-left. The Controls
+            // fit button still uses fitViewOptions as its default and keeps centering —
+            // that's an explicit user action, unlike the initial view.
+            fitView={false}
+            // An overview must be legible before any interaction: unbounded fitView
+            // shrinks a wide graph until labels are unreadable. Capping how far it can
+            // zoom out trades "the whole graph visible at once" for "readable", leaving
+            // the rest reachable by pan (or the Controls fit button, which respects the
+            // same bounds).
+            fitViewOptions={FIT_VIEW_OPTIONS}
+            proOptions={{ hideAttribution: true }}
+            colorMode={scheme}
+            onNodeClick={handleNodeClick}
+            onNodeMouseEnter={handleNodeMouseEnter}
+            onNodeMouseLeave={handleNodeMouseLeave}
+          >
+            <Controls showInteractive={false} />
+            <InitialViewport layout={layout} containerRef={containerRef} />
+          </ReactFlow>
+        </HoverContext.Provider>
+      </div>
+      {/* Renderer-owned legend: producers never need to explain what a color means. One
+          item per role actually present (via `usedRoles`, resolved from the laid-out
+          graph so an unset role's "neutral" default is represented too), plus group and
+          edge-direction items only when those exist in this graph. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+        {usedRoles.map((role) => (
+          <span key={role} className="flex items-center gap-1">
+            <span className={cn("h-3 w-3 shrink-0 rounded border", roleStyles[role].node)} />
+            {t.graph[role]}
+          </span>
+        ))}
+        {layout.groups.length > 0 && (
+          <span className="flex items-center gap-1">
+            <span className="h-3 w-3 shrink-0 rounded border border-dashed border-muted-foreground/40 bg-transparent" />
+            {t.graph.group}
+          </span>
+        )}
+        {layout.edges.length > 0 && <span>{t.graph.edge}</span>}
+        {hasClickableNode && <span>{t.graph.clickable}</span>}
       </div>
       {caption !== undefined && (
-        <figcaption className="text-xs text-muted-foreground">
-          {caption}
-        </figcaption>
+        <figcaption className="text-xs text-muted-foreground">{caption}</figcaption>
       )}
     </figure>
   );

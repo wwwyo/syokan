@@ -27,6 +27,8 @@ If syokan is not installed yet (`syokan --help` fails), or the user says "onboar
 3. Turn it into an envelope JSON (see "Envelope shape" below). Only `root` is required.
 4. Post it with the CLI (see "Posting" below). On success the view URL is printed.
 
+Write the view's own text (headings, verdicts, explanations, captions) in the language the user addressed you in. The docs and the catalog are English, but the view is for the reader, and an English panel handed to a Japanese-speaking reader is a defect, not a default.
+
 If you have built a similar view before, do not start from scratch — base it on a saved template (see "Templates for reproducibility" below).
 
 ## Envelope shape
@@ -62,6 +64,10 @@ For complete examples combining the components, see [references/examples.md](ref
 
 `Stack` spaces its children by nesting depth: the outermost stack separates sections, and each level further in tightens the spacing (deeper than three levels stays at the tightest). **Leave `gap` unset** — that default is what keeps views from drifting apart visually. Set it (`none` / `sm` / `md` / `lg`) only when the depth-derived spacing is wrong for a specific group, e.g. `none` for a row of items meant to read as one strip. A horizontal `Stack` scrolls inside itself when its children exceed the width, so lining many up never breaks the page.
 
+## Card is not the default container
+
+The default flow is `Heading` + body nodes inside a `Stack`; a `Heading` can carry the `id` that jump links target. Reach for `Card` only when a unit needs a visible boundary to be read as one thing — items the reader compares side by side, or a block that must stand apart from the surrounding flow. Wrapping every list item or section in a `Card` adds borders and padding without adding meaning, and makes long views heavier to scan.
+
 ## Cross-cutting node field (id)
 
 Besides `type` / `props` / `children` / `key`, any node may carry `id`: it makes the node addressable. A `Link` with `href: "#<id>"` jumps to it inside the view (revealing it if folded). It is also the identity for viewer-local UI state — **give an `id` to every `Checklist` / `Collapsible` / `Probe`** so checks, folds, and probe reruns survive reloads. An `id` must be unique tree-wide; a duplicate 400s.
@@ -70,15 +76,7 @@ Interaction state (checks, folds, probe re-runs) lives in the viewer's browser, 
 
 ## Interactive views (risk panels, TODO, dashboards)
 
-Typical composition for a review risk panel (condensed envelope in [references/examples.md](references/examples.md) Example 5):
-
-- `Stat` row up top for the counts; `Table` as the cockpit where each row `Link`s (`#id`) to its finding `Card`.
-- Low-priority detail (evidence hunks, verified-None sections) goes inside `Collapsible` instead of being deleted.
-- "No findings" claims carry a `Probe` whose `check` re-measures the claim (search count, diff cleanliness, file existence). Include the `result` you measured at generation time — you can run it via `POST /api/probes/run` with the same `check` — or omit it and the reader runs it. On public shares, probe args/results are stripped unless you set `shareVisible: true`.
-- `Graph` (roles: added/removed/hotspot/neutral, colors fixed by syokan) side by side in a horizontal `Stack` for before/after dependency contrasts. Prefer it over `Mermaid` when the diagram is a plain node/edge sketch — it cannot fail to parse.
-- `Checklist` for reviewer progress; checked items fold to one line.
-
-For any status/risk panel (not just PR review), see [references/risk-panel.md](references/risk-panel.md) for the full principles and a section skeleton: never show "None" without a `Probe` or a stated verification method (no false green), give `id` to every stateful node so state and jump targets survive a reload, and fold low-priority detail into `Collapsible` instead of deleting it.
+For status/risk panels of any kind (PR review, deploy status, incident dashboards), see [references/risk-panel.md](references/risk-panel.md), which lists the aspects worth showing and the recommended node for each — the panel structure is yours to decide. A minimal working example is [references/examples.md](references/examples.md) Example 5.
 
 ## Posting
 

@@ -72,7 +72,7 @@ describe("catalogManifest", () => {
         edges: [{ from: "a", to: "missing" }],
       }).success,
     ).toBe(false);
-    expect(byType.get("Graph")?.notes).toContain("unique within the graph");
+    expect(byType.get("Graph")?.notes).toContain("ids must be unique");
     expect(byType.get("Graph")?.notes).toContain("every edge from/to");
 
     // Markdown: the rejected block constructs (superRefine over the marked token tree)
