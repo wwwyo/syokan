@@ -115,14 +115,10 @@ const routeTree = rootRoute.addChildren([
 // history.replaceState behind the router's back, so the position after an anchor jump would be
 // filed under a key a plain revisit never reads. Accepted cost: every history entry of one
 // snapshot shares a single position.
-export function scrollRestorationKey(location: { pathname: string }): string {
-  return location.pathname;
-}
-
 export const router = createRouter({
   routeTree,
   scrollRestoration: true,
-  getScrollRestorationKey: scrollRestorationKey,
+  getScrollRestorationKey: (location) => location.pathname,
   // prefetch the loader on hover / touch to make click transitions feel near-instant.
   defaultPreload: "intent",
 });
