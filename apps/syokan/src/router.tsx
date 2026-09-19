@@ -110,10 +110,15 @@ const routeTree = rootRoute.addChildren([
   shellRoute.addChildren([homeRoute, viewRoute, splatRoute]),
 ]);
 
+// Not the default per-history-entry key: a sidebar hop A -> B -> A lands on a fresh entry, which
+// would reset A to the top. Not pathname + hash either: AnchorLink writes the hash via
+// history.replaceState behind the router's back, so the position after an anchor jump would be
+// filed under a key a plain revisit never reads. Accepted cost: every history entry of one
+// snapshot shares a single position.
 export const router = createRouter({
   routeTree,
-  // restores the body's reading position per history entry (replacing the bespoke scroll helper code).
   scrollRestoration: true,
+  getScrollRestorationKey: (location) => location.pathname,
   // prefetch the loader on hover / touch to make click transitions feel near-instant.
   defaultPreload: "intent",
 });
