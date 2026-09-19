@@ -81,6 +81,9 @@ export const ja: Messages = {
     listLabel: "フォント",
     noMatches: "該当なし",
   },
+  headingMinimap: {
+    label: "見出し一覧",
+  },
   treeDoc: {
     errors: {
       not_found: "ファイルが見つかりません（削除された可能性があります）。",
