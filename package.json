@@ -25,6 +25,6 @@
     "build-storybook": "cd apps/syokan && storybook build"
   },
   "patchedDependencies": {
-    "@tanstack/router-core@1.171.27": "patches/@tanstack%2Frouter-core@1.171.27.patch"
+    "@tanstack/router-core@1.171.29": "patches/@tanstack%2Frouter-core@1.171.29.patch"
   }
 }

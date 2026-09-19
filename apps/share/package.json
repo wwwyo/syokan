@@ -15,11 +15,11 @@
     "hono": "4.13.7",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "zod": "4.5.4"
+    "zod": "4.6.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260904.1",
+    "@cloudflare/workers-types": "5.20260911.1",
     "bun-plugin-tailwind": "0.1.2",
-    "wrangler": "4.129.0"
+    "wrangler": "4.131.1"
   }
 }
