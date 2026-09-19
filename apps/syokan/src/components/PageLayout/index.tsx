@@ -48,8 +48,8 @@ export function PageLayout({
   return (
     <div data-slot="page-layout" className="flex flex-1 flex-col">
       {header ? (
-        // data-slot="page-header" is the contract useResizeScrollAnchor reads its reference
-        // line from; DOM order alone is not relied on.
+        // data-slot="page-header" is the contract useResizeScrollAnchor and HeadingMinimap read
+        // (via pageHeaderBottom()) for their reference line; DOM order alone is not relied on.
         <div data-slot="page-header" className="sticky top-0 z-20">
           {header}
         </div>

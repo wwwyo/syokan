@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../lib/i18n";
 import { cn } from "../../lib/utils";
+import { pageHeaderBottom } from "../PageLayout/pageHeader";
 
 export type HeadingLevel = 1 | 2 | 3;
 
@@ -103,8 +104,7 @@ export function activeIndex(
 }
 
 function referenceLine(): number {
-  const header = document.querySelector('[data-slot="page-header"]');
-  return (header?.getBoundingClientRect().bottom ?? 0) + LINE_MARGIN;
+  return pageHeaderBottom() + LINE_MARGIN;
 }
 
 function isAtBottom(): boolean {
@@ -116,8 +116,10 @@ function scrollToHeading(el: Element) {
   const reduceMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)",
   ).matches;
-  const header = document.querySelector('[data-slot="page-header"]');
-  const headerHeight = header?.getBoundingClientRect().height ?? 0;
+  // pageHeaderBottom() returns a viewport y (the header's bottom edge), not a height, but it is
+  // the height here: the header is `sticky top-0` at the very top of the column, so its bottom
+  // edge's viewport y and its own height are the same number.
+  const headerHeight = pageHeaderBottom();
   const top =
     el.getBoundingClientRect().top + window.scrollY - headerHeight - LINE_MARGIN;
   window.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
@@ -147,6 +149,9 @@ export function HeadingMinimap() {
   // to a plain position update (see `schedule` below).
   const needsRescanRef = useRef(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  // Resolved once per mount by the effect below; rescan() reads it instead of re-querying, since
+  // page-main doesn't change identity for the component's lifetime (a route change remounts).
+  const mainRef = useRef<Element | null>(null);
 
   const updatePosition = useCallback(() => {
     const entries = headingsRef.current;
@@ -160,7 +165,7 @@ export function HeadingMinimap() {
   }, []);
 
   const rescan = useCallback(() => {
-    const main = document.querySelector('[data-slot="page-main"]');
+    const main = mainRef.current;
     const nodes = main
       ? Array.from(main.querySelectorAll('[data-slot="heading"]'))
       : [];
@@ -196,13 +201,14 @@ export function HeadingMinimap() {
   );
 
   useEffect(() => {
+    const main = document.querySelector('[data-slot="page-main"]');
+    mainRef.current = main;
     rescan();
 
     const onScrollOrResize = () => schedule(false);
     window.addEventListener("scroll", onScrollOrResize, { passive: true });
     window.addEventListener("resize", onScrollOrResize, { passive: true });
 
-    const main = document.querySelector('[data-slot="page-main"]');
     const observer = new MutationObserver(() => schedule(true));
     if (main) {
       observer.observe(main, {
@@ -246,9 +252,10 @@ export function HeadingMinimap() {
   return (
     // Zero-height sticky wrapper: pins the tick column to the vertical center of the viewport
     // as the page scrolls, without taking up flow space in PageLayout's column. Positioned
-    // relative to the content column (not the viewport, which the `right-2` below is relative
-    // to), so it tracks the column's right edge instead of the viewport's — the column can sit
-    // short of the viewport's right edge (e.g. a resizable Stack pane), and a viewport-fixed
+    // relative to the page column (PageLayout's full width, to the right of AppSidebar — not
+    // the max-w-4xl text column `right-2` below sits at the far edge of), not the viewport, so
+    // it tracks the page column's right edge instead of the viewport's — the page column can
+    // sit short of the viewport's right edge (e.g. a resizable Stack pane), and a viewport-fixed
     // position would drift away from the content it annotates in that case.
     // z-10 stays under page-header's z-20.
     <div
