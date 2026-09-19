@@ -1,4 +1,5 @@
 import { type RefObject, useEffect, useRef } from "react";
+import { pageHeaderBottom } from "../PageLayout/pageHeader";
 
 type Anchor = {
   el: Element;
@@ -12,11 +13,12 @@ type Anchor = {
 const X_FRACTIONS = [0.5, 0.25, 0.75];
 
 // The reference line must clear the sticky header, otherwise elementFromPoint keeps hitting
-// header content instead of the body. Read from the header's actual rect rather than a fixed
-// pixel guess, since header height differs per route (ViewHeader vs none).
+// header content instead of the body. +1 nudges strictly past the header's bottom edge itself
+// (elementFromPoint at the exact edge can still resolve to the header), not a fixed pixel guess
+// for header height, which differs per route (ViewHeader vs none) — that variable part comes
+// from PageLayout's page-header contract via pageHeaderBottom().
 function referenceY(): number {
-  const header = document.querySelector('[data-slot="page-header"]');
-  return (header?.getBoundingClientRect().bottom ?? 0) + 1;
+  return pageHeaderBottom() + 1;
 }
 
 function findAnchor(): Anchor | null {
