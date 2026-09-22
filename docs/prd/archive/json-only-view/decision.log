@@ -1,0 +1,81 @@
+# decision.log — json-only-view 実装
+
+PRD (`prd.md`) に明示されていないが実装時に判断したこと・考慮した trade-off・
+ユーザーが知っておくべき事項を記録する。実装日: 2026-07-06。
+
+---
+
+## 1. TreeDoc の path 制約は zod `.refine` ではなく `.regex` で表現
+
+PRD の「相対パス・URL・空文字は validation エラー」を props schema でどう表すか。
+
+- ❌ `.refine(isAbsolute)` + `.refine(notUrl)`: `z.toJSONSchema` で custom check が JSON Schema に
+  乗らず、`GET /api/catalog` の manifest から制約が消える (LLM に制約が伝わらない)。
+- ✅ `.regex(/^(\/|[A-Za-z]:[\\/])/)` 1 本: JSON Schema の `pattern` として manifest に乗る。
+  URL (`https://...` / `file://...`) は scheme が絶対パスパターンに一致しないため同時に弾ける。
+
+**trade-off**: 1 文字 scheme の URL (`c://host`) は Windows ドライブと区別できず通る。実運用で
+存在しない形なので許容。空文字も regex 不一致で弾けるため `min(1)` は持たない。
+
+## 2. tree 解釈の SSOT は `src/lib/treeSource.ts` (旧 fileFormat.ts の後継ポジション)
+
+「ファイル内容 → subtree」の解釈 (JSON parse / itemSchema 検証 / 入れ子 TreeDoc 拒否) を
+`parseTreeContent()` に集約し、client render (TreeDoc) と publish 凍結 (server materialize.ts) の
+両方が同じ関数を使う。旧 FileDoc の「拡張子推論の SSOT = fileFormat.ts」と同じ構図。
+fileFormat.ts は利用者が消えたため test ごと削除した。
+
+## 3. 循環 import は ESM の live binding に依存 (要注意ポイント)
+
+`catalogs/index.ts → TreeDoc → (Render, treeSource) → catalogs/index.ts` という循環がある。
+TreeDoc は `itemSchema` / `Render` を **module 評価時ではなく実行時にのみ** 参照するため、
+ESM の live binding + function hoisting で成立している。TreeDoc 側の module top-level に
+catalog 参照を書くと TDZ で落ちるので、今後触るときは実行時参照を維持すること。
+(bun test / bun bundler / tsc の全部で動作確認済み)
+
+## 4. Mermaid の props は `chart` → `code` に改名
+
+旧実装 (MarkdownDoc 内部の Mermaid) の prop 名は `chart` だったが、catalog の公開契約としては
+`Code.code` と揃えて `code` にした。LLM が型名 (Mermaid) と props 名を推測しやすい一貫性を優先。
+
+## 5. share Worker のエラーコードは `filedoc_not_allowed` → `treedoc_not_allowed` に改名
+
+`ShareErrorCode` は producer/consumer が satisfies/narrowing で結ばれており rename が型エラーで
+波及する設計なので、利用者不在のいま素直に rename。Worker のチェック対象は `TreeDoc` のみに
+変更し、旧 `FileDoc` のチェックは残さない (catalog から消えた型は local 側 validation で
+そもそも作れず、古い payload を送る client も存在しないため)。
+
+## 6. CLI: 2MiB 超のファイルは拡張子で分岐
+
+sniff 上限 (2MiB) を超えるファイルは中身を読めない (OOM 回避) ので envelope / tree の判別が
+できない。`.json` なら TreeDoc に包んで投げ (view 側が too_large を表示する — 旧 FileDoc と
+同じ挙動)、それ以外は `unsupported_input` で即拒否する。拡張子分岐は本体唯一の
+「拡張子を見る」箇所として残る。
+
+## 7. `syokan <tree.json>` で初回から不正な JSON は CLI が拒否する
+
+書きかけ JSON は tree か garbage か判別できないため、CLI 経由では「初回不正 → エラー表示の
+TreeDoc」には到達しない (PRD の AC が「TreeDoc を含む envelope が不正ファイルを指す場合」と
+限定しているのはこのため)。live sync 開始後の不正化は stale 維持で吸収される。
+
+## 8. Home の使い方タブは JSX + CodeSnippet に再実装 (既知バグの副次修正)
+
+`usageDoc` (markdown 文字列) を廃止し、i18n を構造化フィールド (`home.usage.*`) に分解して
+JSX + `CodeSnippet` で描画。AGENTS.md 既知の「dev (StrictMode) で使い方タブの Code が
+高さ 0 に潰れる」問題は、このタブが pierre 系 Code を使わなくなったことで再現しなくなった
+(ViewPage 側の間欠的な再現は残る)。TreeDoc の live sync 手順をタブに追記した。
+
+## 9. 未使用コードの掃除
+
+- `lib/code.ts` の `resolveCodeInfo` を削除 (唯一の利用者が MarkdownDoc のコードフェンス処理だった)。
+- i18n の `fileDoc.errors` は `treeDoc.errors` に移し、`invalid_json` / `invalid_tree` /
+  `nested_treedoc` の 3 reason と stale 通知文 (`staleNotice`) を追加。
+- 依存から `react-markdown` / `remark-gfm` を削除 (`bun install` で lockfile 追従済み)。
+
+## 10. 検証結果
+
+- `bun test`: 394 pass / `bun run typecheck`: クリーン。
+- dev server + headless preview で E2E 確認済み: tree 召喚 → 描画 / 保存で reload なし更新 /
+  不正 JSON で stale 維持 + エラー帯 (reason + path) / 復旧で追従再開 / 入れ子 TreeDoc は
+  `nested_treedoc` エラー / Mermaid は SVG 描画 (`data-state="ready"`) / MarkdownDoc envelope は
+  400 validation_failed / 非 JSON は `unsupported_input` exit 1 / 同一パス再投稿は同一 URL。
+- publish 凍結は unit test で確認 (login が要るため E2E は未実施)。

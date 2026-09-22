@@ -1,0 +1,139 @@
+# decision.log — client-routing 実装
+
+PRD (`prd.md`) に明示されていないが実装時に判断したこと・考慮した trade-off・
+ユーザーが知っておくべき事項を記録する。実装日: 2026-06-20。
+
+---
+
+## 採用ライブラリ
+
+- `@tanstack/react-router@1.170.15` を追加 (bunfig の exact pin + cooldown 7日に従い最新安定版)。
+- code-based route (`createRootRoute` / `createRoute` / `addChildren`)。**Vite プラグイン/codegen は不使用** —
+  Bun の bundler にそのまま載る (file-based routing のときだけ plugin が要る)。
+- `react-router` は引き続き不使用 (AGENTS の "React Router は使わない" は維持)。
+
+## 1. snapshot 一覧の持ち方: 常駐 provider (eager fetch)、route loader にしない
+
+PRD は一覧の保持先を規定していない。次の 3 案から `SnapshotListProvider` (常駐 shell 内で
+mount 時に 1 度 fetch、非ブロッキング) を選んだ。
+
+- ❌ root route の **blocking loader**: root の loader が解決するまで全体が pending になり、
+  home まで白くなる → Goal「白い瞬間を無くす」に反する。
+- ❌ **lazy fetch-on-open** (旧 AppSidebar の挙動): sidebar を開くたびに loading が出る /
+  delete の遷移先計算に一覧が無い。
+- ✅ **eager 常駐 provider**: 初回 mount で 1 度取得し、client 遷移では再取得しない
+  (遷移ごとの loading 無し)。delete の遷移先をメモリ上の一覧から即算出できる。
+
+**trade-off / 挙動変更**: sidebar を一度も開かなくても初回ロード時に `/api/snapshots` を 1 回叩く
+(旧 lazy 比で先行 fetch が増える)。localhost の小さな JSON なので無視できるコストと判断。
+作成 (CLI/LLM) はブラウザ外で起きるため、`syokan open` は full reload になり一覧は作り直される。
+削除のみ in-app なので `refresh()` で明示的に最新化する (FR5)。
+
+## 2. 削除フローを `useDeleteSnapshot` に一本化
+
+旧実装は ViewPageContainer と AppSidebar に削除ロジックが重複していた。1 つの hook に集約:
+confirm → (削除前の並びから next 算出) → delete → 一覧 refresh → **表示中のときだけ**遷移。
+
+- **FR6** (算出した遷移先が既に 404 なら home): 削除後に refresh した一覧に next がまだ在るか
+  確認し、無ければ home へ。neighbor 判定は削除前の並びから行う (削除後は隣接位置が失われるため)。
+- **edge**: eager fetch 完了前に削除を起動すると一覧が空で next を出せず home に倒れる。
+  localhost では一覧は <100ms で揃い、削除は意図的なメニュー操作なので実際には到達しない。
+- **削除失敗時** (network 断のみ。404 は冪等成功): `window.alert("削除に失敗しました")` を出す。
+  旧 ViewPageContainer は error state、旧 AppSidebar は無言 return だった → 2 経路で一貫した
+  可視フィードバックに統一。
+
+## 3. `ViewSummary` を `@/schema` の `SnapshotSummary` に統合
+
+旧コードは `ViewSummary` を store.ts と ViewList.tsx に二重定義 (過去のレビューが drift を指摘)。
+schema 層に 1 つ置き、server (type-only import) と client が同じ型を共有する。PRD の snapshot
+語彙にも合わせて改名。fetch 応答は引き続き `as` cast (client 側 zod 検証は本 PRD の scope 外)。
+
+## 4. ViewList を router 非依存に保つ (`renderLink` 注入)
+
+ViewList は Storybook story と SSR test を router 外で描画する。TanStack `<Link>` は router context
+が無いと throw する。そこで ViewList は既定で素の `<a>` を描画し、AppSidebar が client 遷移する
+`<Link>` renderer を注入する。これで catalog 同様にコンポーネント単体でレビュー/テストできる。
+not-found の "Back to home" も素の `<a href="/">` (error ページの full reload は許容、ViewNotFound を
+純表示に保つ)。
+
+## 5. レイアウトを document(window) スクロールへ戻した
+
+旧: `h-svh overflow-hidden` + 内側 region の独立スクロール。
+新: window スクロール。理由は TanStack の標準 `scrollRestoration` が window scroll 前提のため
+(自前の `useScrollRestore` を撤去できる = PRD Goal)。
+
+- sidebar = `sticky top-0 h-svh self-start` (常駐ゆえスクロール位置は復元コード無しで残る)。
+  `self-start` は flex の stretch を抑えて sticky を成立させるため。
+- header = `sticky top-0 z-20` (スクロール後も sidebar トグルへ届くように)。
+- fullBleed (resizable Stack) = `h-svh flex-col` で viewport に固定し、panel に高さを渡して
+  document スクロールを殺す。PRD が「リスク」と明示した箇所。ブラウザで panel 描画・崩れ無しを確認。
+
+## 6. router オプション
+
+- `scrollRestoration: true` — 履歴 entry 単位 (戻る/進むで復元、新規遷移は先頭、US-003 と整合)。
+- `defaultPreload: "intent"` — hover/touch で loader を先読みし、クリック遷移を即時化 (PRD 非必須。
+  Goal「即時」のための追加。hover ごとに先読み fetch が増えるが localhost なら許容)。
+
+## 7. server routing
+
+Bun の評価順は static > param > wildcard。よって `/api/snapshots` `/api/snapshots/:id` が
+`/api/*` (JSON 404) より優先され、`/*` (SPA HTML) が最下位 fallback になる。旧 `/views/:id` の
+HTML route は撤去 (`/*` が吸収)。直接 URL / reload / 戻る進む はこの fallback で成立 (FR2)。
+
+## 8. 撤去したもの
+
+`lib/useScrollRestore.ts` (自前 scroll 復元) / `lib/route.ts` + `matchViewId` (percent-decode 等は
+TanStack の param parsing が担当) / `App.tsx` / `ViewPageContainer.tsx`。`matchViewId` の
+malformed percent-encoding テストは library 責務になったため削除。sidebar 開閉の localStorage 永続は
+AppShell に移して維持 (hard reload をまたぐため。PRD constraint どおり)。
+
+---
+
+## ⚠️ 本 PRD と無関係の既存 (未コミット) 変更について
+
+`src/catalogs/Code/index.tsx` に **私が触っていない未コミット変更**がある (session 開始時の
+git snapshot は clean だったが working tree には存在)。mount を 1 コミット遅らせて pierre `File` に
+差し替える「tab 内で潰れる」対策 ([[pierre-code-collapses-in-tabs]] の修正)。
+
+これにより pierre `Code` の SSR 出力が `<diffs-container>` ではなく `<pre data-slot="code-fallback">`
+になり、既存 SSR テスト 3 件が落ちる:
+- `src/catalogs/Code/Code.test.tsx`
+- `src/catalogs/MarkdownDoc/MarkdownDoc.test.tsx`
+- `src/catalogs/PlainText/PlainText.test.tsx`
+
+**本 PRD の変更とは無関係**。Code 本体もそのテストも意図的に触っていない。この Code 変更を
+仕上げる人がテスト側 (`<diffs-container>` → `code-fallback` host) を追従させるべき。
+本 PRD 由来のファイルのテストは全て green (113 pass / 0 fail)。
+
+## レビュー (codex / copilot) 反映 — PR #11
+
+draft-pr の self-review (local codex) と PR の自動レビュー (copilot / codex) で出た指摘の対応。
+
+- **削除後に `router.invalidate()`** (codex P2): 削除フローは sidebar 一覧の refresh だけで TanStack の
+  loader cache を消していなかった。戻る / intent preload 経由で削除済み snapshot を一瞬出しうるため、
+  削除 (+遷移) 後に `router.invalidate()` でキャッシュを捨てる。
+- **一覧を focus / visibilitychange で再取得** (codex P3): 常駐 provider 化で「sidebar を開くたびに
+  fetch」を落としたため、アプリを開いたまま外部 (CLI/LLM) 作成した snapshot が一覧に出なくなっていた
+  (旧挙動からの退行)。tab 復帰時 (`focus` / `visibilitychange` で可視) に取り直す。`refresh()` は loading に
+  落とさないので一覧のちらつきは出ない。transient 失敗で既存一覧を消さないよう、error は初回ロード時のみ。
+- **未一致パスの root `notFoundComponent`** (self-review): `/views/:id` は単一セグメント param なので
+  `/views/a/b` 等は match せず、従来は TanStack 既定の素な "Not Found" になっていた。styled な not-found
+  (shell 内 + home リンク) で受ける。`/views/a/b` が `a` の snapshot として出る、という codex P1 は誤り
+  (single-segment param なので match しない) と実機で確認 (REFUTED)。
+- **fallback 画面に toggle 付き header** (copilot ×3 / codex P4): pending / not-found / error が header 無しで、
+  sidebar を閉じていると一覧トグルに届かなかった。`<ViewHeader />` (source/delete 無し) を渡し、どの状態でも
+  sidebar を開閉できるようにする。
+- **削除遷移先を「読み込み済みの一覧」から決める** (codex P2 inline): `/views/:id` を直接開いて一覧取得前に
+  即削除すると `before` が空になり next/prev を失って home に飛んでいた。一覧未取得なら先に取得してから
+  next を決める。
+
+## 検証メモ (headless preview の制約)
+
+preview backend が viewport 0×0 の headless で描画するため、座標クリック (`preview_click`) と
+screenshot は使えない。検証は synthetic event dispatch + DOM/network アサーションで実施
+(実 React handler を通る): client 遷移 (home↔view / view↔view / 戻る進む) が document 再読込
+無し (sentinel 生存) で成立、sidebar 開閉+localStorage 永続、`/api/snapshots` の GET/POST/DELETE と
+未知 `/api/*` の JSON 404 / 任意パスの SPA HTML、fullBleed の panel 描画 を確認済み。
+**削除の UX 全体** (base-ui dropdown/context-menu を開いて「削除」クリック) のみ headless では
+座標クリックできず未実機確認。構成要素は検証済み (DELETE 200 / nextSnapshotId・deleteSnapshot の
+unit test / router.navigate 実証 / 一覧 refresh の endpoint 200)。
