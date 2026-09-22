@@ -80,6 +80,9 @@ export const en = {
     listLabel: "Fonts",
     noMatches: "No matches",
   },
+  headingMinimap: {
+    label: "Page outline",
+  },
   treeDoc: {
     errors: {
       not_found: "File not found (it may have been deleted).",

@@ -27,6 +27,9 @@ export function Heading({ text, level = 2, href }: HeadingProps) {
   const Tag = `h${level}` as "h1" | "h2" | "h3";
   return (
     <Tag
+      // data-slot="heading" (and rendering to an h1/h2/h3 tag) is a contract HeadingMinimap
+      // reads from the DOM to build its scrollspy TOC — it never sees this component's props.
+      // Renaming or removing this attribute silently breaks that reader, not this one.
       data-slot="heading"
       className={cn("font-semibold tracking-tight", SIZE[level])}
     >
