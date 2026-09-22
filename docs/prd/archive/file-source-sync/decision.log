@@ -1,0 +1,172 @@
+# File Source Sync — 実装時の判断ログ
+
+PRD に明示されていないが実装で決めたこと、考慮したトレードオフを記録する。
+PRD/design の「設計フェーズで解決すべき」事項への回答もここに集約する。
+
+---
+
+## 1. dedup は既存の idempotency 機構に乗せる (store 無改修)
+
+`syokan <path>` の auto-wrap 時、CLI が `idempotencyKey = "filedoc:" + 絶対パス` を
+envelope に載せる。store ([server/store.ts](../../../server/store.ts)) は既に
+`idempotency: Record<string,string>` を `snapshots.json` に永続化しているので:
+
+- store は FileDoc を一切特別扱いしない (FR どおり「特別扱いしない」を満たす)。
+- idempotency map がディスクにあるため、**サーバ再起動をまたいで同じ URL に収束**する
+  (US-004 末尾) が自動的に成立する。
+
+content-hash で identity を決める案は採らなかった。store に「ファイル参照は内容ハッシュ」
+という別ロジックを持ち込み、かえって特別扱いになるため。
+
+## 2. 描画形式は拡張子推論のみ (`--as` なし) → 識別子 = 絶対パスのみ
+
+PRD から `--as` を落とした帰結として、描画形式は path の純関数になり、dedup の識別子は
+絶対パスだけで足りる (format を key に含めない)。推論は [src/lib/fileFormat.ts](../../../src/lib/fileFormat.ts)
+の 1 関数に集約し、CLI(将来 key に使う場合) と client render の双方が同じ規則を引く。
+
+推論規則 (FR-2/3):
+- `.md` / `.markdown` → markdown
+- `.json` → code (lang=json)
+- `.txt` / `.log` / 未知拡張子 / 拡張子なし → text
+
+**トレードオフ**: `.ts` / `.py` 等のソースは PRD の表に無いため text 扱いになる
+(ハイライトされない)。PRD FR-2 が `.json` のみを code と明記しているのに合わせた。
+code 対象拡張子を増やすのは将来の拡張で、本実装では PRD の表に忠実にした。
+
+## 3. 絶対パス解決は realpath → 失敗時 resolve (CLI)
+
+CLI は auto-wrap 時に `fs.realpathSync` で canonical 化する (symlink 解決・`..` 除去・
+case 解決)。`foo.md` と `./foo.md` とそのシンボリックリンクが同じ識別子に収束する。
+ファイルが存在しない場合は realpath が ENOENT で投げるので `path.resolve` にフォールバック
+する (post 自体は通し、view 側で「見つからない」を表示させる)。
+
+## 4. CLI の envelope 判定はスキーマ全体を import せず軽量ヒューリスティック
+
+`syokan <path>` で内容を JSON.parse できたとき、「envelope か否か」の判定に full schema
+(`itemSchema`) は使わない。catalog を import すると React component 群 (pierre/diffs 等) が
+CLI バンドルに混入するため。代わりに **`root` が `{ type: string, ... }` 形か** だけで判定する:
+
+- `{ root: { type: ... } }` 形 → envelope として従来どおり post (server が strict 検証)。
+  壊れた envelope は server が validation_failed を返し、利用者が誤りを見られる。
+- それ以外の JSON (配列 / `root` 無し / `.json` 設定ファイル) → FileDoc に wrap。
+
+markdown / log / txt は JSON.parse に失敗するので自動的に wrap 経路に入る。
+
+## 5. ファイル変更通知は SSE「変わった」のみ。内容は client が GET で取り直す
+
+`GET /api/files/watch?path=` が SSE を張り、変更時に `event: change` を送るだけ。内容は
+送らない。client は `change` を受けて `GET /api/files?path=` で取り直す。
+
+理由: US-003 のエラー状態 (欠落 / 巨大 / バイナリ / 非通常ファイル) を HTTP ステータス
+(404/413/415/422/403) に素直に乗せられ、初回 mount と更新で**読み出し経路が 1 本**に
+なる。SSE で内容を push すると、これらのエラー種別を SSE イベントとして再発明する羽目になる。
+
+## 6. watcher = f(購読)。store とは独立、SSE 接続が購読そのもの
+
+watcher ([server/fileSource.ts](../../../server/fileSource.ts)) は in-memory runtime state で
+永続化しない (Constraints)。SSE 接続の open で `subscribe`、切断 (ReadableStream の cancel)
+で `unsubscribe`。path ごとに refcount を持ち、0→1 で fs.watch 生成、1→0 で
+**release timeout 後**に close する。
+
+- **サーバ再起動の復元**: 再起動で watcher は消えるが、client の EventSource が自動再接続し
+  再 subscribe するので watcher が張り直る。`open` の再発火時に GET し直して最新内容も復元する。
+- **複数タブ**: 同じ path への N 接続 → refcount N → watcher 1 個。dedup(snapshot を畳む)
+  とは独立した別の collapse。
+
+## 7. rename 保存対策は file watch + re-arm (FR-5)
+
+エディタの「temp 書き込み → rename」は対象ファイルの inode を差し替えるため、素朴に
+`fs.watch(path)` したままだと差し替え後の変更を見失う。
+
+当初は「親ディレクトリを watch して basename でフィルタ」を実装したが、**Bun(macOS) は
+親ディレクトリ watch が中のファイルの content 変更で発火しない**ことを実機確認した
+(`fs.watch(dir)` は子ファイルの change を報告しない)。そのため方針転換し、**ファイル自身を
+watch し、`rename` イベント (inode 差し替え/削除のシグナル) を受けたら同じ path に watch を
+張り直す (re-arm)** 方式にした。これで「rename 保存 → 以降の in-place 書き込み」も追従する
+(実機で検証: rename + 後続 change が全て発火)。`error` イベント (監視中削除等) も re-arm を試みる。
+
+re-arm の隙間 (path が一瞬消える) を吸収するため 10ms 待ってから張り直す。連続イベント
+(rename + change 等) は per-path 50ms デバウンスで 1 回に束ね、client の連続 refetch を抑える。
+
+**残る限界 (MVP 受容)**: rename で「削除のみ (置換なし)」や、削除後しばらくして同じ path で
+再作成された場合、re-arm が ENOENT で張れず live 更新が止まりうる (PRD「削除後に再作成」は
+設計フェーズの未決事項)。view 側は GET で not_found を表示する。
+
+## 8. release timeout = 10 秒、size 上限 = 2 MiB
+
+- **release 10s** (US-002「タブを閉じてから一定時間内に解放」): reload は SSE を一旦切って
+  すぐ張り直すため、即解放だと watcher を毎回壊して作り直す。10s の猶予で reload を吸収しつつ
+  「閉じたら速やかに解放」も満たす。
+- **size 上限 2 MiB**: markdown / log 閲覧に十分で、巨大ファイルでブラウザを固めない上限。
+  超過は本文を返さず 413 を返す (FR-11)。
+
+どちらも環境変数等での外部設定はせず定数。必要になれば設定化する。
+
+## 9. バイナリ / 非 UTF-8 判定 (FR-12)
+
+read したバッファに NUL バイトが含まれる、または `TextDecoder('utf-8',{fatal:true})` が
+throw する場合に `not_text` (415) とする。読めない内容を画面に出さない。
+
+## 10. FileDoc は data 取得する初の catalog component
+
+既存 catalog は純 render だが、FileDoc は内部で fetch + EventSource を持つ container。
+視覚レビュー (Storybook) と test のため、表示部を presentational な `FileDocBody`
+(状態を props で受ける) に分離し、container は取得状態の管理に徹する。Storybook は
+server が無く fetch できないため、story は `FileDocBody` の各状態 (loading / 各エラー /
+markdown / text / code) を直接描画する。
+
+PlainText 同様、text/code の描画は最終的に pierre `File` を通るため、dev (StrictMode) の
+cold 初回潰れ ([既知の落とし穴](../../../AGENTS.md)) を継承する。本番では出ない。新たな問題は導入しない。
+
+## 11. ファイル読み出しにアクセス制御を課さない (FR-18, Constraints 受容)
+
+localhost bind + ユーザー権限を信頼境界とし、path の allowlist 等は設けない。任意 envelope
+(scheduled agent / paste 由来) が任意ファイルを参照しうるリスクは PRD Constraints で受容済み。
+
+## 12. server を 127.0.0.1 に bind する (信頼境界の実装上の前提を満たす)
+
+PRD Constraints は信頼境界を「localhost bind ＋ ユーザー権限」と置き、FR-18 はそれを根拠に
+ファイル読み出しへアクセス制御を課さない。しかし `Bun.serve` は hostname 未指定だと全
+インターフェース (0.0.0.0) に bind するため、新設の `/api/files` (任意パスを読む) が LAN から
+到達可能になり、PRD が前提とする localhost 境界が実装上崩れていた。`hostname: "127.0.0.1"`
+を明示して localhost のみに bind し、前提を実装で担保した。dev(portless)・compiled binary・CLI
+はいずれも localhost 経由なので影響なし。
+
+これは元々 0.0.0.0 だった既存挙動の変更だが、任意ファイル読み出しを足す本機能が PRD の
+localhost 前提に依存するため、本 PR の範囲として含める。
+
+## 13. レビュー指摘への対応
+
+`/code-review` の finder 指摘のうち、実バグ 2 件と防御 2 件を修正:
+- **reasonFromStatus**: エラー応答の body parse 失敗時に 404 以外 (413/415/422/403) の具体的
+  理由が generic "error" に落ちていた。status→reason のフォールバック表を追加。
+- **EventSource 復帰**: 初回 fetch 失敗 (server 一時ダウン) 後、最初の SSE `open` で再取得を
+  スキップし復帰しなかった。`open` のたびに load する形にし、初回接続でも復帰させる。
+- **localhost bind** (上記 #12)。
+- **SSE の `connection: keep-alive` 削除**: HTTP/2 等で forbidden な connection-specific
+  ヘッダで、SSE consumer には無意味。除去。
+
+修正しなかった指摘と理由 (by-design / 既述):
+- 任意パス読み出しの allowlist 無し → FR-18 で受容 (#11)。bind は #12 で localhost に限定済み。
+- re-arm 10ms 窓の取りこぼし / 削除→再作成で live 停止 → #7 の MVP 限界。notify が保存後に
+  発火し refetch で最新化されるため通常保存では実害なし。下記の re-arm リトライで rename 競合は
+  さらに堅牢化した。
+- `.json`→Code の dev StrictMode 潰れ → #10 (AGENTS.md 既知・dev のみ)。
+- looksLikeEnvelope で typo った envelope (root→roots) が FileDoc に包まれ validation_failed が
+  出ない → #4 のトレードオフ。中身が JSON なら code 表示され内容は見えるため受容。
+- stat+readFile の TOCTOU / 購読 closure の寿命 → 分類に stat が要る / cancel で解放され有界。
+
+### 2 巡目 (Copilot / Codex のレビューコメント)
+
+- **絶対パスのみ受け付ける**: `/api/files` と `/api/files/watch` は相対パスを 400 `invalid_path` で
+  弾く。相対パスは server CWD 依存で意図しないファイルを指すため (CLI は常に絶対パスを渡す)。
+- **re-arm をリトライ化** (Codex P1): rename 後の張り直しで置換先がまだ無い場合、上限回数
+  (5 回) まで再試行する。editor の atomic save (rename 直後に置換先が出現) に堅牢に追従する。
+  張り直せたら一度 notify して取りこぼし分を client に取り直させる。回数上限で「削除のみ」の
+  無限リトライは防ぐ。
+- **CLI の sniff を size 上限で打ち切る** (Codex P2): `syokan <path>` で 2 MiB を超えるファイルは
+  内容を読まずに即 FileDoc へ包む。巨大 log を CLI が丸ごと読んで OOM するのを防ぐ
+  (server 側が too_large を表示)。
+- **hostname の env 上書きは入れない** (Copilot 提案に対する判断): bind は localhost 固定とする。
+  PRD は localhost を信頼境界と定め「外部公開に変える場合は前提が崩れ再検討が要る」としており、
+  容易な env 上書きを置くより固定の方が PRD の意図に沿う。必要時は別 PR で明示的に扱う。
