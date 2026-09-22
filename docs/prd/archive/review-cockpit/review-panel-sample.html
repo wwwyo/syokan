@@ -1,0 +1,569 @@
+<title>Review Panel — PR #142 sample</title>
+<style>
+  :root{
+    --paper:#f7f6f2; --card:#ffffff; --line:#e5e2da; --line-strong:#d4d0c6;
+    --ink:#1c1b18; --muted:#716c62; --faint:#98938a;
+    --hi:#b42318; --hi-bg:#fdf1f0; --hi-line:#efc4bf;
+    --med:#b54708; --med-bg:#fdf5ec; --med-line:#eed3b4;
+    --ok:#067647; --ok-bg:#eefaf2; --ok-line:#bfe3cd;
+    --unk:#5d5a54; --unk-bg:#f1f0ec;
+    --act:#3451b2; --act-bg:#eef1fb;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  a{color:var(--act);text-decoration:none}
+  a:hover{text-decoration:underline}
+  button{font:inherit;cursor:pointer}
+  button:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--act);outline-offset:2px}
+  code{font-family:var(--mono);font-size:.92em;background:#efede7;border-radius:4px;padding:.08em .35em}
+
+  /* ── header ─────────────────────────── */
+  header{border-bottom:1px solid var(--line);background:var(--card)}
+  .hd-in{max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+  .hd-meta{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.01em}
+  .hd-meta b{color:var(--ink);font-weight:600}
+  .hd-title{flex-basis:100%;font-size:19px;font-weight:700;letter-spacing:-.01em;margin:-2px 0 0;text-wrap:balance}
+  .hd-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .stale{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:99px;background:var(--med-bg);border:1px solid var(--med-line);color:var(--med)}
+  .stale::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--med)}
+  .stale.fresh{background:var(--ok-bg);border-color:var(--ok-line);color:var(--ok)}
+  .stale.fresh::before{background:var(--ok)}
+  .btn{border:1px solid var(--line-strong);background:var(--card);border-radius:7px;padding:5px 12px;font-size:12.5px;font-weight:500;color:var(--ink)}
+  .btn:hover{border-color:var(--act);color:var(--act)}
+  .btn.primary{background:var(--act);border-color:var(--act);color:#fff}
+  .btn.primary:hover{opacity:.9;color:#fff}
+  .btn:disabled{opacity:.5;cursor:default}
+
+  /* ── verdict ─────────────────────────── */
+  .verdict{background:var(--hi-bg);border-bottom:1px solid var(--hi-line)}
+  .verdict-in{max-width:1200px;margin:0 auto;padding:12px 24px;display:flex;gap:12px;align-items:baseline}
+  .verdict-in p{margin:0;font-size:13.5px}
+
+  /* ── badges ─────────────────────────── */
+  .sev{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.04em;padding:2px 9px;border-radius:99px;white-space:nowrap}
+  .sev.high{background:var(--hi);color:#fff}
+  .sev.high-sus{background:var(--hi-bg);color:var(--hi);border:1.5px dashed var(--hi)}
+  .sev.med{background:var(--med-bg);color:var(--med);border:1px solid var(--med-line)}
+  .sev.none{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
+  .sev.unk{background:var(--unk-bg);color:var(--unk);border:1px solid var(--line-strong)}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:5px}
+  .tag.new{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-line)}
+  .tag.changed{background:var(--med-bg);color:var(--med);border:1px solid var(--med-line)}
+  .tag.removed{background:var(--hi-bg);color:var(--hi);border:1px solid var(--hi-line)}
+
+  /* ── layout ─────────────────────────── */
+  .wrap{max-width:1200px;margin:0 auto;padding:22px 24px 80px;display:grid;grid-template-columns:296px minmax(0,1fr);gap:26px;align-items:start}
+  aside{position:sticky;top:16px;display:flex;flex-direction:column;gap:14px}
+  @media(max-width:960px){.wrap{grid-template-columns:1fr}aside{position:static}}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .panel h2{margin:0 0 10px;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--faint);text-transform:uppercase}
+
+  /* cockpit table */
+  .cockpit{width:100%;border-collapse:collapse;font-size:12.5px}
+  .cockpit td{padding:7px 4px;border-top:1px solid var(--line);vertical-align:top}
+  .cockpit tr:first-child td{border-top:0}
+  .cockpit tr[data-jump]{cursor:pointer}
+  .cockpit tr[data-jump]:hover td{background:var(--act-bg)}
+  .cockpit .dim-name{font-weight:600;white-space:nowrap;padding-right:8px}
+  .cockpit .note{color:var(--muted);font-size:12px;line-height:1.55}
+  .probe-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10.5px;margin-top:4px;padding:2px 8px;border-radius:99px;border:1px solid var(--ok-line);background:var(--ok-bg);color:var(--ok)}
+  .probe-chip[data-state="stale"]{border-color:var(--med-line);background:var(--med-bg);color:var(--med)}
+  .probe-chip[data-state="running"]{border-color:var(--line-strong);background:var(--unk-bg);color:var(--unk)}
+
+  .filter{display:flex;gap:0;border:1px solid var(--line-strong);border-radius:7px;overflow:hidden;margin-top:12px}
+  .filter button{flex:1;border:0;background:var(--card);padding:5px 0;font-size:12px;color:var(--muted)}
+  .filter button[aria-pressed="true"]{background:var(--ink);color:#fff;font-weight:600}
+
+  /* progress */
+  .prog-bar{height:6px;border-radius:99px;background:var(--unk-bg);overflow:hidden;margin:8px 0 6px}
+  .prog-bar i{display:block;height:100%;width:0%;background:var(--ok);border-radius:99px;transition:width .3s}
+  .prog-label{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  .tri{font-size:12.5px;color:var(--muted)}
+  .tri b{color:var(--ink);font-variant-numeric:tabular-nums}
+
+  /* ── main cards ─────────────────────── */
+  main{display:flex;flex-direction:column;gap:20px;min-width:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 24px;scroll-margin-top:16px}
+  .card.flash{animation:flash 1.2s}
+  @keyframes flash{0%,60%{box-shadow:0 0 0 3px var(--act-bg),0 0 0 4px var(--act)}100%{box-shadow:none}}
+  .card-hd{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-bottom:6px}
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--faint);text-transform:uppercase}
+  .card h3{margin:2px 0 8px;font-size:17px;font-weight:700;letter-spacing:-.01em;flex-basis:100%;text-wrap:balance}
+  .card p{margin:.5em 0;max-width:68ch}
+  .card ul{margin:.4em 0;padding-left:1.3em}
+  .card li{margin:.25em 0}
+  .checkoff{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);user-select:none;cursor:pointer;white-space:nowrap}
+  .checkoff input{accent-color:var(--ok);width:15px;height:15px}
+  .card[data-checked="1"]{border-color:var(--ok-line);background:#fdfdfb;padding-top:14px;padding-bottom:14px}
+  .card[data-checked="1"] .card-hd::after{content:"確認済み";order:-1;font-family:var(--mono);font-size:10.5px;color:var(--ok);background:var(--ok-bg);border:1px solid var(--ok-line);border-radius:99px;padding:2px 8px}
+  /* 確認済み = headline 1 行に畳む。見出しクリックで一時的に開き直せる */
+  .card[data-checked="1"]:not([data-open="1"]) > :not(.card-hd):not(h3){display:none}
+  .card[data-checked="1"] h3{cursor:pointer;font-size:15px;color:var(--muted);margin-bottom:0}
+  .card[data-checked="1"] h3::before{content:"▸ ";font-size:11px;color:var(--faint)}
+  .card[data-checked="1"][data-open="1"] h3::before{content:"▾ "}
+
+  .why{margin:14px 0;padding:10px 14px;border-left:3px solid var(--line-strong);background:#faf9f5;border-radius:0 8px 8px 0;font-size:13px;color:#44413b}
+  .why b:first-child{color:var(--ink)}
+  .detect{font-family:var(--mono);font-size:11.5px;color:var(--muted);background:#f4f2ec;border-radius:7px;padding:8px 12px;overflow-x:auto;white-space:pre;margin:10px 0 0}
+
+  /* disclosure (Collapsible) */
+  .disc>button{display:flex;align-items:center;gap:7px;width:100%;text-align:left;border:0;background:none;padding:8px 0 4px;font-size:12.5px;font-weight:600;color:var(--act)}
+  .disc>button::before{content:"▸";font-size:10px;transition:transform .15s}
+  .disc>button[aria-expanded="true"]::before{transform:rotate(90deg)}
+  .disc>div{display:none}
+  .disc>button[aria-expanded="true"]+div{display:block}
+
+  /* probe row */
+  .probe{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:12px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:#fcfbf8}
+  .probe .lamp{width:9px;height:9px;border-radius:50%;background:var(--ok);flex-shrink:0}
+  .probe[data-state="stale"] .lamp{background:var(--med)}
+  .probe[data-state="running"] .lamp{background:var(--faint);animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .probe code{background:none;padding:0;font-size:11.5px;color:var(--muted)}
+  .probe .meta{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-left:auto;font-variant-numeric:tabular-nums}
+  .probe .btn{padding:2px 9px;font-size:11px}
+
+  /* code + diff */
+  .codeblock{border:1px solid var(--line);border-radius:9px;overflow:hidden;margin:10px 0;font-family:var(--mono);font-size:12.5px;line-height:1.75}
+  .codeblock .fname{display:flex;gap:8px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted);background:#fcfbf8}
+  .codeblock pre{margin:0;padding:10px 0;overflow-x:auto;background:#fff}
+  .codeblock .ln{display:block;padding:0 14px;white-space:pre}
+  .ln.add{background:#e9f7ee}
+  .ln.del{background:#fdeeec}
+  .ln.add::before{content:"+";color:var(--ok);margin-right:8px}
+  .ln.del::before{content:"−";color:var(--hi);margin-right:8px}
+  .ln.ctx::before{content:" ";margin-right:8px}
+  .ln .hl-add{background:#c7ecd4;border-radius:3px;padding:0 2px}
+  .ln .hl-del{background:#f6cfc9;border-radius:3px;padding:0 2px}
+  .tk-k{color:#8250df}.tk-t{color:#0550ae}.tk-s{color:#116329}.tk-p{color:#953800}.tk-c{color:#6e7781}
+
+  /* graph */
+  figure{margin:14px 0}
+  figure figcaption{font-size:13px;font-weight:700;margin-bottom:6px}
+  figure svg{display:block;width:100%;height:auto;background:#fcfbf8;border:1px solid var(--line);border-radius:9px}
+  .fig-scroll{overflow-x:auto}
+
+  /* permission bars */
+  .bars{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:center;margin:12px 0;max-width:560px}
+  .bars .lbl{font-size:12px;color:var(--muted);white-space:nowrap}
+  .bar{height:16px;border-radius:4px;background:var(--unk-bg);position:relative;overflow:hidden}
+  .bar i{position:absolute;inset:0;width:var(--w);background:#9aa7d9;border-radius:4px}
+  .bar i.over{background:var(--hi);left:var(--from);width:var(--ow)}
+  .bars-legend{grid-column:2;font-size:11.5px;color:var(--muted)}
+
+  /* author reply (PromptButton result) */
+  .author-reply{margin-top:12px;padding:12px 14px;border:1px solid var(--act);border-radius:9px;background:var(--act-bg);font-size:13px}
+  .author-reply .who{font-family:var(--mono);font-size:10.5px;color:var(--act);letter-spacing:.08em;margin-bottom:4px}
+
+  /* files */
+  .filelist{font-family:var(--mono);font-size:11.5px;line-height:1.9;color:var(--muted);background:#fcfbf8;border:1px solid var(--line);border-radius:8px;padding:10px 14px;overflow-x:auto;white-space:pre}
+
+  /* comments */
+  .comment{border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin:10px 0}
+  .comment .at{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  textarea{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:9px 12px;font:inherit;font-size:13px;min-height:70px;resize:vertical;background:var(--card);color:var(--ink)}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(8px);background:var(--ink);color:#fff;font-size:13px;padding:9px 18px;border-radius:9px;opacity:0;pointer-events:none;transition:.25s}
+  .toast.show{opacity:1;transform:translateX(-50%)}
+
+  footer{max-width:1200px;margin:0 auto;padding:0 24px 40px;font-size:11.5px;color:var(--faint);font-family:var(--mono)}
+
+  body[data-filter="high"] .card[data-sev="med"],
+  body[data-filter="high"] .card[data-sev="what"],
+  body[data-filter="high"] .card[data-sev="files"]{display:none}
+  body[data-filter="high"] .cockpit tr[data-sev="med"],
+  body[data-filter="high"] .cockpit tr[data-sev="none"]{opacity:.35}
+
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+
+<header>
+  <div class="hd-in">
+    <span class="hd-meta"><b>wwwyo/kiroku</b> · PR #142 · <code>feat/share-link</code> · 14 commits · <b>+2,841 −312</b> · 56 files</span>
+    <div class="hd-right">
+      <span class="stale" id="staleChip">生成: <b>&nbsp;9be21c4</b>&nbsp;· branch は 2 commits 先</span>
+      <button class="btn" id="rerunAll">全 probe を再実行</button>
+    </div>
+    <h1 class="hd-title">共有リンクで note の閲覧権限を第三者に委譲できるようにする</h1>
+  </div>
+</header>
+
+<div class="verdict">
+  <div class="verdict-in">
+    <span class="sev high">総合 High</span>
+    <p><b>認可の形が変わる PR。</b>閲覧判定が owner 直照合から policy 関数に置き換わり、新しい永続テーブル <code>share_links</code> と session claim が増える。2,841 行中 2,204 行は確認済みの生成物で目視不要 — 人間が見るべきは手書き 7 files、特に §7 と §6。</p>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- ═══════════ cockpit rail ═══════════ -->
+  <aside>
+    <div class="panel">
+      <h2>Risk Summary</h2>
+      <table class="cockpit">
+        <tr data-jump="card-perm" data-sev="high" tabindex="0">
+          <td class="dim-name">Permission</td>
+          <td>
+            <span class="sev high-sus">High・疑い</span>
+            <div class="note">owner 直照合 guard 3 箇所が削除され <code>canView()</code> に集約。越権の可能性を疑い扱い</div>
+          </td>
+        </tr>
+        <tr data-jump="card-data" data-sev="high" tabindex="0">
+          <td class="dim-name">Data Model</td>
+          <td>
+            <span class="sev high">High</span>
+            <div class="note">新テーブル <code>share_links</code> + session claim の shape 変更。公開後は戻せない</div>
+          </td>
+        </tr>
+        <tr data-jump="card-impact" data-sev="med" tabindex="0">
+          <td class="dim-name">Impact</td>
+          <td>
+            <span class="sev med">Med</span>
+            <div class="note"><code>resolveViewer()</code> middleware 変更、呼び出し元 23+ 箇所（grep 下限）</div>
+          </td>
+        </tr>
+        <tr data-sev="none">
+          <td class="dim-name">Architecture</td>
+          <td>
+            <span class="sev none">None</span>
+            <div class="note">層をまたぐ新規 import なし</div>
+            <span class="probe-chip" data-state="stale" data-probe><i>●</i><span class="p-label">stale · 2 commits 未検証</span></span>
+          </td>
+        </tr>
+        <tr data-jump="card-unk" data-sev="unk" tabindex="0">
+          <td class="dim-name">未確認</td>
+          <td>
+            <span class="sev unk">未確認</span>
+            <div class="note">share token が log に乗る経路をトレースできていない</div>
+          </td>
+        </tr>
+      </table>
+      <div class="filter" role="group" aria-label="card filter">
+        <button aria-pressed="true" data-filter="all">すべて</button>
+        <button aria-pressed="false" data-filter="high">High のみ</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>レビュー進捗</h2>
+      <div class="prog-bar"><i id="progFill"></i></div>
+      <div class="prog-label"><span id="progText">High 2 件中 0 件</span> 確認済み</div>
+    </div>
+
+    <div class="panel">
+      <h2>Files Triage</h2>
+      <p class="tri" style="margin:0">手書き <b>7</b> · 生成物 <b>40</b>（provenance 確認済） · test <b>9</b><br>
+      <a href="#card-files" data-jump="card-files">→ 全 56 files の一覧</a></p>
+    </div>
+  </aside>
+
+  <!-- ═══════════ main ═══════════ -->
+  <main>
+
+    <!-- §1 What -->
+    <section class="card" data-sev="what" id="card-what">
+      <div class="card-hd"><span class="eyebrow">§1 · What</span></div>
+      <h3>閲覧判定を 1 つの policy に集約し、その上に共有リンクを載せる</h3>
+      <p>今日の kiroku は「note は owner だけが読める」。この PR は <b>share link</b>（URL トークンを知る人に閲覧を許すリンク）を導入し、そのために route ごとに散っていた owner 照合を <code>canView()</code> 1 箇所に集約する。</p>
+
+      <figure>
+        <figcaption>Before: 閲覧判定が route ごとに 3 実装、根拠はすべて owner 直照合</figcaption>
+        <div class="fig-scroll"><svg viewBox="0 0 680 190" role="img" aria-label="変更前の依存図">
+          <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" fill="#a39f95"/></marker></defs>
+          <g font-family="ui-monospace,Menlo,monospace" font-size="11" text-anchor="middle">
+            <rect x="30" y="28" width="180" height="30" rx="6" fill="#fff" stroke="#cfccc4"/><text x="120" y="47" fill="#1c1b18">GET /notes/:id</text>
+            <rect x="250" y="28" width="180" height="30" rx="6" fill="#fff" stroke="#cfccc4"/><text x="340" y="47" fill="#1c1b18">GET /notes/:id/export</text>
+            <rect x="470" y="28" width="180" height="30" rx="6" fill="#fff" stroke="#cfccc4"/><text x="560" y="47" fill="#1c1b18">GET /search</text>
+            <rect x="30" y="120" width="180" height="30" rx="6" fill="#fdf1f0" stroke="#c0392b"/><text x="120" y="139" fill="#b42318">requireOwner()</text>
+            <rect x="250" y="120" width="180" height="30" rx="6" fill="#fdf1f0" stroke="#c0392b"/><text x="340" y="139" fill="#b42318">ownerGuard()</text>
+            <rect x="470" y="120" width="180" height="30" rx="6" fill="#fdf1f0" stroke="#c0392b"/><text x="560" y="139" fill="#b42318">inline ownerId 比較</text>
+            <line x1="120" y1="58" x2="120" y2="117" stroke="#a39f95" marker-end="url(#ar)"/>
+            <line x1="340" y1="58" x2="340" y2="117" stroke="#a39f95" marker-end="url(#ar)"/>
+            <line x1="560" y1="58" x2="560" y2="117" stroke="#a39f95" marker-end="url(#ar)"/>
+          </g>
+        </svg></div>
+      </figure>
+
+      <figure>
+        <figcaption>After: 判定は canView() の 1 箇所、share_links が新しい根拠として加わる</figcaption>
+        <div class="fig-scroll"><svg viewBox="0 0 680 240" role="img" aria-label="変更後の依存図">
+          <g font-family="ui-monospace,Menlo,monospace" font-size="11" text-anchor="middle">
+            <rect x="30" y="20" width="180" height="30" rx="6" fill="#fff" stroke="#cfccc4"/><text x="120" y="39" fill="#1c1b18">GET /notes/:id</text>
+            <rect x="250" y="20" width="180" height="30" rx="6" fill="#fff" stroke="#cfccc4"/><text x="340" y="39" fill="#1c1b18">GET /notes/:id/export</text>
+            <rect x="470" y="20" width="180" height="30" rx="6" fill="#fff" stroke="#cfccc4"/><text x="560" y="39" fill="#1c1b18">GET /search</text>
+            <rect x="240" y="108" width="200" height="32" rx="6" fill="#f0faf4" stroke="#2f8a57" stroke-dasharray="5 3"/><text x="340" y="128" fill="#067647">canView(viewer, note) ＋新規</text>
+            <rect x="120" y="192" width="160" height="30" rx="6" fill="#fff" stroke="#cfccc4"/><text x="200" y="211" fill="#1c1b18">notes.owner_id</text>
+            <rect x="400" y="192" width="160" height="30" rx="6" fill="#f0faf4" stroke="#2f8a57" stroke-dasharray="5 3"/><text x="480" y="211" fill="#067647">share_links ＋新規</text>
+            <line x1="120" y1="50" x2="310" y2="105" stroke="#a39f95" marker-end="url(#ar)"/>
+            <line x1="340" y1="50" x2="340" y2="105" stroke="#a39f95" marker-end="url(#ar)"/>
+            <line x1="560" y1="50" x2="372" y2="105" stroke="#a39f95" marker-end="url(#ar)"/>
+            <line x1="310" y1="140" x2="210" y2="189" stroke="#a39f95" marker-end="url(#ar)"/>
+            <line x1="372" y1="140" x2="470" y2="189" stroke="#2f8a57" stroke-dasharray="5 3" marker-end="url(#ar)"/>
+          </g>
+        </svg></div>
+      </figure>
+
+      <p style="margin-top:14px">この PR 特有の言葉:</p>
+      <ul>
+        <li><b>share link</b> — note ごとに発行される閲覧用 URL。トークンを知っていれば未ログインでも読める</li>
+        <li><b>link-viewer</b> — share link 経由の閲覧者に付く新しい role。session claim に載る</li>
+      </ul>
+    </section>
+
+    <!-- §7 Permission -->
+    <section class="card" data-sev="high" id="card-perm" data-high>
+      <div class="card-hd">
+        <span class="eyebrow">§7 · Permission</span>
+        <span class="sev high-sus">High・疑い</span>
+        <label class="checkoff"><input type="checkbox" data-check>確認した</label>
+      </div>
+      <h3>owner 直照合の guard 3 箇所が削除され、canView() の 1 実装に置き換わった</h3>
+      <p>集約自体は改善だが、<b>canView() が誤ると 3 route が同時に破れる</b>構造になった。さらに link-viewer が意図（read のみ）を超えて <code>/export</code> を通過できるように見える。</p>
+
+      <div class="codeblock">
+        <div class="fname"><span class="tag removed">REMOVED</span> guard の削除 · <span>src/routes/notes.ts</span></div>
+        <pre><span class="ln del">router.get(<span class="tk-s">'/api/notes/:id'</span>, <span class="hl-del">requireOwner</span>, getNote)</span><span class="ln add">router.get(<span class="tk-s">'/api/notes/:id'</span>, <span class="hl-add">resolveViewer</span>, getNote)</span><span class="ln ctx"></span><span class="ln del"><span class="tk-k">if</span> (note.ownerId !== session.userId) <span class="tk-k">throw new</span> <span class="tk-t">Forbidden</span>()</span><span class="ln add"><span class="tk-k">if</span> (!<span class="hl-add">canView(viewer, note)</span>) <span class="tk-k">throw new</span> <span class="tk-t">Forbidden</span>()</span></pre>
+      </div>
+
+      <div class="bars" role="img" aria-label="意図した権限と実際に通る範囲の差">
+        <span class="lbl">意図した scope（read）</span>
+        <div class="bar"><i style="--w:38%"></i></div>
+        <span class="lbl">link-viewer が実際に通る route</span>
+        <div class="bar"><i style="--w:38%"></i><i class="over" style="--from:38%;--ow:26%"></i></div>
+        <span class="bars-legend">赤の区間 = <code>/export</code> と <code>/search</code>（scope 判定が canView に未実装の疑い）＝越権</span>
+      </div>
+
+      <div class="disc">
+        <button aria-expanded="false">証拠を展開 — canView() 実装と scope の扱い（2 hunks）</button>
+        <div>
+          <div class="codeblock">
+            <div class="fname">src/policies/canView.ts · <span style="font-family:var(--mono)">9be21c4</span></div>
+            <pre><span class="ln add"><span class="tk-k">export function</span> canView(viewer: <span class="tk-t">Viewer</span>, note: <span class="tk-t">Note</span>): <span class="tk-t">boolean</span> {</span><span class="ln add">  <span class="tk-k">if</span> (viewer.userId === note.ownerId) <span class="tk-k">return true</span></span><span class="ln add">  <span class="tk-k">return</span> viewer.grants.some(g =&gt; g.noteId === note.id)  <span class="tk-c">// ← scope を見ていない</span></span><span class="ln add">}</span></pre>
+          </div>
+          <p style="font-size:13px;color:var(--muted)"><code>g.scope === 'read'</code> の照合が無いため、export route も同じ判定で通過する。確証には <code>/export</code> handler 側の追加 guard の有無の目視が必要（見つけられなかった＝疑い止まり）。</p>
+        </div>
+      </div>
+
+      <div class="why"><b>なぜ危険か（前提から）</b>: 認可の誤りは機能バグと違い、<b>気づかれないまま成立する</b>（正規ユーザーの画面は正常に見える）。共有トークンは URL として出回るので、公開後に scope を締め直しても既に配られたリンクには遡及しにくい。</div>
+
+      <div class="probe" data-state="stale">
+        <span class="lamp"></span>
+        <code>pr-diff.sh -- src/routes src/policies | grep -E '^[-+].*(require|guard|scope)'</code>
+        <span class="meta p-time">9be21c4 時点 · 3 削除 / 2 追加</span>
+        <button class="btn" data-rerun>再実行</button>
+      </div>
+
+      <button class="btn" data-ask="perm" style="margin-top:12px">作者に聞く: export の scope 判定はどこ？</button>
+      <div data-reply="perm"></div>
+    </section>
+
+    <!-- §6 Data Model -->
+    <section class="card" data-sev="high" id="card-data" data-high>
+      <div class="card-hd">
+        <span class="eyebrow">§6 · Data Model</span>
+        <span class="sev high">High</span>
+        <label class="checkoff"><input type="checkbox" data-check>確認した</label>
+      </div>
+      <h3>share_links テーブルが新設され、session claim の shape が変わる</h3>
+
+      <p style="margin-bottom:4px"><span class="tag new">NEW</span>&nbsp; <code>share_links</code> · migrations/0042_share_links.sql</p>
+      <div class="codeblock">
+        <pre><span class="ln add"><span class="tk-k">CREATE TABLE</span> share_links (</span><span class="ln add">  id          <span class="tk-t">uuid</span> <span class="tk-k">PRIMARY KEY DEFAULT</span> gen_random_uuid(),</span><span class="ln add">  note_id     <span class="tk-t">uuid</span> <span class="tk-k">NOT NULL REFERENCES</span> notes(id) <span class="tk-k">ON DELETE CASCADE</span>,</span><span class="ln add">  token_hash  <span class="tk-t">text</span> <span class="tk-k">NOT NULL UNIQUE</span>,</span><span class="ln add">  scope       <span class="tk-t">text</span> <span class="tk-k">NOT NULL DEFAULT</span> <span class="tk-s">'read'</span>,</span><span class="ln add">  expires_at  <span class="tk-t">timestamptz</span>,  <span class="tk-c">-- NULL = 無期限</span></span><span class="ln add">  created_by  <span class="tk-t">uuid</span> <span class="tk-k">NOT NULL REFERENCES</span> users(id)</span><span class="ln add">);</span></pre>
+      </div>
+
+      <p style="margin:14px 0 4px"><span class="tag changed">CHANGED</span>&nbsp; <code>SessionClaims</code> · src/auth/types.ts</p>
+      <div class="codeblock">
+        <pre><span class="ln ctx"><span class="tk-k">export type</span> <span class="tk-t">SessionClaims</span> = {</span><span class="ln ctx">  userId: <span class="tk-t">string</span></span><span class="ln del">  role: <span class="tk-s">'owner'</span> | <span class="tk-s">'member'</span></span><span class="ln add">  role: <span class="tk-s">'owner'</span> | <span class="tk-s">'member'</span> | <span class="hl-add"><span class="tk-s">'link-viewer'</span></span></span><span class="ln add">  <span class="hl-add">grantedBy?: <span class="tk-t">ShareLinkId</span></span></span><span class="ln ctx">  exp: <span class="tk-t">number</span></span><span class="ln ctx">}</span></pre>
+      </div>
+
+      <ul>
+        <li><code>expires_at</code> が nullable = <b>無期限リンクが仕様として存在する</b>。ここは製品判断（→ §8 相当の未決事項）</li>
+        <li>token は hash 保存で平文残りなし（確認: migration と <code>createShareLink()</code> を目視）</li>
+      </ul>
+
+      <div class="why"><b>なぜ「戻せない」のか（前提から)</b>: 発行済み share link は URL としてユーザーの手元（メール・Slack）に残る。テーブルや claim の形を後から変えると、<b>配布済みのリンク全部を無効化するか互換層を永久に持つか</b>の二択になる。コードと違い revert が他人の手元まで届かない。</div>
+
+      <div class="probe" data-state="stale">
+        <span class="lamp"></span>
+        <code>pr-diff.sh --name-only -- 'migrations/**' '*.prisma' → 2 files（上記のみ）</code>
+        <span class="meta p-time">9be21c4 時点 · pass</span>
+        <button class="btn" data-rerun>再実行</button>
+      </div>
+    </section>
+
+    <!-- §4 Impact -->
+    <section class="card" data-sev="med" id="card-impact">
+      <div class="card-hd">
+        <span class="eyebrow">§4 · Impact</span>
+        <span class="sev med">Med</span>
+        <label class="checkoff"><input type="checkbox" data-check>確認した</label>
+      </div>
+      <h3>resolveViewer() が全 API route の前段に入る</h3>
+      <p>既存の <code>resolveSession()</code> を置き換える形で、<b>23 箇所以上</b>（grep の text 一致による下限。DI 経由は含まれない）の route がこの middleware を通る。戻り値の型が <code>Session → Viewer</code> に変わったが、旧フィールドは全て保持されているため後方互換。</p>
+      <div class="disc">
+        <button aria-expanded="false">呼び出し元 23 箇所の一覧と検知コマンド</button>
+        <div>
+          <div class="detect">git grep -n "resolveViewer\|resolveSession" -- 'src/**/*.ts' | wc -l  # → 23（下限）
+tsc --noEmit  # → 0 errors（シグネチャ互換の機械的確認）</div>
+          <div class="filelist" style="margin-top:8px">src/routes/notes.ts        4 箇所
+src/routes/search.ts       2 箇所
+src/routes/export.ts       3 箇所
+src/routes/settings.ts     6 箇所
+src/jobs/digest.ts         1 箇所   ← job からの利用。HTTP 外で viewer が成立するか要目視
+…ほか 7 files</div>
+        </div>
+      </div>
+      <div class="why"><b>なぜ Med か</b>: 波及は広いが型互換で、<code>tsc</code> が通ることを機械確認済み。唯一 job からの利用だけ実行 context が違うため上の一覧に印を付けた。</div>
+    </section>
+
+    <!-- 未確認 -->
+    <section class="card" data-sev="high" id="card-unk" data-high>
+      <div class="card-hd">
+        <span class="eyebrow">§7 · Permission — 未確認</span>
+        <span class="sev unk">未確認</span>
+        <label class="checkoff"><input type="checkbox" data-check>確認した</label>
+      </div>
+      <h3>share token が log / trace に乗る経路を追い切れていない</h3>
+      <p>token は URL query（<code>?t=…</code>）で運ばれる。access log・APM の URL 記録・エラー時の request dump のどれかに<b>平文で乗る可能性</b>があるが、logger 設定が infra repo 側にあり今回トレースできなかった。「無い」とは言えないため未確認として出す。</p>
+      <p><b>目視してほしい箇所</b>: <code>infra/logging/</code> の request logger 設定、Sentry の <code>beforeSend</code>。</p>
+      <button class="btn" data-ask="unk" style="margin-top:4px">作者に聞く: query でなく path/header にしなかった理由は？</button>
+      <div data-reply="unk"></div>
+    </section>
+
+    <!-- files -->
+    <section class="card" data-sev="files" id="card-files">
+      <div class="card-hd"><span class="eyebrow">§3 · Files Changed</span></div>
+      <h3>56 files 中、人間が見るべきは 7 files</h3>
+      <p>生成物 40 files は provenance 確認済み（<code>prisma generate</code> / <code>openapi-gen</code> を再実行して一致）。</p>
+      <ul style="font-size:13px">
+        <li><code>src/policies/canView.ts</code> — 新設の認可判定そのもの（→ §7）</li>
+        <li><code>src/routes/notes.ts</code> — guard 差し替え 3 箇所（→ §7）</li>
+        <li><code>migrations/0042_share_links.sql</code> — 新テーブル（→ §6）</li>
+        <li><code>src/auth/types.ts</code> — claim の shape 変更（→ §6）</li>
+        <li><code>src/middleware/resolveViewer.ts</code> — 全 route の前段（→ §4）</li>
+        <li><code>src/services/shareLink.ts</code> — token 発行・hash 化</li>
+        <li><code>src/routes/share.ts</code> — 新規公開 endpoint</li>
+      </ul>
+      <div class="disc">
+        <button aria-expanded="false">全 56 files の完全一覧（coverage 保証）</button>
+        <div><div class="filelist">src/policies/canView.ts                手書き   +38  −0
+src/routes/notes.ts                    手書き   +21 −34
+src/routes/share.ts                    手書き   +66  −0
+src/middleware/resolveViewer.ts        手書き   +48 −12
+src/auth/types.ts                      手書き   +4   −1
+src/services/shareLink.ts              手書き   +92  −0
+migrations/0042_share_links.sql        手書き   +9   −0
+src/generated/prisma/** (31 files)     生成物   +1,890 −198
+src/generated/api-types.ts (9 files)   生成物   +314  −22
+test/** (9 files)                      test     +359  −45</div></div>
+      </div>
+    </section>
+
+    <!-- comments -->
+    <section class="card" data-sev="what" id="card-comments">
+      <div class="card-hd"><span class="eyebrow">§9 · コメント</span></div>
+      <h3>レビューコメント</h3>
+      <div class="comment">
+        <div class="at">src/policies/canView.ts:L3 · あなた · 5 分前</div>
+        <p style="margin:.3em 0">scope 照合が無いのは意図的？export を read scope で許すなら、その判断を canView のコメントに残してほしい。</p>
+      </div>
+      <textarea placeholder="行や shape に anchor したコメントを書く…"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn primary" id="sendReview">GitHub に review として送信</button>
+        <button class="btn" id="draftReview">下書き保存</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer>この画面は仮想の catalog 組み合わせで構成: Stack(sticky) · Table · Badge · Collapsible · Graph · Diff · Probe · Checklist · PromptButton — review 専用 component は 0 個</footer>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+  const $ = (s, el=document) => el.querySelector(s);
+  const $$ = (s, el=document) => [...el.querySelectorAll(s)];
+  const toast = msg => { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove('show'), 2400); };
+
+  // anchor jump (universal id + Link)
+  $$('[data-jump]').forEach(el => {
+    const go = () => { const target = $('#'+el.dataset.jump); if(!target) return;
+      target.scrollIntoView({behavior:'smooth', block:'start'});
+      target.classList.remove('flash'); void target.offsetWidth; target.classList.add('flash'); };
+    el.addEventListener('click', e => { e.preventDefault(); go(); });
+    el.addEventListener('keydown', e => { if(e.key==='Enter') go(); });
+  });
+
+  // filter (Table faceting)
+  $$('.filter button').forEach(b => b.addEventListener('click', () => {
+    $$('.filter button').forEach(x => x.setAttribute('aria-pressed', x===b));
+    document.body.dataset.filter = b.dataset.filter;
+  }));
+
+  // Collapsible
+  $$('.disc > button').forEach(b => b.addEventListener('click', () =>
+    b.setAttribute('aria-expanded', b.getAttribute('aria-expanded') !== 'true')));
+
+  // Checklist (persisted node state — mock)
+  const highCards = $$('.card[data-high]');
+  const updateProg = () => {
+    const done = highCards.filter(c => c.dataset.checked === '1').length;
+    $('#progFill').style.width = (done / highCards.length * 100) + '%';
+    $('#progText').textContent = `High ${highCards.length} 件中 ${done} 件`;
+  };
+  $$('[data-check]').forEach(cb => cb.addEventListener('change', () => {
+    const card = cb.closest('.card');
+    card.dataset.checked = cb.checked ? '1' : '0';
+    delete card.dataset.open;           // 確認と同時に畳む
+    updateProg();
+  }));
+  // 確認済み card は見出しクリックで一時的に開閉できる
+  $$('.card h3').forEach(h => h.addEventListener('click', () => {
+    const card = h.closest('.card');
+    if (card.dataset.checked === '1')
+      card.dataset.open = card.dataset.open === '1' ? '0' : '1';
+  }));
+  updateProg();
+
+  // Probe re-run
+  const runProbe = el => new Promise(res => {
+    el.dataset.state = 'running';
+    const label = $('.p-label', el) || $('.p-time', el);
+    if (label) label.textContent = '実行中…';
+    setTimeout(() => { el.dataset.state = 'pass';
+      if (label) label.textContent = 'たった今 · b3f10e2 で pass';
+      res(); }, 900);
+  });
+  $$('[data-rerun]').forEach(b => b.addEventListener('click', () => runProbe(b.closest('.probe'))));
+  $('#rerunAll').addEventListener('click', async () => {
+    await Promise.all([...$$('.probe'), ...$$('.probe-chip[data-probe]')].map(runProbe));
+    const chip = $('#staleChip'); chip.classList.add('fresh');
+    chip.innerHTML = '全 probe を <b>&nbsp;b3f10e2</b>&nbsp;（branch 先端）で再検証済み';
+    toast('4 件の probe を branch 先端で再実行しました');
+  });
+
+  // PromptButton → author round-trip (mock)
+  const replies = {
+    perm: 'scope 照合は意図的に第2弾へ回しました…と言いたいところですが、ご指摘の通り /export が read scope で通るのは見落としです。canView に scope 引数を足して export は scope:"export" を要求する形に直します。',
+    unk: 'path にすると note id とトークンが同一 URL 階層に並んで CDN cache key の扱いが面倒だったため query にしました。log 側の masking は infra repo の logger 設定に依存しており、この PR 単体では保証できません — 未確認のままが正しいです。'
+  };
+  $$('[data-ask]').forEach(b => b.addEventListener('click', () => {
+    b.disabled = true; b.textContent = 'セッションに送信中…';
+    setTimeout(() => {
+      b.textContent = '作者に聞く（送信済み）';
+      const zone = $(`[data-reply="${b.dataset.ask}"]`);
+      const d = document.createElement('div'); d.className = 'author-reply';
+      d.innerHTML = `<div class="who">AUTHOR AGENT · claude session</div>${replies[b.dataset.ask]}`;
+      zone.appendChild(d);
+    }, 1100);
+  }));
+
+  // review submit (mock)
+  $('#sendReview').addEventListener('click', () => toast('gh api で review (COMMENT ×2) を送信しました — mock'));
+  $('#draftReview').addEventListener('click', () => toast('下書きを保存しました — mock'));
+</script>
