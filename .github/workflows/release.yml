@@ -54,6 +54,12 @@ jobs:
           name: binaries
           path: dist
       - run: chmod +x "dist/${{ matrix.binary }}"
+      # Execution alone can't catch a corrupt signature: macOS ≤26 launches binaries whose
+      # adhoc signature fails `codesign --verify`, while macOS 27 SIGKILLs them at exec.
+      # Gate on the verifier so a bun MachoSigner regression (oven-sh/bun#29272, #39837)
+      # can never ship again. Verify both darwin binaries — smoke only runs arm64.
+      - if: matrix.os == 'macos-latest'
+        run: codesign --verify --verbose dist/syokan-darwin-*
       - run: bun apps/syokan/scripts/smoke.ts "dist/${{ matrix.binary }}"
 
   publish:
