@@ -126,8 +126,9 @@ export const graphPropsSchema = z
       }
     });
     // dagre's setEdge(from, to) collapses same-pair duplicates with no name, so allowing
-    // them would only yield overlapping renders with no benefit.
-    const seenEdges = new Set<string>();
+    // them would only yield overlapping renders with no benefit. Compared pairwise rather
+    // than via a "from->to" string key: node ids may themselves contain "->".
+    const seenEdges = new Map<string, Set<string>>();
     value.edges?.forEach((edge, i) => {
       for (const key of ["from", "to"] as const) {
         if (!ids.has(edge[key])) {
@@ -138,15 +139,18 @@ export const graphPropsSchema = z
           });
         }
       }
-      const pairKey = `${edge.from}->${edge.to}`;
-      if (seenEdges.has(pairKey)) {
+      const targets = seenEdges.get(edge.from);
+      if (targets?.has(edge.to)) {
         ctx.addIssue({
           code: "custom",
           path: ["edges", i],
           message: `duplicate edge "${edge.from}" -> "${edge.to}"`,
         });
+      } else if (targets !== undefined) {
+        targets.add(edge.to);
+      } else {
+        seenEdges.set(edge.from, new Set([edge.to]));
       }
-      seenEdges.add(pairKey);
     });
   });
 
@@ -221,28 +225,34 @@ type RoleNodeData = {
 
 type GroupNodeData = { label?: string };
 
-// Role is conveyed in the label itself, not only by color, so the figure stays legible
-// with no accompanying prose: +/- prefixes added/removed, and a trailing "↗" marks any
-// node the reader can click (mirroring the cursor-pointer affordance below). The producer
-// never writes these — they're derived here so they can't drift from `role`/`href`.
-function displayLabel(label: string, role: GraphRole, href: string | undefined): string {
-  const prefixed =
-    role === "added" ? `+ ${label}` : role === "removed" ? `− ${label}` : label;
-  return href !== undefined ? `${prefixed} ↗` : prefixed;
-}
-
 /** Directed-graph node: rounded box, label + optional muted subtitle, role-colored border/fill. */
 const RoleNode = memo(function RoleNode({ id, data }: NodeProps<Node<RoleNodeData, "role">>) {
   const { hoveredId } = useContext(HoverContext);
+  const href = data.href;
   const sourcePos = data.direction === "LR" ? Position.Right : Position.Bottom;
   const targetPos = data.direction === "LR" ? Position.Left : Position.Top;
   return (
     <div
       data-role={data.role}
+      role={href === undefined ? undefined : "link"}
+      tabIndex={href === undefined ? undefined : 0}
+      onKeyDown={
+        href === undefined
+          ? undefined
+          : (event) => {
+              // onNodeClick only fires for pointer input; Enter/Space performs the same
+              // jump for keyboard readers
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                jumpToNode(href.slice(1));
+              }
+            }
+      }
       className={cn(
         "flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg border px-2 text-center text-xs",
         roleStyles[data.role].node,
-        data.href !== undefined && "cursor-pointer",
+        href !== undefined &&
+          "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         hoveredId === id && "ring-2 ring-ring ring-offset-1 ring-offset-background",
       )}
     >
@@ -253,7 +263,7 @@ const RoleNode = memo(function RoleNode({ id, data }: NodeProps<Node<RoleNodeDat
           data.role === "removed" && "line-through",
         )}
       >
-        {displayLabel(data.label, data.role, data.href)}
+        {data.label}
       </span>
       {data.sub !== undefined && (
         <span
@@ -347,6 +357,8 @@ const PADDING = 16;
 // a fixed rem cap, not dvh (see Mermaid's pitfall note): the viewport can report 0 height
 // in headless/measurement embeds, which would collapse the diagram to nothing
 const MAX_HEIGHT_PX = 640; // 40rem at the app's 16px root; tall enough for a TB overview of ~4 ranks with subtitles
+// keeps the Controls strip (~100px) inside the container on a single-node graph
+const MIN_HEIGHT_PX = 120;
 
 // Same bounds the Controls fit button still uses via fitViewOptions.
 const MIN_ZOOM = 0.85;
@@ -384,10 +396,17 @@ function InitialViewport({
   containerRef: RefObject<HTMLDivElement | null>;
 }) {
   const instance = useReactFlow();
+  // The last viewport this component applied. A resize re-fits only while the reader
+  // hasn't moved the view; once they pan/zoom away from it, their position wins over
+  // re-fitting (a sidebar toggle must not throw away where they were reading).
+  const appliedRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     if (container === null) return;
+
+    // a new layout (props change) gets a fresh fit regardless of prior interaction
+    appliedRef.current = null;
 
     const apply = () => {
       const { width: containerWidth, height: containerHeight } =
@@ -415,6 +434,16 @@ function InitialViewport({
           x: (containerWidth - layout.width * zoom) / 2,
           y: (containerHeight - layout.height * zoom) / 2,
         };
+      const applied = appliedRef.current;
+      if (applied !== null) {
+        const current = instance.getViewport();
+        const moved =
+          Math.abs(current.x - applied.x) > 0.5 ||
+          Math.abs(current.y - applied.y) > 0.5 ||
+          Math.abs(current.zoom - applied.zoom) > 0.001;
+        if (moved) return;
+      }
+      appliedRef.current = { ...viewport, zoom };
       instance.setViewport({ ...viewport, zoom });
     };
 
@@ -490,10 +519,12 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
 
   const flowEdges: Edge[] = useMemo(
     () =>
-      layout.edges.map((e) => {
+      // edge ids need only be unique within the graph: an index can't collide the way a
+      // "from->to" string can when node ids themselves contain "->"
+      layout.edges.map((e, i) => {
         const role = e.role as GraphRole;
         return {
-          id: `${e.from}->${e.to}`,
+          id: `edge-${i}`,
           source: e.from,
           target: e.to,
           type: "role",
@@ -509,9 +540,9 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
   const incidentEdges = useMemo(() => {
     if (hoveredId === null) return new Set<string>();
     const incident = new Set<string>();
-    for (const e of layout.edges) {
-      if (e.from === hoveredId || e.to === hoveredId) incident.add(`${e.from}->${e.to}`);
-    }
+    layout.edges.forEach((e, i) => {
+      if (e.from === hoveredId || e.to === hoveredId) incident.add(`edge-${i}`);
+    });
     return incident;
   }, [hoveredId, layout]);
 
@@ -531,7 +562,11 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
   }, []);
   const handleNodeMouseLeave = useCallback(() => setHoveredId(null), []);
 
-  const containerHeight = Math.min(layout.height + PADDING * 2, MAX_HEIGHT_PX);
+  const containerHeight = clamp(
+    layout.height + PADDING * 2,
+    MIN_HEIGHT_PX,
+    MAX_HEIGHT_PX,
+  );
 
   // Roles resolved by layoutGraph (unset -> "neutral"), not the raw props, so an
   // omitted role still shows its actual (neutral) swatch and an unused role is omitted.
@@ -580,13 +615,14 @@ export function Graph({ nodes, edges = [], groups = [], direction = "TB", captio
             // fit button still uses fitViewOptions as its default and keeps centering —
             // that's an explicit user action, unlike the initial view.
             fitView={false}
-            // An overview must be legible before any interaction: unbounded fitView
-            // shrinks a wide graph until labels are unreadable. Capping how far it can
-            // zoom out trades "the whole graph visible at once" for "readable", leaving
-            // the rest reachable by pan (or the Controls fit button, which respects the
-            // same bounds).
+            // The legibility floor is a real prop, not only fitViewOptions: pinch zoom
+            // and the Controls +/- buttons ignore fitViewOptions and would otherwise
+            // zoom out to xyflow's 0.5 default, unreadably small.
+            minZoom={MIN_ZOOM}
+            // fitViewOptions only bounds the fit button: maxZoom stays there because a
+            // small graph shouldn't be blown up to fill the container on mount, while a
+            // user zooming IN past 1x (pinch, +) is a deliberate act and stays allowed.
             fitViewOptions={FIT_VIEW_OPTIONS}
-            proOptions={{ hideAttribution: true }}
             colorMode={scheme}
             onNodeClick={handleNodeClick}
             onNodeMouseEnter={handleNodeMouseEnter}

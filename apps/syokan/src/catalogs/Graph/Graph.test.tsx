@@ -89,6 +89,17 @@ describe("graphPropsSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  test("distinct edge pairs whose joined '->' keys collide are not rejected", () => {
+    const result = graphPropsSchema.safeParse({
+      nodes: [{ id: "a" }, { id: "b->c" }, { id: "a->b" }, { id: "c" }],
+      edges: [
+        { from: "a", to: "b->c" },
+        { from: "a->b", to: "c" },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
   test("rejects href not starting with #", () => {
     const result = graphPropsSchema.safeParse({
       nodes: [{ id: "a", href: "https://example.com" }],
@@ -164,6 +175,12 @@ describe("layoutGraph", () => {
         ],
       }),
     ).not.toThrow();
+  });
+
+  test("non-ASCII labels size wider than ASCII labels of the same length", () => {
+    const ascii = layoutGraph({ nodes: [{ id: "a", label: "abcdefghijkl" }] });
+    const cjk = layoutGraph({ nodes: [{ id: "a", label: "あいうえおかきくけこさしす" }] });
+    expect(cjk.nodes[0]!.width).toBeGreaterThan(ascii.nodes[0]!.width);
   });
 
   test("is deterministic for the same input", () => {

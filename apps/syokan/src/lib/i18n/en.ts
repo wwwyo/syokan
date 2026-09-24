@@ -113,7 +113,7 @@ export const en = {
     changed: "changed",
     neutral: "unchanged",
     group: "boundary",
-    edge: "arrow: from user to used",
+    edge: "arrow: dependent → dependency",
     clickable: "↗ opens its detail",
   },
   diff: {

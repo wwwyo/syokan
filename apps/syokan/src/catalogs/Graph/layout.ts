@@ -73,11 +73,12 @@ type GraphLayout = {
   height: number;
 };
 
-// Label renders at text-sm (14px) and sub at text-xs (12px); dimensions sized for the
-// wider glyph so text-sm content still fits (was 40/56/6.5 for a 12px label).
+// Width is estimated per rendered line: the label renders at text-sm (14px) and sub at
+// text-xs (12px). Non-ASCII (CJK) glyphs run ~1em — roughly twice the ASCII estimate —
+// so they get their own width, otherwise a Japanese `sub` under-sizes the node and
+// line-clamp truncates it.
 const NODE_HEIGHT = 44;
 const NODE_HEIGHT_WITH_SUB = 60;
-const CHAR_WIDTH = 7.5;
 const NODE_PADDING_X = 16;
 const MIN_NODE_WIDTH = 96;
 
@@ -96,9 +97,34 @@ const NODE_SEP = Math.max(BASE_SEP, 2 * GROUP_PAD_X, GROUP_PAD_TOP + GROUP_PAD_B
 const EDGE_SEP = NODE_SEP;
 const RANK_SEP = Math.max(64, 2 * GROUP_PAD_X, GROUP_PAD_TOP + GROUP_PAD_BOTTOM);
 
+// The rendered label carries role/href markers (+/- prefix, trailing ↗) so the figure
+// explains itself without prose. Produced here — not at render time — so node width
+// measurement sees the same string the reader sees and the markers can't clip.
+export function displayLabel(
+  label: string,
+  role: LayoutRole,
+  href: string | undefined,
+): string {
+  const prefixed =
+    role === "added" ? `+ ${label}` : role === "removed" ? `− ${label}` : label;
+  return href !== undefined ? `${prefixed} ↗` : prefixed;
+}
+
+function textWidth(text: string, charWidth: number, wideCharWidth: number): number {
+  let width = 0;
+  for (const ch of text) {
+    width += (ch.codePointAt(0) ?? 0) > 0x7f ? wideCharWidth : charWidth;
+  }
+  return width;
+}
+
 function nodeDimensions(label: string, sub?: string): { width: number; height: number } {
-  const longest = Math.max(label.length, sub?.length ?? 0);
-  const width = Math.max(MIN_NODE_WIDTH, Math.round(longest * CHAR_WIDTH) + NODE_PADDING_X * 2);
+  const labelWidth = textWidth(label, 7.5, 14);
+  const subWidth = sub !== undefined ? textWidth(sub, 6.5, 12) : 0;
+  const width = Math.max(
+    MIN_NODE_WIDTH,
+    Math.round(Math.max(labelWidth, subWidth)) + NODE_PADDING_X * 2,
+  );
   return { width, height: sub !== undefined ? NODE_HEIGHT_WITH_SUB : NODE_HEIGHT };
 }
 
@@ -165,8 +191,16 @@ export function layoutGraph(props: LayoutProps): GraphLayout {
     }
   }
 
-  for (const node of nodes) {
-    const { width, height } = nodeDimensions(node.label ?? node.id, node.sub);
+  // defaults and label decoration resolved once, up front, so dagre measures the exact
+  // string the reader sees (displayLabel adds +/−/↗ markers the raw label lacks)
+  const resolved = nodes.map((node) => ({
+    ...node,
+    label: displayLabel(node.label ?? node.id, node.role ?? "neutral", node.href),
+    role: node.role ?? "neutral",
+  }));
+
+  for (const node of resolved) {
+    const { width, height } = nodeDimensions(node.label, node.sub);
     g.setNode(node.id, { width, height });
     const group = nodeGroup.get(node.id);
     if (group !== undefined) {
@@ -183,15 +217,15 @@ export function layoutGraph(props: LayoutProps): GraphLayout {
 
   dagre.layout(g);
 
-  const laidOutNodes: LaidOutNode[] = nodes.map((node) => {
+  const laidOutNodes: LaidOutNode[] = resolved.map((node) => {
     const dn = g.node(node.id);
     const width = dn.width ?? MIN_NODE_WIDTH;
     const height = dn.height ?? NODE_HEIGHT;
     return {
       id: node.id,
-      label: node.label ?? node.id,
+      label: node.label,
       sub: node.sub,
-      role: node.role ?? "neutral",
+      role: node.role,
       href: node.href,
       group: nodeGroup.get(node.id),
       x: (dn.x ?? 0) - width / 2,
