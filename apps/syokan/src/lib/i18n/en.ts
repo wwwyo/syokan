@@ -104,6 +104,18 @@ export const en = {
     renderFailed: "This diagram could not be rendered.",
     expand: "Expand diagram",
   },
+  graph: {
+    added: "added",
+    removed: "removed",
+    // kept for backward compatibility with already-posted envelopes; unused as a legend
+    // entry (hotspot renders and reads as "changed" — see catalogs/Graph/index.tsx).
+    hotspot: "changed",
+    changed: "changed",
+    neutral: "unchanged",
+    group: "boundary",
+    edge: "arrow: dependent → dependency",
+    clickable: "↗ opens its detail",
+  },
   diff: {
     unparsable: "The diff could not be displayed (the patch could not be parsed).",
     fileFailed: "This diff could not be displayed.",

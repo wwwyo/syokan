@@ -63,7 +63,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Stack", stackPropsSchema, Stack),
   defineViewComponent("Card", cardPropsSchema, Card, {
     notes:
-      "Optional title fills the header slot; children fill the body. Wrap multiple body elements in a Stack for spacing (the body is a single padded slot with no inter-child gap of its own).",
+      "Not the default container: use it only when a unit needs a visible boundary to read as one thing (items compared side by side, a block set apart from the flow); otherwise Heading + body nodes in a Stack. Optional title fills the header slot; children fill the body. Wrap multiple body elements in a Stack for spacing (the body is a single padded slot with no inter-child gap of its own).",
   }),
   // leaf components have no children. childrenTypes: [] rejects stray children at
   // ingest time (when unspecified, children are silently dropped).
@@ -75,7 +75,11 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Time", timePropsSchema, Time, { childrenTypes: [] }),
   defineViewComponent("Diff", diffPropsSchema, Diff, { childrenTypes: [] }),
   defineViewComponent("Code", codePropsSchema, Code, { childrenTypes: [] }),
-  defineViewComponent("Badge", badgePropsSchema, Badge, { childrenTypes: [] }),
+  defineViewComponent("Badge", badgePropsSchema, Badge, {
+    childrenTypes: [],
+    notes:
+      "Variant carries meaning, not decoration: success = verified/pass, warning = medium/needs attention, destructive = high/fail, info = neutral fact worth noticing, secondary = low-emphasis label, outline = plain tag, default = no particular meaning.",
+  }),
   defineViewComponent("Mermaid", mermaidPropsSchema, Mermaid, {
     childrenTypes: [],
   }),
@@ -98,7 +102,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Stat", statPropsSchema, Stat, {
     childrenTypes: [],
     notes:
-      'Display-only labelled figure. Put several in a Stack direction="horizontal" for a dashboard row.',
+      'Display-only labelled figure. Put several in a Stack direction="horizontal" for a dashboard row. `tone` colors the value by meaning (success/warning/danger/info) — use it for count rows like High/Med/None so the reader sees severity before reading labels.',
   }),
   defineViewComponent("Checklist", checklistPropsSchema, Checklist, {
     notes:
@@ -111,7 +115,7 @@ const entries: readonly ViewComponentEntry[] = [
   defineViewComponent("Graph", graphPropsSchema, Graph, {
     childrenTypes: [],
     notes:
-      "Static directed graph. role→color/stroke is fixed by the renderer (added=green, removed=red+dashed, hotspot=amber+bold, neutral=muted). Put two side by side for a before/after contrast. node ids must be unique within the graph and every edge from/to must name one of them; both are rejected at ingest.",
+      "Interactive architecture diagram (React Flow + dagre, pan/zoom, auto-laid-out). Color means exactly one thing: how that module changed, following the diff convention — `role: \"added\"` (emerald) / `\"removed\"` (red, dashed, struck through) / `\"changed\"` (amber, touched-but-clean) / `\"neutral\"` (muted, unchanged); `\"hotspot\"` is deprecated (kept only for backward compatibility with already-posted envelopes) and renders identically to `\"changed\"` — it is not a change kind, so do not use it for findings. A finding is never a color: put `href:\"#<finding id>\"` on the node that has one, which adds a trailing `↗` to its label so \"click to jump\" is visible in the figure itself, and jumps to any node carrying that `id` (typically the finding's `Heading`). Use for an overview of a changed area: `groups` draw module/file boundaries (nodes reference one via `group`), `sub` is a one-line \"what changed\" per node. `direction:\"LR\"` widens instead of growing tall. node/group ids must be unique and every edge from/to or node group must name one that exists; both are rejected at ingest. Renders a legend of the roles in use, so producers need not explain colors.",
   }),
   defineViewComponent("Probe", probePropsSchema, Probe, {
     childrenTypes: [],

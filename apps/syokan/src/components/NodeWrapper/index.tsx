@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { navigateToNode } from "../../lib/anchor";
+import { jumpToNode } from "../../lib/anchor";
 
 /**
  * Carrier of the cross-cutting anchor mechanism (UI-state identity is provided per
@@ -41,10 +41,7 @@ export function AnchorLink({
       className={className}
       onClick={(e) => {
         e.preventDefault();
-        // reflect the target in the URL (without a native jump) so the link stays
-        // shareable / reload-restorable; ViewStateProvider handles it on load
-        history.replaceState(null, "", `#${encodeURIComponent(nodeId)}`);
-        navigateToNode(nodeId);
+        jumpToNode(nodeId);
       }}
     >
       {children}
