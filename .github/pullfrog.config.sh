@@ -47,7 +47,10 @@ pf_set fix-ci.reviewed-prs 'false'
 
 "${PF[@]}" config set hooks.setup --repo "$REPO" --yes --file - <<'PULLFROG_HOOK_SETUP'
 # mise toolchain: install mise if absent, install repo tools, expose shims on PATH
+# NB: set -e is intentionally AFTER the file guard — `ls` exits non-zero when
+# only some of the files exist, and pipefail would turn that into a false negative.
 ls mise.toml .mise.toml .config/mise.toml 2>/dev/null | grep -q . || exit 0
+set -euo pipefail
 command -v mise >/dev/null 2>&1 || curl -fsSL https://mise.run | sh
 export PATH="$HOME/.local/bin:$PATH"
 mise trust -a 2>/dev/null || true
