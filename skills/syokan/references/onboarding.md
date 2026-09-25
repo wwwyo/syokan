@@ -1,6 +1,6 @@
 # syokan onboarding
 
-Steps for Claude to guide a new user from installing syokan to seeing their first snapshot in the browser.
+Steps for the agent running this skill to guide a new user from installing syokan to seeing their first snapshot in the browser. The flow is agent-neutral — anything that can run commands and confirm with the user interactively (Claude Code, Codex, pi, Devin, …) can run it.
 Run this flow when the user says `syokan onboarding`, "install / set up syokan", or "first time using it".
 
 How to proceed (interactively; never install on your own):

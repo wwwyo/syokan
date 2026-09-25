@@ -80,7 +80,7 @@ For status/risk panels of any kind (PR review, deploy status, incident dashboard
 
 ## Posting
 
-Pass the assembled envelope as a file or via stdin; on success the view URL is printed to stdout (`syokan snapshot.json` / `cat snapshot.json | syokan` / `claude -p '…JSON…' | syokan`).
+Pass the assembled envelope as a file or via stdin; on success the view URL is printed to stdout (`syokan snapshot.json` / `cat snapshot.json | syokan` / `claude -p '…JSON…' | syokan`). The pipe form is agent-neutral — any agent that can emit the JSON as text (Codex, pi, Devin, a scheduled script) can post the same way.
 
 For everything else — commands, subcommands, env vars, exit codes — consult `syokan --help --json`; for types and props, `syokan catalog`.
 
