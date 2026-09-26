@@ -42,7 +42,13 @@ function resolveBun(): string {
       if (existsSync(cand)) return cand;
     }
   }
-  return process.execPath;
+  // Falling back to the rejected execPath would silently use the shadowing npm bun whose
+  // `--commit` rewrites all of package.json — fail instead of producing a dirty diff.
+  fail(
+    "resolve",
+    `no \`bun\` found outside node_modules on PATH (execPath: ${process.execPath}). ` +
+      `Run this with the mise-pinned bun, e.g. \`bun run patch:router-core\`.`,
+  );
 }
 const BUN = resolveBun();
 
