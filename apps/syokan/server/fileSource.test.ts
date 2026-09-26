@@ -60,6 +60,28 @@ async function mutateUntilNotified(
   }
 }
 
+/**
+ * Drain delayed/coalesced notifications: resolve once the count stays flat for `quietMs`.
+ * Phase assertions snapshot `hits` as a baseline — a notification lagging its own mutation
+ * (e.g. a Linux dir watch reports the temp write AND the rename as separate events) must not
+ * be counted toward the next phase.
+ */
+async function settledHits(
+  hits: () => number,
+  quietMs = 60,
+  timeoutMs = 2000,
+): Promise<number> {
+  const deadline = Date.now() + timeoutMs;
+  let prev = -1;
+  while (Date.now() <= deadline) {
+    await sleep(quietMs);
+    const cur = hits();
+    if (cur === prev) return cur;
+    prev = cur;
+  }
+  throw new Error("settledHits timed out — notifications never stopped arriving");
+}
+
 describe("readTextFile", () => {
   test("reads a UTF-8 file", async () => {
     const p = join(dir, "a.md");
@@ -125,8 +147,9 @@ describe("createFileWatcher", () => {
     watcher.closeAll();
   });
 
-  // Surviving an inode swap works via re-arm on rename (macOS) or the parent-dir watch (Linux);
-  // either way the observable spec is the same: an editor-style save keeps notifying.
+  // Whatever keeps the watch alive across an inode swap (Linux dir watch; macOS re-arm — or
+  // path-granular FSEvents, which survives a swap on its own), the observable spec is the same:
+  // an editor-style save keeps notifying.
   test("survives temp-write→rename (editor save)", async () => {
     const p = join(dir, "doc.md");
     await writeFile(p, "v1");
@@ -135,18 +158,20 @@ describe("createFileWatcher", () => {
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
     });
-    // Establish the watch before the swap so the swap can't race arming.
+    // Establish the watch before the swap so the swap can't race arming; drain lagged
+    // establish-phase events so the baseline can't be crossed by a stale notification.
     let v = 1;
     await mutateUntilNotified(() => writeFile(p, `v${++v}`), () => hits > 0);
-    const established = hits;
+    const established = await settledHits(() => hits);
     // Editor-style: write a separate file and swap it in via rename (inode swap).
     const tmp = join(dir, "doc.md.tmp");
     await writeFile(tmp, "v2");
     await rename(tmp, p);
-    // The swap event itself is delivered by the old watch; then only a live watch on the
-    // NEW inode can deliver the writes that follow — that's what proves the re-arm attached.
+    // The transition's events (temp write + rename are separate on a Linux dir watch) all
+    // land before the post-swap baseline, so only a post-swap write can raise `hits` past it.
     await waitFor(() => hits > established);
-    const afterSwap = hits;
+    const afterSwap = await settledHits(() => hits);
+    // Only a watch that still follows the path after the swap can deliver these.
     await mutateUntilNotified(
       () => writeFile(p, `v${++v}`),
       () => hits > afterSwap,
@@ -163,19 +188,19 @@ describe("createFileWatcher", () => {
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
     });
-    // Establish the watch before removing the file.
+    // Establish the watch before removing the file, then drain so the baseline is clean.
     let v = 1;
     await mutateUntilNotified(() => writeFile(p, `v${++v}`), () => hits > 0);
-    const established = hits;
-    // Mimic a save that unlinks → recreates after a short pause. The delete's rename re-arms,
-    // and the replacement appearing re-attaches the watch.
+    const established = await settledHits(() => hits);
+    // Unlink and wait for its notification — with a clean baseline that can only be the
+    // delete's own event, which is also what schedules the re-arm. The recreate then lands
+    // either before the first re-arm attempt or inside the retry window; either way an
+    // attempt must attach.
     await rm(p);
-    await sleep(8);
-    await writeFile(p, `v${++v}`);
-    // The delete/recreate event is delivered by the old watch (or the dir watch); a write
-    // notified after that can only come from a re-armed watch on the new inode.
     await waitFor(() => hits > established);
-    const afterRecreate = hits;
+    await writeFile(p, `v${++v}`);
+    const afterRecreate = await settledHits(() => hits);
+    // Only a watch that still follows the path can deliver these.
     await mutateUntilNotified(
       () => writeFile(p, `v${++v}`),
       () => hits > afterRecreate,
