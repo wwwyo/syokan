@@ -212,45 +212,39 @@ if (!src.includes("replaceRouteChunk")) {
   process.exit(0);
 }
 
-const alreadyWrapped = LAZY_RE.test(src);
-
 // `bun patch` prepares the package for editing: it re-materializes node_modules/<pkg> as a
 // copy unlinked from Bun's global cache (node_modules files are hardlinks into the cache on
-// Linux/Windows) and re-applies any registered patch. Editing without it can write through a
-// hardlink into the shared cache and makes --commit diff against a corrupted baseline. Only
-// needed when the package will actually be modified — a fully-patched install skips it.
-if (!alreadyWrapped || !patchOnDisk) {
+// Linux/Windows) and re-applies any registered patch — or restores the pristine copy when the
+// live key isn't registered. Only needed when the package will be modified or committed.
+const needsPrepare = !LAZY_RE.test(src) || !patchOnDisk;
+if (needsPrepare) {
   await run("bun patch", [BUN, "patch", PKG]);
 }
 
-if (!alreadyWrapped) {
-  // Re-read after `bun patch` — the prepared copy differs from the pre-read `src`, and a
-  // registered patch (live key still present) is re-applied during preparation, so the fresh
-  // copy can already carry the wrap even though `src` didn't.
-  const fresh = await readFile(routerJsPath, "utf8");
-  if (LAZY_RE.test(fresh)) {
-    console.log("patch-router-core: `bun patch` re-applied the registered wrap — nothing to write");
-  } else {
-    const matches = [...fresh.matchAll(EAGER_RE)];
-    if (matches.length !== 1) {
-      fail(
-        "inspect",
-        `${routerJsPath} has ${matches.length} eager '_replaceRouteChunk' assignments ` +
-          `(expected exactly 1) and no known lazy wrap — upstream changed the shape. ` +
-          `Inspect dist/esm/router.js, update the wrap in this script, and re-run.`,
-      );
-    }
-    const indent = matches[0]?.[1];
-    if (indent === undefined) {
-      fail("inspect", "unreachable: matched eager line without an indent group");
-    }
-    const wrapped =
-      `${indent}RouterCore.prototype._replaceRouteChunk = function(route, lazyFn) {\n` +
-      `${indent}\treturn replaceRouteChunk(route, lazyFn);\n` +
-      `${indent}};`;
-    await writeFile(routerJsPath, fresh.replace(EAGER_RE, wrapped));
-    console.log("patch-router-core: applied lazy wrap to dist/esm/router.js");
+// Always decide on the post-prepare contents: preparation can add the wrap (registered patch
+// re-applied) AND remove it (no patch registered → pristine restored), so `src` is stale either
+// way once prepare ran.
+const current = needsPrepare ? await readFile(routerJsPath, "utf8") : src;
+if (!LAZY_RE.test(current)) {
+  const matches = [...current.matchAll(EAGER_RE)];
+  if (matches.length !== 1) {
+    fail(
+      "inspect",
+      `${routerJsPath} has ${matches.length} eager '_replaceRouteChunk' assignments ` +
+        `(expected exactly 1) and no known lazy wrap — upstream changed the shape. ` +
+        `Inspect dist/esm/router.js, update the wrap in this script, and re-run.`,
+    );
   }
+  const indent = matches[0]?.[1];
+  if (indent === undefined) {
+    fail("inspect", "unreachable: matched eager line without an indent group");
+  }
+  const wrapped =
+    `${indent}RouterCore.prototype._replaceRouteChunk = function(route, lazyFn) {\n` +
+    `${indent}\treturn replaceRouteChunk(route, lazyFn);\n` +
+    `${indent}};`;
+  await writeFile(routerJsPath, current.replace(EAGER_RE, wrapped));
+  console.log("patch-router-core: applied lazy wrap to dist/esm/router.js");
 }
 
 // --- 3. (re)generate the patch file + patchedDependencies key -------------------
