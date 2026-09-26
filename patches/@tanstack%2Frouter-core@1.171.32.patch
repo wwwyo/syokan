@@ -1,8 +1,8 @@
 diff --git a/dist/esm/router.js b/dist/esm/router.js
-index 50a7b0868dbf162aafb51a25abd129cf3afcd993..e54127e456ce13609c51dd50e6ed843be4752a07 100644
+index 7a450eb62ec5ce5b2019c53d27bd319fae36e6b6..60259c0be3a24875f270902b5fd6e2c735a862eb 100644
 --- a/dist/esm/router.js
 +++ b/dist/esm/router.js
-@@ -834,7 +834,9 @@ async function documentNavigation(router, href, { replace, ignoreBlocker }) {
+@@ -828,7 +828,9 @@ async function documentNavigation(router, href, { replace, ignoreBlocker }) {
  * dedicated to HMR.
  */
  if (process.env.NODE_ENV !== "production") {
