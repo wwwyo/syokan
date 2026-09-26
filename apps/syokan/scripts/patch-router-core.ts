@@ -10,7 +10,7 @@
 // Usage: bun run patch:router-core   (paths resolve off the repo root, cwd-independent)
 import { existsSync } from "node:fs";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, delimiter, join } from "node:path";
 
 const PKG = "@tanstack/router-core";
 const PKG_KEY_PREFIX = `${PKG}@`;
@@ -24,9 +24,16 @@ const patchesDir = join(repoRoot, "patches");
 
 // `bun run` prepends node_modules/.bin to PATH, which shadows the mise-pinned toolchain with
 // the npm `bun` package (e.g. 1.3.13 rewrites all of package.json where 1.4.x edits surgically).
-// Spawned children should use the toolchain bun — the first `bun` on PATH outside node_modules.
+// A bun running this script from outside node_modules is already the toolchain; otherwise take
+// the first PATH bun that isn't inside node_modules.
 function resolveBun(): string {
-  for (const dir of (process.env.PATH ?? "").split(":")) {
+  if (
+    basename(process.execPath) === "bun" &&
+    !process.execPath.includes("node_modules")
+  ) {
+    return process.execPath;
+  }
+  for (const dir of (process.env.PATH ?? "").split(delimiter)) {
     if (!dir || dir.includes("node_modules")) continue;
     const cand = join(dir, "bun");
     if (existsSync(cand)) return cand;
@@ -181,6 +188,11 @@ const liveKey = `${PKG}@${installed}`;
 console.log(`patch-router-core: installed ${liveKey}`);
 
 // --- 2. make node_modules carry the lazy wrap ---------------------------------
+const pkgJson = JSON.parse(await readFile(rootPkgJsonPath, "utf8"));
+const declared = pkgJson.patchedDependencies?.[liveKey];
+const patchOnDisk =
+  typeof declared === "string" && existsSync(join(repoRoot, declared));
+
 const src = await readFile(routerJsPath, "utf8");
 
 if (!src.includes("replaceRouteChunk")) {
@@ -196,8 +208,21 @@ if (!src.includes("replaceRouteChunk")) {
   process.exit(0);
 }
 
-if (!LAZY_RE.test(src)) {
-  const matches = [...src.matchAll(EAGER_RE)];
+const alreadyWrapped = LAZY_RE.test(src);
+
+// `bun patch` prepares the package for editing: it re-materializes node_modules/<pkg> as a
+// copy unlinked from Bun's global cache (node_modules files are hardlinks into the cache on
+// Linux/Windows) and re-applies any registered patch. Editing without it can write through a
+// hardlink into the shared cache and makes --commit diff against a corrupted baseline. Only
+// needed when the package will actually be modified — a fully-patched install skips it.
+if (!alreadyWrapped || !patchOnDisk) {
+  await run("bun patch", [BUN, "patch", PKG]);
+}
+
+if (!alreadyWrapped) {
+  // Re-read after `bun patch` — the prepared copy differs from the pre-read `src`.
+  const fresh = await readFile(routerJsPath, "utf8");
+  const matches = [...fresh.matchAll(EAGER_RE)];
   if (matches.length !== 1) {
     fail(
       "inspect",
@@ -214,21 +239,19 @@ if (!LAZY_RE.test(src)) {
     `${indent}RouterCore.prototype._replaceRouteChunk = function(route, lazyFn) {\n` +
     `${indent}\treturn replaceRouteChunk(route, lazyFn);\n` +
     `${indent}};`;
-  await writeFile(routerJsPath, src.replace(EAGER_RE, wrapped));
+  await writeFile(routerJsPath, fresh.replace(EAGER_RE, wrapped));
   console.log("patch-router-core: applied lazy wrap to dist/esm/router.js");
 }
 
-// --- 3. drop stale keys (old versions) + their patch files ----------------------
-await removeStaleEntries(liveKey);
-
-// --- 4. (re)generate the patch file + patchedDependencies key -------------------
-const pkgJson = JSON.parse(await readFile(rootPkgJsonPath, "utf8"));
-const declared = pkgJson.patchedDependencies?.[liveKey];
-const patchOnDisk =
-  typeof declared === "string" && existsSync(join(repoRoot, declared));
+// --- 3. (re)generate the patch file + patchedDependencies key -------------------
 if (!patchOnDisk) {
   await run("bun patch --commit", [BUN, "patch", "--commit", pkgDirRel]);
 }
+
+// --- 4. drop stale keys (old versions) + their patch files ----------------------
+// After --commit, not before: a failed commit leaves package.json untouched rather than
+// half-cleaned.
+await removeStaleEntries(liveKey);
 
 // --- 5. reconcile the lockfile + re-apply the patch, then verify -----------------
 await run("bun install", [BUN, "install"]);

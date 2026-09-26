@@ -54,8 +54,8 @@ describe("router-core HMR cycle patch", () => {
       eagerReadPattern.test(source),
       `${routerJsPath} contains the eager 'RouterCore.prototype._replaceRouteChunk = replaceRouteChunk;' assignment. ` +
         "This means the bun patch was dropped (likely a router-core version bump whose new version no longer " +
-        "matches the patchedDependencies key). Re-run 'bun patch @tanstack/router-core', re-apply the lazy-wrap " +
-        "fix, and 'bun patch --commit node_modules/@tanstack/router-core'.",
+        "matches the patchedDependencies key). Run 'bun run patch:router-core' — it re-applies the lazy wrap, " +
+        "commits the patch, and drops stale patch keys/files.",
     ).toBe(false);
 
     const lazyWrapPattern = /_replaceRouteChunk\s*=\s*function/;
