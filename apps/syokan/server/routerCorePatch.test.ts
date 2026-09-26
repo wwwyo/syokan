@@ -30,9 +30,8 @@ import path from "node:path";
  * Remediation on failure:
  * - If (a) fails (the eager, unpatched form is present again): the version
  *   bumped and `patchedDependencies` no longer matches, so bun skipped the
- *   patch. Run `bun patch @tanstack/router-core`, re-apply the one-line wrap
- *   from the diff above, `bun patch --commit node_modules/@tanstack/router-core`,
- *   then delete the old patch file and update the `patchedDependencies` key.
+ *   patch. Run `bun run patch:router-core` — it re-applies the lazy wrap,
+ *   `bun patch --commit`s it, and drops the stale patch file + key.
  * - Once the mise-pinned bun ships oven-sh/bun#40259, delete the patch file,
  *   the `patchedDependencies` entry, and this test.
  */
