@@ -18,6 +18,10 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 function waitFor(
   predicate: () => boolean,
   timeoutMs = 2000,
@@ -33,6 +37,27 @@ function waitFor(
     };
     tick();
   });
+}
+
+/**
+ * fs.watch arms asynchronously — on macOS the OS-level watch goes live tens of ms after
+ * subscribe() returns, and a change landing in that gap is dropped forever (the macOS CI
+ * flake: a test's single write raced arming and nothing ever arrived). Repeat the mutation
+ * until a notification is observed, so tests synchronize on delivery, not on a guessed delay.
+ */
+async function mutateUntilNotified(
+  mutate: () => Promise<unknown>,
+  notified: () => boolean,
+  timeoutMs = 2000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!notified()) {
+    if (Date.now() > deadline) {
+      throw new Error("mutateUntilNotified timed out — no fs event was ever delivered");
+    }
+    await mutate();
+    await sleep(40);
+  }
 }
 
 describe("readTextFile", () => {
@@ -93,8 +118,9 @@ describe("createFileWatcher", () => {
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
     });
-    await writeFile(p, "v2");
-    await waitFor(() => hits >= 1);
+    // A one-shot write can land before the OS watch is armed and be silently dropped.
+    let v = 1;
+    await mutateUntilNotified(() => writeFile(p, `v${++v}`), () => hits > 0);
     unsub();
     watcher.closeAll();
   });
@@ -109,11 +135,22 @@ describe("createFileWatcher", () => {
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
     });
+    // Establish the watch before the swap so the swap can't race arming.
+    let v = 1;
+    await mutateUntilNotified(() => writeFile(p, `v${++v}`), () => hits > 0);
+    const established = hits;
     // Editor-style: write a separate file and swap it in via rename (inode swap).
     const tmp = join(dir, "doc.md.tmp");
     await writeFile(tmp, "v2");
     await rename(tmp, p);
-    await waitFor(() => hits >= 1);
+    // The swap event itself is delivered by the old watch; then only a live watch on the
+    // NEW inode can deliver the writes that follow — that's what proves the re-arm attached.
+    await waitFor(() => hits > established);
+    const afterSwap = hits;
+    await mutateUntilNotified(
+      () => writeFile(p, `v${++v}`),
+      () => hits > afterSwap,
+    );
     unsub();
     watcher.closeAll();
   });
@@ -126,19 +163,23 @@ describe("createFileWatcher", () => {
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
     });
-    // Wait for the watch to be established.
-    await new Promise((r) => setTimeout(r, 60));
+    // Establish the watch before removing the file.
+    let v = 1;
+    await mutateUntilNotified(() => writeFile(p, `v${++v}`), () => hits > 0);
+    const established = hits;
     // Mimic a save that unlinks → recreates after a short pause. The delete's rename re-arms,
     // and the replacement appearing re-attaches the watch.
     await rm(p);
-    await new Promise((r) => setTimeout(r, 8));
-    await writeFile(p, "v2");
-    // Wait for the re-arm to re-attach on the new inode.
-    await new Promise((r) => setTimeout(r, 80));
-    // Picking up an in-place write after re-attach is proof the re-arm succeeded.
-    const before = hits;
-    await writeFile(p, "v3");
-    await waitFor(() => hits > before);
+    await sleep(8);
+    await writeFile(p, `v${++v}`);
+    // The delete/recreate event is delivered by the old watch (or the dir watch); a write
+    // notified after that can only come from a re-armed watch on the new inode.
+    await waitFor(() => hits > established);
+    const afterRecreate = hits;
+    await mutateUntilNotified(
+      () => writeFile(p, `v${++v}`),
+      () => hits > afterRecreate,
+    );
     unsub();
     watcher.closeAll();
   });
@@ -167,7 +208,7 @@ describe("createFileWatcher", () => {
     unsub();
     // Re-subscribing before the release timeout doesn't rebuild the watcher.
     const unsub2 = watcher.subscribe(p, () => {});
-    await new Promise((r) => setTimeout(r, 150));
+    await sleep(150);
     expect(watcher.activeCount()).toBe(1);
     unsub2();
     watcher.closeAll();
