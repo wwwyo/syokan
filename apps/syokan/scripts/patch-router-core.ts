@@ -68,13 +68,10 @@ const LAZY_RE =
 /**
  * Remove this package's stale `name@version` keys from a patchedDependencies block by editing
  * lines, so the rest of package.json keeps its exact formatting. A removed last entry leaves a
- * dangling comma on the previous line — that comma is stripped too. Falls back to null when the
- * block isn't one-entry-per-line (callers then decide; a leftover stale key is inert anyway).
+ * dangling comma on the previous line — that comma is stripped too. Returns null when the block
+ * isn't one-entry-per-line (callers then decide; a leftover stale key is inert anyway).
  */
-function dropStalePatchKeys(
-  text: string,
-  keepKey: string,
-): { text: string; removed: string[] } | null {
+function dropStalePatchKeys(text: string, keepKey: string): string | null {
   const lines = text.split("\n");
   const start = lines.findIndex((l) => /"patchedDependencies"\s*:\s*\{/.test(l));
   const startLine = lines[start];
@@ -92,15 +89,10 @@ function dropStalePatchKeys(
   if (end === -1) return null;
 
   const entryRe = /^\s*"(@tanstack\/router-core@[^"]+)":\s*"[^"]*",?\s*$/;
-  const removed: string[] = [];
   const kept = lines.filter((l, i) => {
     if (i <= start || i >= end) return true;
     const key = l.match(entryRe)?.[1];
-    if (key !== undefined && key !== keepKey) {
-      removed.push(key);
-      return false;
-    }
-    return true;
+    return key === undefined || key === keepKey;
   });
 
   const closing = kept.findIndex(
@@ -112,7 +104,7 @@ function dropStalePatchKeys(
     kept[i] = l.replace(/,\s*$/, "");
     break;
   }
-  return { text: kept.join("\n"), removed };
+  return kept.join("\n");
 }
 
 /** package.json patchedDependencies → validated write; surgical edit first, JSON rewrite last. */
@@ -127,21 +119,21 @@ async function removeStaleEntries(
   ).filter(isStale);
   if (staleKeys.length === 0) return;
 
-  let next = "";
+  let next: string | null = null;
   const surgical = dropStalePatchKeys(text, keepKey ?? "");
-  if (surgical) {
+  if (surgical !== null) {
     try {
       // Only trust the surgical edit if it parses AND actually dropped every stale key —
       // a multi-line entry survives the line filter and must fall back to the JSON rewrite.
-      const check = JSON.parse(surgical.text);
+      const check = JSON.parse(surgical);
       if (!Object.keys(check.patchedDependencies ?? {}).some(isStale)) {
-        next = surgical.text;
+        next = surgical;
       }
     } catch {
       // never ship a broken package.json
     }
   }
-  if (!next) {
+  if (next === null) {
     const parsed = JSON.parse(text);
     for (const k of staleKeys) delete parsed.patchedDependencies[k];
     next = JSON.stringify(parsed, null, 2) + "\n";
