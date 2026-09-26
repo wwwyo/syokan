@@ -14,9 +14,21 @@ beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "syokan-fs-"));
 });
 
+const watchers: { closeAll(): void }[] = [];
+
 afterEach(async () => {
+  // A test that throws mid-await would otherwise leak an armed watcher.
+  for (const w of watchers.splice(0)) w.closeAll();
   await rm(dir, { recursive: true, force: true });
 });
+
+function makeWatcher(
+  opts?: Parameters<typeof createFileWatcher>[0],
+): ReturnType<typeof createFileWatcher> {
+  const w = createFileWatcher(opts);
+  watchers.push(w);
+  return w;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -135,7 +147,7 @@ describe("createFileWatcher", () => {
   test("notifies subscribers when the file changes", async () => {
     const p = join(dir, "watch.txt");
     await writeFile(p, "v1");
-    const watcher = createFileWatcher({ notifyDebounceMs: 5 });
+    const watcher = makeWatcher({ notifyDebounceMs: 5 });
     let hits = 0;
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
@@ -144,7 +156,6 @@ describe("createFileWatcher", () => {
     let v = 1;
     await mutateUntilNotified(() => writeFile(p, `v${++v}`), () => hits > 0);
     unsub();
-    watcher.closeAll();
   });
 
   // Whatever keeps the watch alive across an inode swap (Linux dir watch; macOS re-arm — or
@@ -153,7 +164,7 @@ describe("createFileWatcher", () => {
   test("survives temp-write→rename (editor save)", async () => {
     const p = join(dir, "doc.md");
     await writeFile(p, "v1");
-    const watcher = createFileWatcher({ notifyDebounceMs: 5 });
+    const watcher = makeWatcher({ notifyDebounceMs: 5 });
     let hits = 0;
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
@@ -177,13 +188,12 @@ describe("createFileWatcher", () => {
       () => hits > afterSwap,
     );
     unsub();
-    watcher.closeAll();
   });
 
   test("keeps following across a brief gap where the path momentarily disappears", async () => {
     const p = join(dir, "gap.md");
     await writeFile(p, "v1");
-    const watcher = createFileWatcher({ notifyDebounceMs: 5, rearmDelayMs: 15 });
+    const watcher = makeWatcher({ notifyDebounceMs: 5, rearmDelayMs: 15 });
     let hits = 0;
     const unsub = watcher.subscribe(p, () => {
       hits += 1;
@@ -206,13 +216,12 @@ describe("createFileWatcher", () => {
       () => hits > afterRecreate,
     );
     unsub();
-    watcher.closeAll();
   });
 
   test("refcounts: multiple subs share one watcher; releases after timeout", async () => {
     const p = join(dir, "shared.txt");
     await writeFile(p, "v1");
-    const watcher = createFileWatcher({ releaseDelayMs: 30, notifyDebounceMs: 5 });
+    const watcher = makeWatcher({ releaseDelayMs: 30, notifyDebounceMs: 5 });
     const unsubA = watcher.subscribe(p, () => {});
     const unsubB = watcher.subscribe(p, () => {});
     expect(watcher.activeCount()).toBe(1);
@@ -222,13 +231,12 @@ describe("createFileWatcher", () => {
     unsubB();
     // refcount 0 → released after the release timeout.
     await waitFor(() => watcher.activeCount() === 0);
-    watcher.closeAll();
   });
 
   test("re-subscribing within the release window cancels the release", async () => {
     const p = join(dir, "regrab.txt");
     await writeFile(p, "v1");
-    const watcher = createFileWatcher({ releaseDelayMs: 100, notifyDebounceMs: 5 });
+    const watcher = makeWatcher({ releaseDelayMs: 100, notifyDebounceMs: 5 });
     const unsub = watcher.subscribe(p, () => {});
     unsub();
     // Re-subscribing before the release timeout doesn't rebuild the watcher.
@@ -236,6 +244,5 @@ describe("createFileWatcher", () => {
     await sleep(150);
     expect(watcher.activeCount()).toBe(1);
     unsub2();
-    watcher.closeAll();
   });
 });
