@@ -26,9 +26,9 @@ flowchart LR
 ### archive の意味論
 
 - `DELETE /api/snapshots/:id` は envelope の写しを archive に記録として残し、active store から除く。`GET /api/snapshots` の一覧・`GET /api/snapshots/:id`・view route からは消える (view から見れば delete と同じく not-found に落ち、SSE の delete 通知も同じく流れる)
-- archive は per-event の JSON file (`state/archive/<id>.<archivedAt>.json`) とする。`archivedAt` は同一 id 内で一意に採番される unixtime (ms 精度、同一値との衝突時は繰り上げ) で、filename 上の識別子と generation selector (`?archived=<archivedAt>`) を兼ねる — 分離した suffix を持たせると「file は2つ・selector は1つ」の不整合が起きるため。append-only はこの一意採番で保証する (上書き禁止)
-- 同じ id は複数の archive **generation** を持ちうる (archive → revive → 再 archive)。一覧は generation 単位の行を返し、個別取得は既定で最新 generation、generation 指定で任意の記録を引く
-- archived snapshot の read は query parameter で名前空間を分ける: `GET /api/snapshots?archived=1` (一覧) / `GET /api/snapshots/:id?archived=1` (最新 generation) / `GET /api/snapshots/:id?archived=<archivedAt>` (generation 指定)。`/api/snapshots/archived` のような literal segment は `:id` param と衝突するため置かない (Bun.serve の static-vs-param 解決順に依存させない)
+- archive は per-event の JSON file (`state/archive/<id>.<archivedAt>.json`) とする。`archivedAt` は同一 id 内で一意に採番される unixtime (ms 精度、同一値との衝突時は繰り上げ) で、append-only はこの一意採番で保証する (上書き禁止)
+- 同じ id は複数の archive **generation** を持ちうる (archive → revive → 再 archive)。一覧は generation 単位の行を返すが、個別取得は常に最新 generation のみ返す — 古い世代は API 経路を持たず、archive file を直接読む (稀な forensics 需要のために selector を足さない)
+- archived snapshot の read は query parameter で名前空間を分ける: `GET /api/snapshots?archived=1` (一覧) / `GET /api/snapshots/:id?archived=1` (最新 generation)。`/api/snapshots/archived` のような literal segment は `:id` param と衝突するため置かない (Bun.serve の static-vs-param 解決順に依存させない)
 
 ### revive (再 post = restore)
 
@@ -41,7 +41,7 @@ idempotencyKey の対応は archive 後も生かす。archive 済み snapshot �
 `GET /api/snapshots` 系は curl で既に引けるが、LLM の入口は CLI なので affordance を足す。
 
 - `syokan snapshots list [--archived]` — id / title / createdAt (+ archivedAt) の一覧。`--archived` 時は generation 単位の行を返す。日付で絞れること
-- `syokan snapshots get <id> [--archived-at <unixtime>]` — envelope をそのまま出す。**flag なしで active → archive (最新 generation) の順に探す** — LLM が「この id」で引くときに archive かどうかを事前に知る必要はない (query 経路なので archived が既定経路に漏れる問題ではない)。`--archived-at` で過去の generation を指定できる
+- `syokan snapshots get <id>` — envelope をそのまま出す。**flag なしで active → archive (最新 generation) の順に探す** — LLM が「この id」で引くときに archive かどうかを事前に知る必要はない (query 経路なので archived が既定経路に漏れる問題ではない)
 
 これで「昨日の daily 何してた」は `list` で昨日付の snapshot を引き、`get` で中身を読む2手に落ちる。書き戻された check 状態も envelope に含まれるため「何を済ませたか」まで答えられる。
 
@@ -61,7 +61,7 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 
 ### Non-Goals
 
-- archive の TTL / 自動 purge、pin、restore 専用 UI
+- archive の TTL / 自動 purge、pin、restore 専用 UI、過去 generation を指定する read 経路 (常に最新で足りる)
 - store / archive の backend を GitHub (git repo) にすること (外部書き込みが合流点を迂回するため。履歴・backup は downstream sync で取る — 上記参照)
 - share / publish 済み snapshot の archive (Worker 側の話)
 - archived snapshot への書き戻し (archive は read-only の記録)
@@ -69,17 +69,17 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 ## Glossary
 
 - **archive**: delete された snapshot の envelope が記録として残る保存領域。queryable だが active な参照経路には出ない
-- **generation**: 同じ id が archive → revive → 再 archive を経るたびに積まれる記録の世代。一意採番された `archivedAt` がその識別子を兼ねる
+- **generation**: 同じ id が archive → revive → 再 archive を経るたびに積まれる記録の世代。一意採番された `archivedAt` が file 名上の世代識別子を兼ねる。API は常に最新のみを返し、世代選択経路は持たない
 - **revive**: archive 済み snapshot が同じ idempotencyKey の post により同じ id で active に戻ること。restore 専用の操作は持たない
 
 ## Acceptance Criteria
 
 - [ ] `DELETE /api/snapshots/:id` した snapshot が一覧と `GET /:id` から消え、archive に envelope が残る
-- [ ] archived snapshot は `GET /api/snapshots?archived=1` で generation 単位の一覧が取れ、`GET /api/snapshots/:id?archived=1` (最新) / `?archived=<archivedAt>` (generation 指定) で個別に envelope を取得できる。同じ id の再 archive は一意な `archivedAt` を持つ別 file に記録され、過去の記録を上書きしない
+- [ ] archived snapshot は `GET /api/snapshots?archived=1` で generation 単位の一覧が取れ、`GET /api/snapshots/:id?archived=1` でその id の最新 generation の envelope を取得できる (見つからなければ 404)。同じ id の再 archive は一意な `archivedAt` を持つ別 file に記録され、過去の記録を上書きしない
 - [ ] archive 時に開いている view は従来の delete と同じく not-found に落ちる (SSE で通知される)
 - [ ] archive 済み snapshot と同じ idempotencyKey で再 post すると同じ id / URL が active に戻り、新しい envelope の内容が採用される。archive 側の記録 (旧 check 状態を含む) は残る
 - [ ] `syokan snapshots list --archived` で archive 済みを含む一覧が引け、createdAt で日付を絞れる
-- [ ] `syokan snapshots get <id>` が flag なしで archive 済み snapshot の envelope (書き戻された check 状態を含む) を返し、`--archived-at` で過去 generation を選べる
+- [ ] `syokan snapshots get <id>` が flag なしで archive 済み snapshot の envelope (書き戻された check 状態を含む) を返す
 
 ## Required Updates
 
