@@ -85,8 +85,23 @@ store は他 process の書き込みを読み取りで拾う設計 (read-through
 ### 最初の編集操作: Checklist の check
 
 書き戻しを持つ最初の操作は **Checklist item の check** とする (「TODO を消し込む」の本命)。
-check は `items[i].checked` への PATCH として書き戻され、操作は optimistic に UI へ反映し、失敗時は元に戻して通知する。
+check は対応規則で同定した項目の `checked` への書き戻しとして PATCH に乗る。操作は optimistic に UI へ反映し、失敗時は元に戻して通知する。
 id を持たない Checklist は書き戻し先を同定できないため、従来通り device-local の mark として動く (永続化したい node に id を付ける契約は現行と同じ)。
+
+payload の例 (Checklist の check 書き戻し):
+
+```json
+PATCH /api/snapshots/:id
+{
+  "nodeId": "todos",
+  "item": { "label": "牛乳を買う", "occurrence": 2 },
+  "set": { "checked": true },
+  "expect": { "checked": false }
+}
+```
+
+- `item` が項目の同定で、そのラベルが Checklist 内で occurrence 番目 (1-based) に出る項目を指す
+- `expect` が値レベルの前提条件で、指定した prop の現在値が一致しないときは適用せず拒否する
 
 文言の inline 編集など他の操作も同じ PATCH で表現できるが、UI 面の検討が別途要るため本 PRD では扱わない (Non-Goals)。
 
