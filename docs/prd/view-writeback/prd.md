@@ -15,7 +15,14 @@ view 上での操作が、データに還らない。
 
 この課題は tree-edit-writeback PRD ですでに定義されていた。ただし当時の解は「TreeDoc が参照する tree JSON ファイルへの書き戻し」で、正本が LLM と人間の双方が書くファイルであるために、node 単位マージ・位置照合・競合規則・ファイル健全性の保証を抱え込んでいた。
 
-同時に、正本がファイルに散っていること自体が別の歪みを生んでいる。TreeDoc は「中身が envelope / store の外に住む」唯一の catalog node で、これ1つのために以下が維持されている。
+同じ判断は node-identity PRD でも下されていて、Appendix で「閲覧者の操作状態を snapshot / 参照先ファイルへ書き戻さない」ことを4つの理由で却下している。本変更はこの却下をも反転するものであり、4つの理由の帰趨を明確にしておく。
+
+- 「ファイル内の位置指定は node の挿入でずれ、ずれたときの代償がファイルの破壊に上がる」→ ファイルを正本にしないことで消える。書き戻し先は store の tree で、対象は位置ではなく node id と項目対応で同定する
+- 「LLM の全文書き換えと閲覧者の部分更新が同じファイルで衝突する」→ 消えないが形が変わる。store lock の内側で最新 tree に条件付きで適用する設計に縮む (後述の書き戻し規則)
+- 「ファイル読み取り API が読み取り専用であることを前提に信頼境界が許容されている」→ files API ごと消える
+- 「投稿された snapshot には同じことができず、同じ node の挙動が文脈で分かれる」→ すべての snapshot が store 上の envelope になるため、書き戻せる範囲は「store 上の snapshot を描く view」に一律に定まる。file-backed view が残る方が文脈依存だった
+
+また、正本がファイルに散っていること自体が別の歪みを生んでいる。TreeDoc は「中身が envelope / store の外に住む」唯一の catalog node で、これ1つのために以下が維持されている。
 
 - server が任意ローカルパスを読む (`/api/files`)。localhost bind の信頼境界の正当化はほぼこの endpoint のためだけにある
 - ファイル watch + refcount + パスごとの SSE (`/api/files/watch`)
@@ -41,20 +48,25 @@ flowchart LR
 正本が store のみになるよう、ファイル参照による view を廃止する。
 
 - `syokan <file>` に bare catalog tree JSON を渡すと、内容を内包した envelope (`{ title: basename, root: <tree>, idempotencyKey: file:<abspath> }`) として post する。live な参照ではなく、その時点の内容が store に入る
-- 同じファイルを書き換えて再実行すると、idempotencyKey により同じ snapshot がその場更新される (既存の PUT→404→POST 経路)。「編集 → view が追従」の loop は再打ちで再現される
+- 同じファイルを書き換えて再実行すると、idempotencyKey により同じ snapshot がその場更新される (既存の PUT→404→POST 経路)。「編集 → view が追従」の loop は再打ちで再現される。key は現行の `treedoc:<abspath>` から `file:<abspath>` に変わるため、移行直後に同じファイルへ再 post すると旧 TreeDoc snapshot とは別の snapshot ができる。orphan は unknown type 表示のまま残るが、ephemeral 原則のもと許容する
 - ファイルを移動した場合は別 key = 別 snapshot になる。内容は投げ込み済みなので、旧 view が dangling 参照で壊れることはない
 - catalog から TreeDoc を削除し、`/api/files`・`/api/files/watch`・ファイル watch 機構を削除する
 - publish は freeze を経ず、store の内容に probe redaction を掛けて worker に送るだけになる。`materialize_failed` / `treedoc_not_allowed` の系路も消える
 
-### 書き戻し (node 単位 PATCH)
+### 書き戻し (node 単位の条件付き PATCH)
 
-view からの編集は、**node id で同定した node の props 内の特定 path への set** として `PATCH /api/snapshots/:id` に送る。
+view からの編集は、**node id で同定した node の props 内の特定位置への条件付き set** として `PATCH /api/snapshots/:id` に送る。
 
-- node id は ingest 時に tree 内一意が強制済みであり、書き戻し先の同定に使える
-- set の対象は prop 内の path (例: Checklist node の `items.2.checked`) であり、node 全体や envelope 全体の上書きはしない。これにより、LLM が同じ snapshot の他の node を PUT で書き換えても人間の書き戻しは消えず、逆に人間の書き戻しが LLM の変更を巻き戻すこともない
-- 対象の node id が store 上の最新 tree に存在しない場合 (LLM が該当 node を消した・差し替えた) は書き戻しを拒否し、view は操作を元に戻したうえでその旨を表示する。人間の操作を黙って捨てない
+- node id は ingest 時に tree 内一意が強制済みであり、書き戻し先 node の同定に使える
+- 書き戻しは条件付きである。「対象が view の前提する状態と一致する」場合に限り適用し、前提から外れていれば適用せず拒否する。node 全体や envelope 全体の上書きはしないため、LLM が同じ snapshot の他の node を PUT で書き換えても人間の書き戻しは消えず、逆に人間の書き戻しが LLM の変更を巻き戻すこともない
+- Checklist の項目の同定は配列 index ではなく、node-identity PRD が定めた対応規則を使う (ラベルが一致する項目、同じラベルが複数あるときは Checklist 内での出現順)。index でアドレスすると LLM の挿入・削除・並べ替えで別の項目を指し、対象不在と違って拒否の契機がない。ラベル対応にすれば、ずれは「対象を同定できない」として検出できる
+- 値レベルの期待 (set 対象の現在値が view の操作前の値と一致すること) も条件に含め、対象に外部変更が入ったあとの書き戻しは成立しない
+- 対象の node id が最新 tree に存在しない場合、項目が対応規則で一意に定まらない場合、値が期待と一致しない場合はいずれも書き戻しを拒否する。拒否された view は操作を元に戻したうえでその旨を表示し、人間の操作を黙って捨てない
 - PATCH は store の write lock の内側で最新 tree に適用するため、並行する PUT との間に read-modify-write の競合窓はない
+- 適用後の tree が catalog schema に valid であることを検証し、違反する値での set は tree を変更しない
 - 書き戻せる node は store 上の snapshot を描く view に限る。share viewer (published な写し) と id を持たない node は従来通り read-only / device-local のままとする
+
+項目対応の規則は、未実装の node-identity PRD が定めたものを借用しているだけであり、本 PRD は node-identity の実装には依存しない。将来 node-identity の自動導出が実装された場合、id を持たない node の書き戻し先同定にも同じ規則が使えるようになる。
 
 ### change 通知
 
@@ -81,6 +93,7 @@ id を持たない Checklist は書き戻し先を同定できないため、従
 ### 書き込みの防御
 
 mutation endpoint (snapshot の POST / PUT / PATCH / DELETE) へ別 origin のページからのリクエストは、書き込み自体が実行されないことを要件とする。localhost の別ポートで動くページも含む。publish 側に既にある cross-origin 拒否と同じ防御を、書き込み系 endpoint 全体に広げる。
+判定は Origin / Referer header が存在するリクエストにだけ適用する。CLI や curl はこれらの header を付けず、header なしのリクエストを拒否すると ingest の主経路を壊すためである。
 
 ### 永続化の範囲
 
@@ -114,16 +127,20 @@ Collapsible の開閉や probe の実行結果など「表示上の状態」は�
 
 書き戻し:
 
-- [ ] id を持つ Checklist の item を check / uncheck すると、`items[i].checked` が store の snapshot に書き戻され、reload 後も保持される
+- [ ] id を持つ Checklist の item を check / uncheck すると、その項目の `checked` が store の snapshot に書き戻され、reload 後も保持される
 - [ ] check を入れた snapshot を publish すると、share された view にも check 状態が現れる
 - [ ] check 済みの状態は `GET /api/snapshots/:id` の内容に含まれ、LLM が次の tree を組み立てる際に読める
 - [ ] 書き戻し対象の node id が最新の snapshot に存在しない場合、view の表示は操作前に戻り、書き戻せなかった旨が表示される
+- [ ] LLM が Checklist の項目を挿入・削除・並べ替えたあとでも、書き戻しはユーザーが操作した項目 (ラベル対応) にだけ適用される。対応が取れなくなった項目への書き戻しは拒否され、別の項目へ誤適用されない
+- [ ] 同じラベルの項目が複数ある Checklist では、ユーザーが操作した出現順の項目にだけ書き戻される
+- [ ] 操作の時点と書き戻しの時点で対象の値が変わっている場合 (外部からの更新) は拒否され、view は操作前に戻る
+- [ ] schema に違反する値への set は拒否され、store の tree は変更されない
 - [ ] id を持たない Checklist は従来通り動き、状態は device-local に留まる
 - [ ] share viewer では check 操作が書き戻されない (表示のみ)
 
 通知:
 
-- [ ] 開いている view の snapshot が PUT / PATCH で更新されると、reload なしに新しい内容が表示される
+- [ ] 開いている view の snapshot が、同一 server が受理した PUT / PATCH で更新されると、reload なしに新しい内容が表示される
 - [ ] view を開いている最中にその snapshot が delete されると、not-found 表示になる
 - [ ] 通知を受け取れない間 (接続断等) でも、次の通知・focus 時の再取得で内容が追随する
 
@@ -138,6 +155,16 @@ self-contained 化:
 防御:
 
 - [ ] 別 origin のページ (localhost の別ポートを含む) からの snapshot 書き込み系リクエストは、実行されずに拒否される
+
+## Required Updates
+
+プロダクトの振る舞いではないが、この変更を完了させるために必要な更新を挙げる。
+
+- `skills/syokan/` — TreeDoc と live sync の説明を、file → inline post・再打ちで update の flow に書き換える。Checklist の check が store に永続化されることと、永続化には node の id が要る契約を明記する
+- `AGENTS.md` — file-backed view 節・ephemeral 原則の記述・directory 記述 (fileSource.ts / materialize.ts / treeSource.ts) を更新する
+- `README.md` / `README.ja.md` — catalog 一覧と `syokan <path>` の説明を更新する
+- `apps/syokan/scripts/smoke.ts` — TreeDoc summon leg を「PUT 更新 → change 通知 → 再描画」の leg に置き換える
+- i18n・CLI help・error 系路から TreeDoc・materialize 由来の記述を取り除く
 
 ## Success Metrics
 
