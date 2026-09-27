@@ -59,9 +59,9 @@ view からの編集は、**node id で同定した node の props 内の特定�
 
 - node id は ingest 時に tree 内一意が強制済みであり、書き戻し先 node の同定に使える
 - 書き戻しは条件付きである。「対象が view の前提する状態と一致する」場合に限り適用し、前提から外れていれば適用せず拒否する。node 全体や envelope 全体の上書きはしないため、LLM が同じ snapshot の他の node を PUT で書き換えても人間の書き戻しは消えず、逆に人間の書き戻しが LLM の変更を巻き戻すこともない
-- Checklist の項目の同定は配列 index ではなく、node-identity PRD が定めた対応規則を使う (ラベルが一致する項目、同じラベルが複数あるときは Checklist 内での出現順)。index でアドレスすると LLM の挿入・削除・並べ替えで別の項目を指し、対象不在と違って拒否の契機がない。ラベル対応にすれば、ずれは「対象を同定できない」として検出できる
-- 値レベルの期待 (set 対象の現在値が view の操作前の値と一致すること) も条件に含め、対象に外部変更が入ったあとの書き戻しは成立しない
-- 対象の node id が最新 tree に存在しない場合、項目が対応規則で一意に定まらない場合、値が期待と一致しない場合はいずれも書き戻しを拒否する。拒否された view は操作を元に戻したうえでその旨を表示し、人間の操作を黙って捨てない
+- Checklist の項目の同定は配列 index ではなく、node-identity PRD が定めた対応規則を使う (ラベルが一致する項目、同じラベルが複数あるときは Checklist 内での出現順)。index でアドレスすると LLM の挿入・削除・並べ替えで別の項目を指し、対象不在と違って拒否の契機がない
+- 対応規則だけでは、同じラベルの項目が挿入されると occurrence が別の項目を指しうる。そこで書き戻しの前提条件を props 単位に置き、view が描画した時点の `items` 配列を `expect` に含めて最新 tree との一致を要求する (`items` 配列への compare-and-set)。配列が一致するなら同定は一意に定まり、ずれていれば別項目を誤って書き換える前に検出できる
+- 対象の node id が最新 tree に存在しない場合、項目が対応規則で一意に定まらない場合、`expect` が最新 tree と一致しない場合はいずれも書き戻しを拒否する。拒否された view は操作を元に戻したうえでその旨を表示し、人間の操作を黙って捨てない
 - PATCH は store の write lock の内側で最新 tree に適用するため、並行する PUT との間に read-modify-write の競合窓はない
 - 適用後の tree が catalog schema に valid であることを検証し、違反する値での set は tree を変更しない
 - 書き戻せる node は store 上の snapshot を描く view に限る。share viewer (published な写し) と id を持たない node は従来通り read-only / device-local のままとする
@@ -96,12 +96,12 @@ PATCH /api/snapshots/:id
   "nodeId": "todos",
   "item": { "label": "牛乳を買う", "occurrence": 2 },
   "set": { "checked": true },
-  "expect": { "checked": false }
+  "expect": { "items": [ { "label": "牛乳を買う", "checked": false }, ... ] }
 }
 ```
 
 - `item` が項目の同定で、そのラベルが Checklist 内で occurrence 番目 (1-based) に出る項目を指す
-- `expect` が値レベルの前提条件で、指定した prop の現在値が一致しないときは適用せず拒否する
+- `expect` が props 単位の前提条件で、指定した prop が最新の tree と一致しないときは適用せず拒否する。Checklist の書き戻しでは、描画時点の `items` 配列をそのまま渡す
 
 文言の inline 編集など他の操作も同じ PATCH で表現できるが、UI 面の検討が別途要るため本 PRD では扱わない (Non-Goals)。
 
@@ -148,7 +148,7 @@ Collapsible の開閉や probe の実行結果など「表示上の状態」は�
 - [ ] 書き戻し対象の node id が最新の snapshot に存在しない場合、view の表示は操作前に戻り、書き戻せなかった旨が表示される
 - [ ] LLM が Checklist の項目を挿入・削除・並べ替えたあとでも、書き戻しはユーザーが操作した項目 (ラベル対応) にだけ適用される。対応が取れなくなった項目への書き戻しは拒否され、別の項目へ誤適用されない
 - [ ] 同じラベルの項目が複数ある Checklist では、ユーザーが操作した出現順の項目にだけ書き戻される
-- [ ] 操作の時点と書き戻しの時点で対象の値が変わっている場合 (外部からの更新) は拒否され、view は操作前に戻る
+- [ ] 描画時点から `items` 配列が変わっている場合 (同じラベルの項目の挿入・削除・並べ替えを含む外部からの更新) は拒否され、別の項目を誤って書き換えず、view は操作前に戻る
 - [ ] schema に違反する値への set は拒否され、store の tree は変更されない
 - [ ] id を持たない Checklist は従来通り動き、状態は device-local に留まる
 - [ ] share viewer では check 操作が書き戻されない (表示のみ)
