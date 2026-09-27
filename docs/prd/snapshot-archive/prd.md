@@ -86,6 +86,8 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 
 - `AGENTS.md` — ephemeral 原則の記述を「見かけは ephemeral・記録は archive に残る」に更新し、directory 記述に archive を足す。XDG 3-way の表にある snapshots の backup 行 (`machine-local; survive restarts but need no backup`) も更新する — archive には check 状態を含む記録が入るため「no backup」の前提が変わる (downstream git sync がその受け皿)
 - `src/lib/paths.ts` — `state/archive/` の path 解決を足す
+- `apps/syokan/server/store.ts` — `get(id)` を active snapshot → 最新 archive generation の順に解決し、`archivedAt` を response に載せる
+- `apps/syokan/server/routes.ts` — `GET /api/snapshots/:id` を上記の解決契約に合わせ、`GET /api/snapshots?archived=1` の一覧経路を足す
 - `skills/syokan/` — delete が archive になること、`syokan snapshots` で過去の snapshot を引けることを明記する
 - `apps/syokan/scripts/smoke.ts` — delete → archive → revive の leg を足す
 
