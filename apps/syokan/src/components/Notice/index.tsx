@@ -4,9 +4,9 @@ import { cn } from "../../lib/utils";
 type NoticeProps = {
   /**
    * The `data-slot` value. Owned by the caller rather than derived here, because the
-   * existing slot names (`tree-doc-error`, `mermaid-error`) are what tests and outside
-   * selectors match on — a shared name would break them and lose the "which component
-   * failed" distinction.
+   * slot names chosen by each caller (`diff`, `mermaid-error`) are what tests and
+   * outside selectors match on — a shared name would break them and lose the
+   * "which component failed" distinction.
    */
   slot: string;
   /**

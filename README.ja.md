@@ -62,10 +62,10 @@ syokan open   # home を開く
 
 props は `syokan catalog` で確認して組む。あとは見たいものを syokan。
 
-tree ファイルはそのまま syokan（envelope を組む必要はない）。envelope JSON なら単発で post、裸の catalog tree なら live な `TreeDoc` に自動で包まれ、ファイルの編集が view に追従する（LLM がファイルを書き換え続ければ view が追いかける）。非 JSON は拒否される — syokan が話すのは catalog tree だけ:
+tree ファイルはそのまま syokan（envelope を組む必要はない）。envelope JSON ならそのまま post、裸の catalog tree ならファイルの絶対パスをキーに持つ自己完結 snapshot として post されるので、編集後に同じコマンドを再実行すれば同じ view がその場で更新される（LLM がファイルを書き換えて再 post すれば view が追いかける）。非 JSON は拒否される — syokan が話すのは catalog tree だけ:
 
 ```bash
-syokan dashboard.json   # tree を召喚。保存するたびに view が再描画される
+syokan dashboard.json   # post。ファイルを編集して再実行すれば同じ view が更新される
 ```
 
 ## 開発
@@ -108,9 +108,9 @@ GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes
 
 type は Storybook（`bun run storybook`）で視覚的に確認できる。
 
-すべての node は横断フィールド `id`（view 内 anchor。`Link href:"#<id>"` で移動でき、操作を持つ node が閲覧端末ローカルの状態を保持するための identity にもなる）を受け付ける。操作状態（チェック・開閉・Probe 再実行）は閲覧側ブラウザに留まり、snapshot 本体は不変のまま。`Probe` は自身の `check` props スキーマに公開された事前定義の読み取り専用 check だけを実行でき（`POST /api/probes/run`）、公開共有では再実行が無効化され、`shareVisible: true` を指定しない限り publish 時に引数と結果が envelope から削除される。
+すべての node は横断フィールド `id`（view 内 anchor。`Link href:"#<id>"` で移動でき、操作を持つ node の状態の identity にもなる）を受け付ける。`id` を持つ `Checklist` ではチェックが snapshot 本体に書き戻され（`PATCH /api/snapshots/:id`）、リロード後も残り、他デバイスにも届き、公開 share にも乗る。`id` 無しの Checklist のチェックや、開閉・Probe 再実行は閲覧側ブラウザに留まる。`Probe` は自身の `check` props スキーマに公開された事前定義の読み取り専用 check だけを実行でき（`POST /api/probes/run`）、公開共有では再実行が無効化され、`shareVisible: true` を指定しない限り publish 時に引数と結果が envelope から削除される。
 
-`TreeDoc`（props: `path`、**絶対パスのみ**、URL 不可）は catalog tree JSON ファイルを参照する catalog ノード。サーバが内容を読み、クライアントが検証して live な subtree として描画し、ファイルの変更を view に追従させる（forward sync）。書きかけの不正な保存で view は消えない: ファイルが正常に戻るまで、直前の正常な描画を保ったまま控えめなエラーを添える。sync 対象の tree の中に `TreeDoc` は置けない（入れ子を拒否することで循環を仕組みごと排除）。サーバは localhost のみに bind し、監視は view を開いている間だけの一時状態（永続しない）。publish 時は各 `TreeDoc` がその時点の subtree に凍結され、公開 payload がファイルを参照することはない。
+すべての view は store 済みの snapshot を描く — ファイル参照や live ソースはない。store への mutation（post/update/patch/delete）は SSE の変更通知として開いている view と一覧に届き、そのまま追随する。
 
 ## テンプレート
 
@@ -128,7 +128,7 @@ syokan shares                      # 自分の公開一覧
 syokan unpublish <shareId>
 ```
 
-share も他と同じく ephemeral: **既定 7 日、最大 30 日**で消える。無期限保存はない。1 ユーザーが同時に持てる share は 100 まで。publish はその時点の view を凍結する（`TreeDoc` はサブツリーに焼き込まれ、ローカルの編集が公開 URL に漏れることはない）。再 publish は新しい URL になる。view の Share ボタンも同じ動作。
+share も他と同じく ephemeral: **既定 7 日、最大 30 日**で消える。無期限保存はない。1 ユーザーが同時に持てる share は 100 まで。publish はその時点に store された view をそのまま複製する（その後のローカルの編集が公開 URL に届くことはない）。再 publish は新しい URL になる。view の Share ボタンも同じ動作。
 
 publish は[利用規約](https://syokan.dev/terms)への同意を意味する。問題のある share は各 share ページの "Report abuse" リンクから報告できる。
 

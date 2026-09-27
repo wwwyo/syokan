@@ -41,13 +41,6 @@ export async function publishSnapshot(id: string): Promise<PublishResult> {
       return { kind: "success", share: await res.json() };
     }
     if (res.status === 401) return { kind: "not_logged_in" };
-    if (res.status === 422) {
-      const body = await res.json();
-      return {
-        kind: "error",
-        message: t.share.errors.materializeFailed(body.path),
-      };
-    }
     if (res.status === 502) {
       const body = await res.json().catch(() => null);
       return {

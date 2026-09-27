@@ -17,7 +17,6 @@ import { Stat } from "./Stat";
 import { Table } from "./Table";
 import { Text } from "./Text";
 import { Time } from "./Time";
-import { TreeDoc } from "./TreeDoc";
 
 // components stored in the Map are widened to ItemComponent.
 // On the test side only identity (=== comparison) matters, so coerce to the same type.
@@ -35,7 +34,6 @@ describe("catalog", () => {
     expect(specs.get("Code")?.type).toBe("Code");
     expect(specs.get("Badge")?.type).toBe("Badge");
     expect(specs.get("Mermaid")?.type).toBe("Mermaid");
-    expect(specs.get("TreeDoc")?.type).toBe("TreeDoc");
     expect(specs.get("Markdown")?.type).toBe("Markdown");
   });
 
@@ -71,7 +69,6 @@ describe("catalog", () => {
     expect(components.get("Code")).toBe(asItem(Code));
     expect(components.get("Badge")).toBe(asItem(Badge));
     expect(components.get("Mermaid")).toBe(asItem(Mermaid));
-    expect(components.get("TreeDoc")).toBe(asItem(TreeDoc));
     expect(components.get("Table")).toBe(asItem(Table));
     expect(components.get("Stat")).toBe(asItem(Stat));
     expect(components.get("Checklist")).toBe(asItem(Checklist));
@@ -81,8 +78,9 @@ describe("catalog", () => {
     expect(components.get("Markdown")).toBe(asItem(Markdown));
     expect(components.get("MarkdownDoc")).toBeUndefined();
     expect(components.get("FileDoc")).toBeUndefined();
+    expect(components.get("TreeDoc")).toBeUndefined();
     expect(components.get("TagFilter")).toBeUndefined();
-    expect(components.size).toBe(18);
+    expect(components.size).toBe(17);
   });
 
   test("Heading requires text and is strict", () => {
@@ -159,13 +157,19 @@ describe("catalog", () => {
     expect(result.success).toBe(false);
   });
 
-  test("MarkdownDoc / FileDoc are no longer accepted (removed types)", () => {
+  test("MarkdownDoc / FileDoc / TreeDoc are no longer accepted (removed types)", () => {
     expect(
       itemSchema.safeParse({ type: "MarkdownDoc", props: { body: "# title" } })
         .success,
     ).toBe(false);
     expect(
       itemSchema.safeParse({ type: "FileDoc", props: { path: "/a/notes.md" } })
+        .success,
+    ).toBe(false);
+    // snapshots posted with a file reference are rejected at ingest rather than
+    // degrading to a hanging placeholder
+    expect(
+      itemSchema.safeParse({ type: "TreeDoc", props: { path: "/a/tree.json" } })
         .success,
     ).toBe(false);
   });
@@ -182,20 +186,6 @@ describe("catalog", () => {
       itemSchema.safeParse({ type: "Mermaid", props: { code: "x", theme: "d" } })
         .success,
     ).toBe(false);
-  });
-
-  test("TreeDoc requires an absolute path and is strict", () => {
-    expect(
-      itemSchema.safeParse({ type: "TreeDoc", props: { path: "/a/tree.json" } })
-        .success,
-    ).toBe(true);
-    expect(
-      itemSchema.safeParse({ type: "TreeDoc", props: { path: "tree.json" } })
-        .success,
-    ).toBe(false);
-    expect(itemSchema.safeParse({ type: "TreeDoc", props: {} }).success).toBe(
-      false,
-    );
   });
 
   test("Diff requires a patch string and is strict", () => {
@@ -252,7 +242,6 @@ describe("catalog", () => {
     expect(withChild("Code", { code: "x" })).toBe(false);
     expect(withChild("Badge", { text: "x" })).toBe(false);
     expect(withChild("Mermaid", { code: "graph TD; A-->B" })).toBe(false);
-    expect(withChild("TreeDoc", { path: "/a/tree.json" })).toBe(false);
     expect(withChild("Markdown", { body: "x" })).toBe(false);
   });
 

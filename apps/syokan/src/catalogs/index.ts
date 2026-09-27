@@ -18,11 +18,6 @@ import { Stat, statPropsSchema } from "./Stat";
 import { Table, tablePropsSchema } from "./Table";
 import { Text, textPropsSchema } from "./Text";
 import { Time, timePropsSchema } from "./Time";
-import { TreeDoc } from "./TreeDoc";
-// TreeDoc closes an import cycle back to this module (TreeDoc → Render → catalogs). Its schema is
-// imported from the leaf so it is initialized whichever module the bundler enters first; see
-// ./TreeDoc/schema.ts.
-import { treeDocPropsSchema } from "./TreeDoc/schema";
 
 export type ItemComponent = ComponentType<
   Record<string, unknown> & { children?: ReactNode }
@@ -88,11 +83,6 @@ const entries: readonly ViewComponentEntry[] = [
     notes:
       "Prose flow only. Block structure/data belongs to catalog nodes: headings, GFM tables, task-list items, raw HTML, images, and non-http(s) links are rejected — use Heading/Table/Checklist instead, or Link for a single external link.",
   }),
-  defineViewComponent("TreeDoc", treeDocPropsSchema, TreeDoc, {
-    childrenTypes: [],
-    notes:
-      "Live-synced subtree: the server reads and watches `path` (an absolute local path, never a URL) and the view re-renders as the file changes. The file must hold a bare catalog node `{ type, props, children? }` — not a snapshot envelope — with ids unique within that file's own tree and no TreeDoc anywhere inside it (nesting is rejected outright). A save that is momentarily invalid keeps the last valid render.",
-  }),
   // composite leaves: cells / labels embed the inline subset via props (see inline.tsx)
   defineViewComponent("Table", tablePropsSchema, Table, {
     childrenTypes: [],
@@ -106,7 +96,7 @@ const entries: readonly ViewComponentEntry[] = [
   }),
   defineViewComponent("Checklist", checklistPropsSchema, Checklist, {
     notes:
-      "children[i] is the expanded body of items[i] (optional). Checking folds the body to the label line; checks are viewer-local UI state, never written back. Give the node an id to persist progress across reloads.",
+      "children[i] is the expanded body of items[i] (optional). Checking folds the body to the label line. Give the node an id and checks are written back into the snapshot itself (PATCH /api/snapshots/:id) — they survive reloads, show up in GET responses, and ride along on publish. Without an id, checks stay viewer-local.",
   }),
   defineViewComponent("Collapsible", collapsiblePropsSchema, Collapsible, {
     notes:

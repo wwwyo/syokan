@@ -132,9 +132,9 @@ function scrollToHeading(el: Element) {
  *
  * Viewer chrome, not a catalog node: headings are read from the rendered DOM instead of props,
  * because only `Heading` (catalog) ever emits `[data-slot="heading"]` and no LLM posts this
- * component. The DOM it reads can change without a re-post — TreeDoc live-sync swaps a subtree,
- * Collapsible toggles open/closed, ViewPage's source toggle hides the body — so a
- * MutationObserver keeps the heading list in sync instead of collecting once at mount.
+ * component. The DOM it reads can change without a re-render of this component — Collapsible
+ * toggles open/closed, ViewPage's source toggle hides the body — so a MutationObserver keeps
+ * the heading list in sync instead of collecting once at mount.
  * `PageLayout`'s non-fullBleed branch mounts this unconditionally; it renders nothing until
  * enough headings are visible.
  */

@@ -62,10 +62,10 @@ syokan open   # open home
 
 Check props with `syokan catalog` and compose the tree. From there, syokan whatever you want to see.
 
-A tree file needs no envelope at all — just syokan the path. If the input is envelope JSON it is posted once; a bare catalog tree is auto-wrapped in a live `TreeDoc`, so edits to the file flow into the view (an LLM keeps rewriting the file; the view keeps up). Non-JSON input is rejected — syokan speaks catalog trees only:
+A tree file needs no envelope at all — just syokan the path. If the input is envelope JSON it is posted as-is; a bare catalog tree is inlined into a self-contained snapshot keyed by the file's absolute path, so re-running the command after an edit updates the same view in place (an LLM keeps rewriting the file and re-posting; the view keeps up). Non-JSON input is rejected — syokan speaks catalog trees only:
 
 ```bash
-syokan dashboard.json   # summons the tree; every save re-renders the view
+syokan dashboard.json   # post; edit the file and re-run to update the same view
 ```
 
 ## Development
@@ -108,9 +108,9 @@ GET /api/catalog   # { items: [{ type, props (JSON Schema), childrenTypes, notes
 
 Review types visually with Storybook (`bun run storybook`).
 
-Every node also accepts the cross-cutting field `id` (in-view anchor via `Link href:"#<id>"`, and the identity that lets interactive nodes persist their viewer-local state). Interaction state (checks, folds, probe re-runs) stays in the viewer's browser — snapshots remain immutable. `Probe` runs only the predefined read-only checks published in its `check` props schema (`POST /api/probes/run`); on public shares, re-run is disabled and probe args/results are stripped at publish unless `shareVisible: true`.
+Every node also accepts the cross-cutting field `id` (in-view anchor via `Link href:"#<id>"`, and the identity that lets interactive nodes carry state). On an id-carrying `Checklist`, a check writes back into the snapshot itself (`PATCH /api/snapshots/:id`) — progress survives reloads, reaches other devices, and lands in published shares; an id-less Checklist keeps checks in the viewer's browser. Folds and probe re-runs stay viewer-local either way. `Probe` runs only the predefined read-only checks published in its `check` props schema (`POST /api/probes/run`); on public shares, re-run is disabled and probe args/results are stripped at publish unless `shareVisible: true`.
 
-`TreeDoc` (props: `path`, **absolute paths only**, no URLs) is a catalog node that references a catalog-tree JSON file. The server reads the content, the client validates it and renders it as a live subtree, and the view stays in sync with file changes (forward sync). A mid-write invalid save never blanks the view: the last valid render is kept with an unobtrusive error until the file is valid again. A `TreeDoc` cannot appear inside a synced tree (nesting is rejected, which rules out cycles). The server binds to localhost only, and watching is transient state that lives only while a view is open (never persisted). Publishing a view freezes each `TreeDoc` into its subtree at that moment — public payloads never reference files.
+Every view renders the stored snapshot — nothing references a file or live source, and store mutations (post/update/patch/delete) push a change notification over SSE so open views and the list follow along.
 
 ## Templates
 
@@ -128,7 +128,7 @@ syokan shares                      # your published shares
 syokan unpublish <shareId>
 ```
 
-Shares are as ephemeral as everything else: they expire after **7 days by default, 30 days at most**, then vanish — there is no permanent hosting. Each user can hold up to 100 live shares. Publishing freezes the view at that moment (`TreeDoc` subtrees are baked in; local edits never leak to the public URL); republishing mints a new URL. The UI's Share button on a view does the same thing.
+Shares are as ephemeral as everything else: they expire after **7 days by default, 30 days at most**, then vanish — there is no permanent hosting. Each user can hold up to 100 live shares. Publishing copies the stored view at that moment (later local edits never reach the public URL); republishing mints a new URL. The UI's Share button on a view does the same thing.
 
 By publishing you agree to the [terms](https://syokan.dev/terms). Abusive shares can be reported via the "Report abuse" link on any share page.
 

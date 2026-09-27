@@ -70,9 +70,9 @@ The default flow is `Heading` + body nodes inside a `Stack`; a `Heading` can car
 
 ## Cross-cutting node field (id)
 
-Besides `type` / `props` / `children` / `key`, any node may carry `id`: it makes the node addressable. A `Link` with `href: "#<id>"` jumps to it inside the view (revealing it if folded). It is also the identity for viewer-local UI state — **give an `id` to every `Checklist` / `Collapsible` / `Probe`** so checks, folds, and probe reruns survive reloads. An `id` must be unique tree-wide; a duplicate 400s.
+Besides `type` / `props` / `children` / `key`, any node may carry `id`: it makes the node addressable. A `Link` with `href: "#<id>"` jumps to it inside the view (revealing it if folded). It is also the identity for UI state — **give an `id` to every `Checklist` / `Collapsible` / `Probe`** so checks, folds, and probe reruns survive reloads. An `id` must be unique tree-wide; a duplicate 400s.
 
-Interaction state (checks, folds, probe re-runs) lives in the viewer's browser, never in the envelope — post the *initial* state (`checked`, `defaultOpen`, `result`) and let the reader take it from there.
+On an id-carrying `Checklist`, a check on the view is **written back into the snapshot itself** (`PATCH /api/snapshots/:id`) — progress survives reloads, shows up on other devices, and lands in published shares. The writeback is a conditional set on the item's `checked`, identified by **label** (same-label items by occurrence order), so you may reorder or insert items when you regenerate the tree and checks still land on the item the reader meant — but keep each item's `label` stable: a rewritten label breaks the correspondence and the reader's writeback is refused. A `Checklist` without an id keeps device-local checks (viewer's browser only) as before, so an id-less Checklist's progress never reaches the store. For `Collapsible` folds and `Probe` re-runs, state lives in the viewer's browser — post the *initial* state (`checked`, `defaultOpen`, `result`) and let the reader take it from there.
 
 ## Interactive views (risk panels, TODO, dashboards)
 
@@ -84,17 +84,17 @@ Pass the assembled envelope as a file or via stdin; on success the view URL is p
 
 For everything else — commands, subcommands, env vars, exit codes — consult `syokan --help --json`; for types and props, `syokan catalog`.
 
-## Live-syncing a tree file (TreeDoc)
+## Posting a tree file
 
-To keep updating a view without re-posting, **write the catalog tree to a JSON file and syokan the path**. A file holding a bare catalog tree (`{ "type": ..., "props": ... }`, no envelope) is auto-wrapped in a live `TreeDoc`: the CLI resolves it to an absolute path, and **while the view is open it follows every save of the file**. Rewrite the file to update the view.
+To iterate on a view from a file, **write the catalog tree to a JSON file and syokan the path**. A file holding a bare catalog tree (`{ "type": ..., "props": ... }`, no envelope) is inlined into a self-contained snapshot — `title` = the file name, `idempotencyKey` = `file:<absolute path>` — so **re-running the same command updates the same view in place**, and an open view follows the update without a reload.
 
 ```bash
-syokan ./dashboard.json   # summons the tree; every save re-renders the view
+syokan ./dashboard.json   # post; edit the file and re-run to update the same view
 ```
 
-- `syokan <path>` accepts JSON only: an envelope posts once (static); a bare catalog tree live-syncs; anything else (markdown / log / txt / other JSON) is rejected with `unsupported_input`.
-- Mid-write invalid JSON is safe: the view keeps the last valid render and shows an unobtrusive error until the file is valid again.
-- To mix a synced subtree with static nodes, place `TreeDoc` nodes yourself (props: `path`, **absolute paths only**, no URLs). A `TreeDoc` cannot appear inside a synced tree (nesting is rejected).
+- `syokan <path>` accepts JSON only: a file holding an envelope posts the envelope as-is; a bare catalog tree posts inline; anything else (markdown / log / txt / other JSON) is rejected with `unsupported_input`.
+- The snapshot holds the file's content at invocation time — nothing references the file afterward. Renaming or moving the file names a *new* view.
+- The same goes for any envelope you post: every view is the stored snapshot, period — updating means PUT/PATCH into the store, never pointing a view at a live file.
 
 To show a local markdown / text file, there is no file viewer: read it and post the result as catalog nodes (see "JSON only — no free-form markdown ingest" above). Prose sections (paragraphs, lists, links, fenced code, blockquotes) can go straight into a `Markdown` node's `body`; pull out headings into `Heading`, GFM tables into `Table`, and task lists into `Checklist` first — `Markdown` rejects those. For raw text, `jq --rawfile` streams a body in without worrying about JSON escaping.
 

@@ -1,10 +1,14 @@
 import { mkdir, open, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeJsonAtomic } from "../src/lib/fsAtomic";
+import { isRecord, jsonEqual } from "../src/lib/json";
+import { indexOfLabelOccurrence } from "../src/lib/labelOccurrence";
 import {
   CURRENT_SCHEMA_VERSION,
+  findItem,
   type Item,
   type SnapshotEnvelope,
+  type SnapshotPatchInput,
   type SnapshotSummary,
 } from "../src/schema";
 
@@ -33,6 +37,21 @@ export type UpdateResult =
   | { ok: true; envelope: SnapshotEnvelope }
   | { ok: false; error: "not_found" };
 
+export type PatchResult =
+  | { ok: true; envelope: SnapshotEnvelope }
+  | { ok: false; error: "not_found" }
+  | { ok: false; error: "node_not_found"; nodeId: string }
+  | { ok: false; error: "target_not_found" }
+  | { ok: false; error: "value_conflict" }
+  | { ok: false; error: "invalid_set" };
+
+// Emitted to subscribers after a store mutation lands (in-process only — mutations
+// written by another process are visible via read-through but never pushed here).
+export type SnapshotChange = {
+  id: string;
+  kind: "create" | "update" | "delete" | "patch";
+};
+
 export type SnapshotStore = {
   // Create anew. If idempotencyKey is already registered, return the existing one instead of creating (dedup).
   create: (input: CreateInput) => Promise<SnapshotEnvelope>;
@@ -41,9 +60,21 @@ export type SnapshotStore = {
   // use create when you want to create anew. So that a missed target never silently creates,
   // update never breaks its "must already exist" premise).
   update: (input: UpdateInput) => Promise<UpdateResult>;
+  // Write a node-scoped edit (view writeback) into the latest tree inside the write lock,
+  // so a concurrent PUT can't lose it or be rolled back by it. The set is conditional —
+  // it lands only when the node's props still match `expect` and the addressed item
+  // resolves by the label correspondence — and `validate` gates the write on the
+  // mutated node's props (routes.ts checks them against the node's catalog schema).
+  patch: (
+    id: string,
+    input: SnapshotPatchInput,
+    validate: (node: Item) => boolean,
+  ) => Promise<PatchResult>;
   get: (id: string) => Promise<SnapshotEnvelope | undefined>;
   list: () => Promise<SnapshotSummary[]>;
   delete: (id: string) => Promise<boolean>;
+  // Subscribe to mutations issued through this store instance. Returns the unsubscribe.
+  subscribe: (listener: (change: SnapshotChange) => void) => () => void;
 };
 
 // Old JSON files on disk are read without schema revalidation (read() below just
@@ -53,6 +84,9 @@ export type SnapshotStore = {
 // responses always match the current shape. The stored file is left as-is: snapshots
 // are ephemeral, so rewriting them at read time buys nothing a projection doesn't.
 function stripLegacyNodeFields(item: Item): Item {
+  // A stored tree's children aren't revalidated — pass malformed elements
+  // through untouched so the traversal (findItem) can skip them itself.
+  if (!isRecord(item)) return item;
   const { tags: _legacyTags, ...rest } = item as Item & { tags?: unknown };
   const copy = rest as Item;
   // On-disk snapshots are parsed without revalidation (that is why this function exists),
@@ -70,12 +104,43 @@ function stripLegacyNodeFields(item: Item): Item {
 
 const LOCK_TIMEOUT_MS = 5_000;
 
+// A set map walks item prop keys. Never let a write walk the prototype chain.
+export const FORBIDDEN_PROP_KEYS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
+
 export function createSnapshotStore(dataDir: string): SnapshotStore {
   const file = join(dataDir, "snapshots.json");
   const lockFile = `${file}.lock`;
   // Serialize writes (create/delete) within one process (in-process mutex).
   // Prevents idempotency violations / lost updates from interleaved read-modify-write.
   let writeChain: Promise<unknown> = Promise.resolve();
+
+  // In-process mutation subscribers (drives the SSE change notification). Not persisted.
+  const listeners = new Set<(change: SnapshotChange) => void>();
+
+  // Called only after a mutation has been written. A throwing listener must never
+  // break the write path.
+  function notify(change: SnapshotChange): void {
+    for (const listener of listeners) {
+      try {
+        listener(change);
+      } catch {
+        // listener bugs are their own problem
+      }
+    }
+  }
+
+  function subscribe(
+    listener: (change: SnapshotChange) => void,
+  ): () => void {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }
 
   function isProcessAlive(pid: number): boolean {
     try {
@@ -249,6 +314,7 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
           data.idempotency[input.idempotencyKey] = id;
         }
         await write(data);
+        notify({ id, kind: "create" });
         return envelope;
       }),
     );
@@ -271,7 +337,80 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         );
         data.snapshots[envelope.id] = envelope;
         await write(data);
+        notify({ id: envelope.id, kind: "update" });
         return { ok: true, envelope };
+      }),
+    );
+  }
+
+  function patch(
+    id: string,
+    input: SnapshotPatchInput,
+    validate: (node: Item) => boolean,
+  ): Promise<PatchResult> {
+    return enqueue(() =>
+      withLock(async () => {
+        const data = await read();
+        const existing = data.snapshots[id];
+        if (!existing) return { ok: false, error: "not_found" };
+        // Reproject first: fields removed from the schema (e.g. `tags`) ride along
+        // in stored trees but must not count as schema violations. The reprojected
+        // tree is fresh — nothing retains it on a refusal, and `data` is discarded
+        // unwritten, so mutating it in place is unobservable.
+        const root = stripLegacyNodeFields(existing.root);
+        const node = findItem(root, (item) => item.id === input.nodeId);
+        if (!node) {
+          return { ok: false, error: "node_not_found", nodeId: input.nodeId };
+        }
+        // The prop preconditions first: a Checklist asserts the whole `items`
+        // array it rendered (compare-and-set). If it still matches, the label
+        // correspondence resolves deterministically below; if it drifted — a
+        // same-label insertion included — the write is refused as a conflict.
+        const props = isRecord(node.props) ? node.props : {};
+        for (const [key, expected] of Object.entries(input.expect)) {
+          const current = Object.hasOwn(props, key) ? props[key] : undefined;
+          if (!jsonEqual(current ?? null, expected)) {
+            return { ok: false, error: "value_conflict" };
+          }
+        }
+        // A stored tree isn't revalidated, so items may be a malformed shape — any
+        // of these is simply "the item can't be identified", never a partial write.
+        let target: unknown;
+        const items = props.items;
+        if (Array.isArray(items)) {
+          const index = indexOfLabelOccurrence(
+            items,
+            input.item.label,
+            input.item.occurrence,
+          );
+          if (index !== -1) target = items[index];
+        }
+        if (!isRecord(target)) {
+          return { ok: false, error: "target_not_found" };
+        }
+        for (const key of Object.keys(input.set)) {
+          if (FORBIDDEN_PROP_KEYS.has(key)) {
+            return { ok: false, error: "invalid_set" };
+          }
+        }
+        for (const [key, value] of Object.entries(input.set)) {
+          target[key] = value;
+        }
+        if (!validate(node)) {
+          return { ok: false, error: "invalid_set" };
+        }
+        existing.root = root;
+        await write(data);
+        notify({ id: existing.id, kind: "patch" });
+        return {
+          ok: true,
+          envelope: buildEnvelope(
+            existing.id,
+            existing.createdAt,
+            existing.root,
+            existing.title,
+          ),
+        };
       }),
     );
   }
@@ -309,10 +448,11 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
           if (data.idempotency[key] === id) delete data.idempotency[key];
         }
         await write(data);
+        notify({ id, kind: "delete" });
         return true;
       }),
     );
   }
 
-  return { create, update, get, list, delete: remove };
+  return { create, update, patch, get, list, delete: remove, subscribe };
 }

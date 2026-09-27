@@ -176,30 +176,43 @@ describe("share routes", () => {
       });
       await loginDirectly();
       const { stub, calls } = makeWorkerFetch(() => Response.json({}));
-      const res = await app(stub).request(
-        `/api/snapshots/${env.id}/publish`,
-        {
+      const share = app(stub);
+      for (const origin of [
+        "https://evil.example",
+        // another localhost port is equally a foreign origin
+        "http://localhost:9999",
+      ]) {
+        const res = await share.request(`/api/snapshots/${env.id}/publish`, {
           method: "POST",
-          headers: { origin: "https://evil.example" },
-        },
-      );
-      expect(res.status).toBe(403);
+          headers: { origin },
+        });
+        expect(res.status).toBe(403);
+      }
       expect(calls).toEqual([]);
     });
   });
 
   describe("POST /api/snapshots/:id/publish", () => {
-    test("materializes TreeDoc, posts the frozen envelope with a bearer token, and relays the 201", async () => {
-      const filePath = join(dir, "tree.json");
-      await writeFile(
-        filePath,
-        JSON.stringify({ type: "Text", props: { body: "frozen" } }),
-      );
+    test("posts the stored envelope with a bearer token and relays the 201", async () => {
       const env = await store.create({
         root: {
           type: "Stack",
           props: {},
-          children: [{ type: "TreeDoc", props: { path: filePath } }],
+          children: [
+            // a check already written back into the store rides along on publish
+            {
+              type: "Checklist",
+              id: "todo",
+              props: { items: [{ label: "a", checked: true }] },
+            },
+            {
+              type: "Probe",
+              props: {
+                label: "clean",
+                check: { kind: "file_exists", path: "/secret/place" },
+              },
+            },
+          ],
         },
       });
       await loginDirectly("tok-1");
@@ -226,7 +239,7 @@ describe("share routes", () => {
       const body = calls[0]?.body as {
         envelope: {
           id: string;
-          root: { children: Array<{ type: string; props: Record<string, unknown> }> };
+          root: { children: Array<Record<string, unknown>> };
         };
         sourceSnapshotId: string;
         expiresIn: number;
@@ -234,10 +247,16 @@ describe("share routes", () => {
       expect(body.sourceSnapshotId).toBe(env.id);
       expect(body.expiresIn).toBe(3600);
       expect(body.envelope.id).toBe(env.id);
-      // The TreeDoc is frozen into its referenced subtree at publish time
+      // stored content goes out as-is …
       expect(body.envelope.root.children[0]).toEqual({
-        type: "Text",
-        props: { body: "frozen" },
+        type: "Checklist",
+        id: "todo",
+        props: { items: [{ label: "a", checked: true }] },
+      });
+      // … except probe args/results, which are redacted (local paths would leak)
+      expect(body.envelope.root.children[1]).toEqual({
+        type: "Probe",
+        props: { label: "clean" },
       });
     });
 
@@ -269,26 +288,6 @@ describe("share routes", () => {
       );
       expect(res.status).toBe(404);
       expect(((await res.json()) as { error: string }).error).toBe("not_found");
-    });
-
-    test("unreadable TreeDoc -> 422 materialize_failed with path + reason; worker is not called", async () => {
-      const missing = join(dir, "gone.json");
-      const env = await store.create({
-        root: { type: "TreeDoc", props: { path: missing } },
-      });
-      await loginDirectly();
-      const { stub, calls } = makeWorkerFetch(() => Response.json({}));
-      const res = await app(stub).request(
-        `/api/snapshots/${env.id}/publish`,
-        { method: "POST" },
-      );
-      expect(res.status).toBe(422);
-      expect(await res.json()).toEqual({
-        error: "materialize_failed",
-        path: missing,
-        reason: "not_found",
-      });
-      expect(calls).toEqual([]);
     });
 
     test("not logged in -> 401 not_logged_in; worker is not called", async () => {

@@ -1,4 +1,8 @@
-import type { SnapshotEnvelope, SnapshotSummary } from "../schema";
+import type {
+  SnapshotEnvelope,
+  SnapshotPatchInput,
+  SnapshotSummary,
+} from "../schema";
 
 /**
  * Decide the "open next" id after deleting a snapshot from the list (newest first).
@@ -41,6 +45,37 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
   } catch {
     // Swallow a fetch reject (offline, etc.) into false so the caller's floating promise
     // does not become an unhandled rejection (the UI can treat it as "failed").
+    return false;
+  }
+}
+
+// The writeback body (PRD view-writeback), minus the nodeId carried separately by
+// patchSnapshot — the shape is defined by snapshotPatchInputSchema in src/schema
+// so this client contract can't drift from the server's validator.
+export type ItemWriteback = Omit<SnapshotPatchInput, "nodeId">;
+
+/**
+ * Write an item-scoped conditional edit back into the store (view writeback).
+ * Returns false on any refusal — a gone snapshot (404), a node id no longer in the
+ * latest tree, an item the label correspondence can't identify, or a value that
+ * moved since the view rendered it (409), or a schema-breaking set (422) — so the
+ * caller can revert its optimistic display. The server pushes a change
+ * notification on success; the open view picks up the stored state through the
+ * following refetch.
+ */
+export async function patchSnapshot(
+  snapshotId: string,
+  nodeId: string,
+  patch: ItemWriteback,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/snapshots/${encodeURIComponent(snapshotId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nodeId, ...patch }),
+    });
+    return res.ok;
+  } catch {
     return false;
   }
 }

@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 // Smoke test against a COMPILED syokan binary (usage: bun smoke.ts [path-to-binary]).
 // Guards "the distributed artifact itself works": lazy-spawn via re-exec, the embedded frontend's
-// server, and TreeDoc file-follow over SSE — paths a dev-mode `bun test` never exercises.
+// server, the snapshot change-notification SSE, and view writeback (PATCH) — paths a dev-mode
+// `bun test` never exercises.
 // Runs fully isolated (temp XDG dirs + its own port), so it can't touch a real install.
-import { mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,7 +73,14 @@ try {
   const snapshotUrl = await step("post envelope via stdin (lazy-spawns server)", async () => {
     const envelope = JSON.stringify({
       title: "smoke",
-      root: { type: "Heading", props: { text: "smoke" } },
+      root: {
+        type: "Stack",
+        props: {},
+        children: [
+          { type: "Heading", props: { text: "smoke" } },
+          { type: "Checklist", id: "todo", props: { items: [{ label: "a" }] } },
+        ],
+      },
     });
     const r = await run([], envelope);
     if (r.code !== 0 || !r.out.includes("/snapshots/")) throw new Error(`exit=${r.code} out=${r.out}\n${r.err}`);
@@ -94,21 +102,28 @@ try {
   });
 
   const treePath = join(work, "tree.json");
-  await step("syokan <path> summons a bare tree as TreeDoc", async () => {
+  const treeUrl = await step("syokan <path> posts a bare tree as a self-contained snapshot", async () => {
     writeFileSync(treePath, JSON.stringify({ type: "Heading", props: { text: "smoke v1" } }));
     const r = await run([treePath]);
     if (r.code !== 0 || !r.out.includes("/snapshots/")) throw new Error(`exit=${r.code} out=${r.out}\n${r.err}`);
+    return r.out;
   });
 
-  await step("GET /api/files returns the tree content", async () => {
-    const res = await fetch(`${baseUrl}/api/files?path=${encodeURIComponent(treePath)}`);
-    const body = (await res.json()) as { content?: string };
-    if (!res.ok || !body.content?.includes("smoke v1")) throw new Error(`status=${res.status} body=${JSON.stringify(body)}`);
+  await step("the snapshot holds the file's content at invocation time (not a file reference)", async () => {
+    const id = treeUrl.split("/snapshots/")[1];
+    const res = await fetch(`${baseUrl}/api/snapshots/${id}`);
+    const body = (await res.json()) as {
+      title?: string;
+      root?: { type?: string; props?: { text?: string } };
+    };
+    if (!res.ok || body.title !== "tree.json" || body.root?.props?.text !== "smoke v1" || body.root?.type === "TreeDoc") {
+      throw new Error(`status=${res.status} body=${JSON.stringify(body)}`);
+    }
   });
 
-  await step("editor-style save (write tmp + rename) is notified over SSE", async () => {
-    const res = await fetch(`${baseUrl}/api/files/watch?path=${encodeURIComponent(treePath)}`);
-    if (!res.ok || !res.body) throw new Error(`watch -> ${res.status}`);
+  await step("a re-posted file updates the same view, notified over SSE", async () => {
+    const res = await fetch(`${baseUrl}/api/snapshots/changes`);
+    if (!res.ok || !res.body) throw new Error(`changes -> ${res.status}`);
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -126,18 +141,88 @@ try {
       }
     };
     await readUntil(": connected", 5000);
-    // The atomic-save shape (inode swap) — the save style that broke naive watching (AGENTS.md pitfall).
-    const tmp = `${treePath}.tmp`;
-    writeFileSync(tmp, JSON.stringify({ type: "Heading", props: { text: "smoke v2" } }));
-    renameSync(tmp, treePath);
+    // Re-running the same file PUTs into the same snapshot (idempotencyKey = file:<abs path>).
+    writeFileSync(treePath, JSON.stringify({ type: "Heading", props: { text: "smoke v2" } }));
+    const r = await run([treePath]);
+    if (r.code !== 0 || r.out !== treeUrl) throw new Error(`expected in-place update of ${treeUrl}; exit=${r.code} out=${r.out}\n${r.err}`);
     await readUntil("event: change", 10000);
     await reader.cancel();
   });
 
   await step("refetch returns the updated content", async () => {
-    const res = await fetch(`${baseUrl}/api/files?path=${encodeURIComponent(treePath)}`);
-    const body = (await res.json()) as { content?: string };
-    if (!res.ok || !body.content?.includes("smoke v2")) throw new Error(`status=${res.status} body=${JSON.stringify(body)}`);
+    const id = treeUrl.split("/snapshots/")[1];
+    const res = await fetch(`${baseUrl}/api/snapshots/${id}`);
+    const body = (await res.json()) as { root?: { props?: { text?: string } } };
+    if (!res.ok || body.root?.props?.text !== "smoke v2") throw new Error(`status=${res.status} body=${JSON.stringify(body)}`);
+  });
+
+  await step("PATCH writes a view edit into the store (Checklist writeback)", async () => {
+    const id = snapshotUrl.split("/snapshots/")[1];
+    // The conditional set: the item is addressed by label correspondence (not
+    // index) — "a" is its first occurrence — and expect.items is the rendered
+    // array verbatim (compare-and-set on the node props).
+    const res = await fetch(`${baseUrl}/api/snapshots/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        nodeId: "todo",
+        item: { label: "a", occurrence: 1 },
+        set: { checked: true },
+        expect: { items: [{ label: "a" }] },
+      }),
+    });
+    if (!res.ok) throw new Error(`PATCH -> ${res.status}`);
+    const got = await fetch(`${baseUrl}/api/snapshots/${id}`);
+    const body = (await got.json()) as {
+      root?: { children?: { props?: { items?: { checked?: boolean }[] } }[] };
+    };
+    if (body.root?.children?.[1]?.props?.items?.[0]?.checked !== true) {
+      throw new Error(`check not stored: ${JSON.stringify(body)}`);
+    }
+  });
+
+  await step("a stale expect (the value moved) is rejected without writing", async () => {
+    const id = snapshotUrl.split("/snapshots/")[1];
+    const res = await fetch(`${baseUrl}/api/snapshots/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        nodeId: "todo",
+        item: { label: "a", occurrence: 1 },
+        set: { checked: false },
+        // The rendered items array no longer matches — the CAS fails.
+        expect: { items: [{ label: "a" }] },
+      }),
+    });
+    if (res.status !== 409) throw new Error(`expected 409 value_conflict, got ${res.status}`);
+  });
+
+  await step("PATCH against a node missing from the latest tree is rejected", async () => {
+    const id = snapshotUrl.split("/snapshots/")[1];
+    const res = await fetch(`${baseUrl}/api/snapshots/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        nodeId: "gone",
+        item: { label: "a", occurrence: 1 },
+        set: { checked: true },
+        expect: { items: [{ label: "a" }] },
+      }),
+    });
+    if (res.status !== 409) throw new Error(`expected 409 node_not_found, got ${res.status}`);
+  });
+
+  await step("a cross-origin mutation is rejected before executing", async () => {
+    const res = await fetch(`${baseUrl}/api/snapshots`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        // a browser page on another localhost port — the CSRF case the guard exists for
+        origin: "http://localhost:1",
+      },
+      body: JSON.stringify({ root: { type: "Heading", props: { text: "x" } } }),
+    });
+    if (res.status !== 403) throw new Error(`expected 403, got ${res.status}`);
   });
 
   // The running server is found by asking the port, with no state on disk to consult — the whole

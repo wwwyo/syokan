@@ -29,7 +29,7 @@ export const probePropsSchema = z
 export type ProbeProps = z.infer<typeof probePropsSchema>;
 
 // what the component actually receives: published envelopes strip check/result at
-// publish time unless shareVisible (server/materialize.ts), so check can be absent
+// publish time unless shareVisible (server/redact.ts), so check can be absent
 // even though producers must always send it.
 type ProbeComponentProps = Omit<ProbeProps, "check"> & { check?: ProbeCheck };
 

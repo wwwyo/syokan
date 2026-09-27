@@ -1,7 +1,7 @@
 // Probe execution: predefined read-only checks only. The check schema (SSOT:
 // src/catalogs/Probe) admits no arbitrary shell string — each kind maps to a fixed
 // argv / fs walk here, so a snapshot can never make the server run attacker-chosen
-// commands. Trust boundary is the localhost bind + user permissions (same as /api/files).
+// commands. Trust boundary is the localhost bind + user permissions.
 
 import { existsSync, type Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
@@ -11,7 +11,7 @@ import {
   type ProbeResult,
   SEARCH_OP_LABEL,
 } from "../src/catalogs/Probe/check";
-import { readTextFile } from "./fileSource";
+import { readTextFile } from "./readFile";
 
 const GIT_TIMEOUT_MS = 10_000;
 // walk caps so search_count can't freeze the server on a huge tree

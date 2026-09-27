@@ -69,8 +69,7 @@ function MermaidSource({ code }: { code: string }) {
 
 /**
  * The failed-render view. Split out because the error state is only reachable through the async
- * render effect, which `renderToString` never runs — tests and stories drive this directly
- * instead (the same reason `TreeDocBody` is separate from `TreeDoc`).
+ * render effect, which `renderToString` never runs — tests and stories drive this directly.
  *
  * `error` is the message from {@link errorMessage}, already trimmed and capped; it is "" when
  * mermaid threw something blank, in which case only the localized headline shows.

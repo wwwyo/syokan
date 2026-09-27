@@ -47,16 +47,13 @@ describe("publishSnapshot", () => {
     expect(await publishSnapshot("a")).toEqual({ kind: "not_logged_in" });
   });
 
-  test("422 materialize_failed → error message containing the path", async () => {
-    stubFetch(() =>
-      Response.json(
-        { error: "materialize_failed", path: "/a/b.md", reason: "not_found" },
-        { status: 422 },
-      ),
-    );
+  test("other error statuses → generic error", async () => {
+    stubFetch(() => Response.json({ error: "bogus" }, { status: 422 }));
     const result = await publishSnapshot("a");
     expect(result.kind).toBe("error");
-    if (result.kind === "error") expect(result.message).toContain("/a/b.md");
+    if (result.kind === "error") {
+      expect(result.message).toBe("Failed to share.");
+    }
   });
 
   test("502 share_api_unreachable → error", async () => {

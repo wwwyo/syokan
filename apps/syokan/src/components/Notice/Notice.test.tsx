@@ -6,9 +6,9 @@ import { Notice, NoticeDetail } from ".";
 describe("Notice", () => {
   test("emits the caller's data-slot so existing selectors keep matching", () => {
     const html = renderToString(
-      createElement(Notice, { slot: "tree-doc-error", children: "boom" }),
+      createElement(Notice, { slot: "demo-notice", children: "boom" }),
     );
-    expect(html).toContain('data-slot="tree-doc-error"');
+    expect(html).toContain('data-slot="demo-notice"');
     expect(html).toContain("boom");
   });
 

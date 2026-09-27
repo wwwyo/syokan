@@ -2,6 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { Checklist, checklistPropsSchema } from ".";
+import {
+  NodeMetaProvider,
+  useWritebackTarget,
+  ViewStateProvider,
+} from "../../lib/viewState";
 
 describe("checklistPropsSchema", () => {
   test("accepts string and inline labels with optional checked", () => {
@@ -72,5 +77,52 @@ describe("Checklist", () => {
     );
     expect(html).toContain("detail body");
     expect(html).not.toContain('class="ml-6.5 hidden"');
+  });
+});
+
+function TargetProbe() {
+  const target = useWritebackTarget();
+  return createElement(
+    "span",
+    null,
+    target === null ? "none" : `${target.snapshotId}:${target.nodeId}`,
+  );
+}
+
+describe("useWritebackTarget", () => {
+  const wrap = (opts: {
+    shared?: boolean;
+    snapshotId?: string;
+    withMeta?: boolean;
+  }) =>
+    renderToString(
+      createElement(
+        ViewStateProvider,
+        {
+          scopeKey: "scope",
+          shared: opts.shared,
+          snapshotId: opts.snapshotId,
+        },
+        createElement(
+          NodeMetaProvider,
+          { meta: opts.withMeta ? { id: "n1", hash: "h" } : null },
+          createElement(TargetProbe),
+        ),
+      ),
+    );
+
+  test("present only for an id-carrying node in a store-backed view", () => {
+    expect(wrap({ snapshotId: "s1", withMeta: true })).toContain("s1:n1");
+  });
+
+  test("absent on a share viewer — checks there never write back", () => {
+    expect(wrap({ snapshotId: "s1", shared: true, withMeta: true })).toContain(
+      "none",
+    );
+  });
+
+  test("absent outside the store (no snapshotId) and on a node without an id", () => {
+    expect(wrap({ withMeta: true })).toContain("none");
+    expect(wrap({ snapshotId: "s1" })).toContain("none");
   });
 });

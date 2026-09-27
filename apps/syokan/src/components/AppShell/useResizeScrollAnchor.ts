@@ -92,7 +92,8 @@ export function useResizeScrollAnchor(): RefObject<HTMLDivElement | null> {
       const anchor = anchorRef.current;
       if (!anchor || !anchor.el.isConnected) {
         // The anchor can vanish without a scroll event (route transition at the same scrollY,
-        // TreeDoc re-sync swapping the DOM). Re-arm here so the next width change corrects.
+        // a change-notification refetch swapping the DOM). Re-arm here so the next width
+        // change corrects.
         anchorRef.current = findAnchor();
         return;
       }

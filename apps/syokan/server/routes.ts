@@ -1,11 +1,13 @@
 import type { BunRequest } from "bun";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import { itemSchema } from "../src/catalogs";
+import { itemSchema, specs } from "../src/catalogs";
 import { catalogManifest, catalogEnvelopeSchema } from "../src/catalogs/manifest";
 import { probeCheckSchema } from "../src/catalogs/Probe/check";
 import { resolveRepoHead, runProbe } from "./probe";
 import { isFontValue } from "../src/lib/fonts";
+import { isRecord } from "../src/lib/json";
+import { crossOrigin } from "./origin";
 import {
   createSnapshotInputSchema,
   findDuplicateId,
@@ -13,15 +15,10 @@ import {
   type Item,
   settingPatchSchema,
   type SnapshotEnvelope,
+  snapshotPatchInputSchema,
 } from "../src/schema";
-import {
-  type FileWatcher,
-  FILE_SIZE_LIMIT,
-  type ReadFileFailure,
-  readTextFile,
-} from "./fileSource";
 import { type SettingStore } from "./setting";
-import { type SnapshotStore } from "./store";
+import { FORBIDDEN_PROP_KEYS, type SnapshotStore } from "./store";
 import { type TemplateStore } from "./templates";
 
 // ids must be unique tree-wide: anchor lookup and UI-state keying both assume it.
@@ -103,17 +100,33 @@ function snapshotResponse(
   );
 }
 
+// Mutation endpoints reject requests carrying a foreign Origin (a browser page on
+// another origin — another localhost port included — must not drive writes). GETs are
+// unguarded: cross-origin reads can't read the response under the same-origin policy.
+function forbidden(req: Request): Response | null {
+  return crossOrigin(req)
+    ? jsonError(403, {
+        error: "forbidden",
+        message: "cross-origin requests are not accepted",
+      })
+    : null;
+}
+
 export type ApiHandlers = {
   createSnapshot: (req: Request) => Promise<Response>;
   updateSnapshot: (req: Request) => Promise<Response>;
   listSnapshots: () => Promise<Response>;
   getSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
+  patchSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
   deleteSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
+  watchChanges: () => Response;
 };
 
 export function createApiHandlers(store: SnapshotStore): ApiHandlers {
   return {
     async createSnapshot(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await parseSnapshotBody(req, postInputSchema);
       if (!body.ok) return body.response;
       const envelope = await store.create(body.value);
@@ -122,6 +135,8 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
 
     // 404 if there's no match (AIP-134's Update default; use POST when you want to create).
     async updateSnapshot(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await parseSnapshotBody(req, putInputSchema);
       if (!body.ok) return body.response;
       const result = await store.update(body.value);
@@ -151,7 +166,91 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       return Response.json(env);
     },
 
+    // Node-scoped writeback from a view (a Checklist check). The set is
+    // conditional: it lands only when the item resolves by the label
+    // correspondence and every `expect`ed prop still holds its value, and the
+    // mutated node's props must satisfy its catalog schema — a view can't
+    // corrupt the store.
+    async patchSnapshot(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
+      const id = req.params.id;
+      const body = await readJsonBody(req);
+      if (!body.ok) return body.response;
+      // Zod rebuilds records (Object.assign), which turns an own "__proto__" key
+      // into a prototype assignment and hides it from the parsed output — scan
+      // the raw body so such a key is rejected instead of silently dropped.
+      // Anything but a record falls through to the schema check below (→ 400).
+      if (isRecord(body.value)) {
+        for (const map of [body.value.set, body.value.expect]) {
+          if (!isRecord(map)) continue;
+          for (const key of Object.keys(map)) {
+            if (FORBIDDEN_PROP_KEYS.has(key)) {
+              return jsonError(422, {
+                error: "invalid_set",
+                message: "The set does not satisfy the catalog schema",
+              });
+            }
+          }
+        }
+      }
+      const parsed = snapshotPatchInputSchema.safeParse(body.value);
+      if (!parsed.success) {
+        return jsonError(400, {
+          error: "validation_failed",
+          message: "Request body does not satisfy the patch schema",
+          issues: formatValidationError(parsed.error),
+        });
+      }
+      // Validate the mutated node only — stored trees aren't revalidated on read
+      // (a snapshot can carry a since-removed type rendered as unknown), so a
+      // whole-tree check would refuse writebacks on unrelated legacy nodes.
+      const result = await store.patch(id, parsed.data, (node) => {
+        const spec = specs.get(node.type);
+        return spec?.propsSchema.safeParse(node.props).success ?? false;
+      });
+      if (!result.ok) {
+        switch (result.error) {
+          case "not_found":
+            return jsonError(404, {
+              error: "not_found",
+              message: `Snapshot ${id} not found`,
+            });
+          // The node's id is gone from the latest tree (an LLM rewrote it): the view
+          // must revert the operation — the writeback was refused, not dropped.
+          case "node_not_found":
+            return jsonError(409, {
+              error: "node_not_found",
+              message: `Node ${result.nodeId} is not in the latest tree`,
+            });
+          // The item can't be identified in the latest tree — the label is
+          // absent or `occurrence` is out of range (an LLM insert/delete/reorder
+          // broke the correspondence). Never redirect the write to another item.
+          case "target_not_found":
+            return jsonError(409, {
+              error: "target_not_found",
+              message: "The item is not identifiable in the latest tree",
+            });
+          // The item's value moved since the view rendered it (an external
+          // update): applying would silently overwrite that change.
+          case "value_conflict":
+            return jsonError(409, {
+              error: "value_conflict",
+              message: "The item's current value does not match `expect`",
+            });
+          case "invalid_set":
+            return jsonError(422, {
+              error: "invalid_set",
+              message: "The set does not satisfy the catalog schema",
+            });
+        }
+      }
+      return snapshotResponse(result.envelope);
+    },
+
     async deleteSnapshot(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const id = req.params.id;
       const ok = await store.delete(id);
       if (!ok) {
@@ -161,6 +260,44 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
         });
       }
       return Response.json({ ok: true });
+    },
+
+    // Store mutations → open views/list. Same shape as the old files/watch: only "it
+    // changed" is pushed; the client re-fetches content with GET. In-process only —
+    // mutations by another server process don't reach subscribers (the focus-refetch
+    // floor covers that edge).
+    watchChanges() {
+      const encoder = new TextEncoder();
+      let unsubscribe: (() => void) | undefined;
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(": connected\n\n"));
+          unsubscribe = store.subscribe((change) => {
+            try {
+              controller.enqueue(
+                encoder.encode(
+                  `event: change\ndata: ${JSON.stringify(change)}\n\n`,
+                ),
+              );
+            } catch {
+              // Client already disconnected (can't enqueue) — drop the listener now
+              // rather than waiting for cancel, or half-dead connections pile up in
+              // the subscriber set and get iterated on every mutation.
+              unsubscribe?.();
+            }
+          });
+        },
+        // On client disconnect Bun calls cancel → unsubscribe.
+        cancel() {
+          unsubscribe?.();
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+        },
+      });
     },
   };
 }
@@ -192,6 +329,8 @@ export type ProbeApiHandlers = {
 export function createProbeHandlers(): ProbeApiHandlers {
   return {
     async runProbe(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = probeRunInputSchema.safeParse(body.value);
@@ -207,6 +346,8 @@ export function createProbeHandlers(): ProbeApiHandlers {
 
     // current HEAD of a repo — the client compares it with a result's ref for staleness
     async resolveRef(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = probeRefInputSchema.safeParse(body.value);
@@ -257,6 +398,8 @@ export function createTemplateHandlers(
     },
 
     async createTemplate(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = templateInputSchema.safeParse(body.value);
@@ -284,6 +427,8 @@ export function createTemplateHandlers(
     },
 
     async deleteTemplate(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const id = req.params.id;
       const ok = await store.remove(id);
       if (!ok) {
@@ -293,96 +438,6 @@ export function createTemplateHandlers(
         });
       }
       return Response.json({ ok: true });
-    },
-  };
-}
-
-// Map failure reasons to HTTP status codes. The client branches on status (FR-9~12).
-const FILE_FAILURE_STATUS: Record<ReadFileFailure, number> = {
-  not_found: 404,
-  not_regular_file: 422,
-  permission_denied: 403,
-  too_large: 413,
-  not_text: 415,
-};
-
-export type FileApiHandlers = {
-  readFile: (req: Request) => Promise<Response>;
-  watchFile: (req: Request) => Response;
-};
-
-// File-reference node (TreeDoc) read + change watching. The read returns the body/error via GET,
-// and watching notifies only "it changed" over SSE (the client re-fetches the content via GET). Watchers are
-// runtime state scoped to the server process's lifetime — not persisted.
-// Extract and validate the path query param. Relative paths depend on the server CWD and could point
-// at an unintended file, so only absolute paths are accepted (the CLI always passes an absolute path).
-function readPathParam(
-  req: Request,
-): { ok: true; path: string } | { ok: false; response: Response } {
-  const path = new URL(req.url).searchParams.get("path");
-  if (!path) {
-    return {
-      ok: false,
-      response: jsonError(400, {
-        error: "missing_path",
-        message: "query param 'path' is required",
-      }),
-    };
-  }
-  if (!isAbsolute(path)) {
-    return {
-      ok: false,
-      response: jsonError(400, {
-        error: "invalid_path",
-        message: "path must be absolute",
-      }),
-    };
-  }
-  return { ok: true, path };
-}
-
-export function createFileHandlers(watcher: FileWatcher): FileApiHandlers {
-  return {
-    async readFile(req) {
-      const param = readPathParam(req);
-      if (!param.ok) return param.response;
-      const result = await readTextFile(param.path);
-      if (result.ok) return Response.json({ content: result.content });
-      const status = FILE_FAILURE_STATUS[result.reason];
-      return jsonError(status, {
-        error: result.reason,
-        ...(result.reason === "too_large" ? { limit: FILE_SIZE_LIMIT } : {}),
-      });
-    },
-
-    watchFile(req) {
-      const param = readPathParam(req);
-      if (!param.ok) return param.response;
-      const path = param.path;
-      const encoder = new TextEncoder();
-      let unsubscribe: (() => void) | undefined;
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(encoder.encode(": connected\n\n"));
-          unsubscribe = watcher.subscribe(path, () => {
-            try {
-              controller.enqueue(encoder.encode("event: change\ndata: {}\n\n"));
-            } catch {
-              // Client already disconnected (can't enqueue). cancel handles the teardown.
-            }
-          });
-        },
-        // On client disconnect Bun calls cancel → unsubscribe (= watcher refcount--).
-        cancel() {
-          unsubscribe?.();
-        },
-      });
-      return new Response(stream, {
-        headers: {
-          "content-type": "text/event-stream",
-          "cache-control": "no-cache",
-        },
-      });
     },
   };
 }
@@ -399,6 +454,8 @@ export function createSettingHandlers(store: SettingStore): SettingApiHandlers {
     },
 
     async updateSetting(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = settingPatchSchema.safeParse(body.value);
