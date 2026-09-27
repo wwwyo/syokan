@@ -113,7 +113,7 @@ mutation endpoint (snapshot の POST / PUT / PATCH / DELETE) へ別 origin の�
 
 ### 永続化の範囲
 
-check 状態は snapshot のデータに載るため、snapshot と同じ lifecycle を持つ (store が消えれば一緒に消える)。これは ephemeral 原則と整合する — 残したいものは template / share といった既存の昇格経路に乗る。
+check 状態は snapshot のデータに載るため、snapshot と同じ lifecycle を持つ (store が消えれば一緒に消える)。これは ephemeral 原則と整合する — 残したいものは template / share といった既存の昇格経路に乗る。なお snapshot 自体を消さず記録として残す archive 経路は [`../snapshot-archive/`](../snapshot-archive/prd.md) で追加される。
 Collapsible の開閉や probe の実行結果など「表示上の状態」は従来通り device-local のままとし、永続化するのは「データとして意味を持つ状態」のみとする。
 
 ### Goals
