@@ -42,9 +42,13 @@ idempotencyKey の対応は archive 後も生かす。archive 済み snapshot �
 
 これで「昨日の daily 何してた」は `list` で昨日付の snapshot を引き、`get` で中身を読む2手に落ちる。書き戻された check 状態も envelope に含まれるため「何を済ませたか」まで答えられる。
 
-### retention
+### retention と GitHub 管理の位置
 
-archive は明示的に消すまで残す。肥大化が実害になったときの TTL / purge は別 PRD とする (Non-Goal)。archive file は素の JSON なので、運用側で `git commit` すれば履歴管理も product 変更なしに可能である。
+archive は明示的に消すまで残す。肥大化が実害になったときの TTL / purge は別 PRD とする (Non-Goal)。
+
+履歴・バックアップ・github.com 上の検索 UI は欲しいが、store / archive の backend を GitHub (git repo) にはしない。書き込み経路に外部 service を置くと、外部からの push / web 編集が store の write lock と CAS の合流点を迂回する — TreeDoc の file 参照と同型の split-brain になる上、localhost / offline / 秘密を持たない前提も崩れる。
+
+一方で archive → git repo への commit / push は「書き込み済み envelope の downstream 複製」なので問題にならない。向きが一方向 (store → git) で store へ戻らない限り同期の問題は存在しない。したがって GitHub 管理は運用層の sync (cron / launchd で `git -C archive commit && push`) で取るのが既定とし、product 側に入れる場合も `syokan archive sync` のような明示 command までとし、request path には入れない。
 
 ### Goals
 
@@ -55,7 +59,7 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 ### Non-Goals
 
 - archive の TTL / 自動 purge、pin、restore 専用 UI
-- archive の git 管理 (運用で可能・product の責務外)
+- store / archive の backend を GitHub (git repo) にすること (外部書き込みが合流点を迂回するため。履歴・backup は downstream sync で取る — 上記参照)
 - share / publish 済み snapshot の archive (Worker 側の話)
 - archived snapshot への書き戻し (archive は read-only の記録)
 
