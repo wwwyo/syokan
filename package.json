@@ -17,6 +17,7 @@
     "compile:all": "bun --filter @syokan/app compile:all",
     "smoke": "bun apps/syokan/scripts/smoke.ts",
     "release": "bun apps/syokan/scripts/release.ts",
+    "patch:router-core": "bun apps/syokan/scripts/patch-router-core.ts",
     "build:share": "bun --filter @syokan/share build",
     "deploy:share": "bun --filter @syokan/share deploy",
     "test": "bun test",

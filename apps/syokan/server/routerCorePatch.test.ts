@@ -30,9 +30,8 @@ import path from "node:path";
  * Remediation on failure:
  * - If (a) fails (the eager, unpatched form is present again): the version
  *   bumped and `patchedDependencies` no longer matches, so bun skipped the
- *   patch. Run `bun patch @tanstack/router-core`, re-apply the one-line wrap
- *   from the diff above, `bun patch --commit node_modules/@tanstack/router-core`,
- *   then delete the old patch file and update the `patchedDependencies` key.
+ *   patch. Run `bun run patch:router-core` — it re-applies the lazy wrap,
+ *   `bun patch --commit`s it, and drops the stale patch file + key.
  * - Once the mise-pinned bun ships oven-sh/bun#40259, delete the patch file,
  *   the `patchedDependencies` entry, and this test.
  */
@@ -55,8 +54,8 @@ describe("router-core HMR cycle patch", () => {
       eagerReadPattern.test(source),
       `${routerJsPath} contains the eager 'RouterCore.prototype._replaceRouteChunk = replaceRouteChunk;' assignment. ` +
         "This means the bun patch was dropped (likely a router-core version bump whose new version no longer " +
-        "matches the patchedDependencies key). Re-run 'bun patch @tanstack/router-core', re-apply the lazy-wrap " +
-        "fix, and 'bun patch --commit node_modules/@tanstack/router-core'.",
+        "matches the patchedDependencies key). Run 'bun run patch:router-core' — it re-applies the lazy wrap, " +
+        "commits the patch, and drops stale patch keys/files.",
     ).toBe(false);
 
     const lazyWrapPattern = /_replaceRouteChunk\s*=\s*function/;
