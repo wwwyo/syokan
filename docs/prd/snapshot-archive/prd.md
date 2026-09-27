@@ -27,8 +27,8 @@ flowchart LR
 
 - `DELETE /api/snapshots/:id` は envelope の写しを archive に記録として残し、active store から除く。`GET /api/snapshots` の一覧と view route からは消える (view から見れば delete と同じく not-found に落ち、SSE の delete 通知も同じく流れる)。`GET /api/snapshots/:id` 自体は引き続き envelope を返す (後述)
 - archive は per-event の JSON file (`state/archive/<id>.<archivedAt>.json`) とする。`archivedAt` は同一 id 内で一意に採番される unixtime (ms 精度、同一値との衝突時は繰り上げ) で、append-only はこの一意採番で保証する (上書き禁止)
-- 同じ id は複数の archive **generation** を持ちうる (archive → revive → 再 archive)。一覧は generation 単位の行を返すが、個別取得は常に最新 generation のみ返す — 古い世代は API 経路を持たず、archive file を直接読む (稀な forensics 需要のために selector を足さない)
-- `GET /api/snapshots/:id` は **active / archived を問わず** envelope を返す — archived は「resource が消えた」のではなく「archive 状態にある」ので、plain GET の意味論に合わせて返し、response の `archivedAt` field (active では null) で状態を示す。archived を既定経路から外す必要があるのは list だけなので、query parameter での分離は `GET /api/snapshots?archived=1` のみとする (既定は active のみ)。`/api/snapshots/archived` のような literal segment は `:id` param と衝突するため置かない (Bun.serve の static-vs-param 解決順に依存させない)
+- 同じ id は複数の archive **generation** を持ちうる (archive → revive → 再 archive)。一覧は generation 単位の行を返すが、個別取得は常に最新 generation のみ返す — 古い世代は API 経路を持たず、`state/archive/` 配下の file を shell で直接読む (稀な forensics 需要のために selector を足さない; 読み経路は CLI ではなく filesystem と明示する)
+- `GET /api/snapshots/:id` は **active / archived を問わず** envelope を返す — archived は「resource が消えた」のではなく「archive 状態にある」ので、plain GET の意味論に合わせて返し、response の `archivedAt` field (active では null) で状態を示す。**active と archived generation が同居する場合 (revive 後) は常に active が勝ち、archive は active が無いときの fallback** — 同一 id に対して resource の現在形を返す、という plain GET の契約を維持する。archived を既定経路から外す必要があるのは list だけなので、query parameter での分離は `GET /api/snapshots?archived=1` のみとする (既定は active のみ)。`/api/snapshots/archived` のような literal segment は `:id` param と衝突するため置かない (Bun.serve の static-vs-param 解決順に依存させない)
 - view route は `archivedAt` が立つ envelope を not-found として扱う (sidebar の整理操作が live view に影響しない = 従来の delete と同じ結末)
 
 ### revive (再 post = restore)
