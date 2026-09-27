@@ -26,19 +26,21 @@ flowchart LR
 ### archive の意味論
 
 - `DELETE /api/snapshots/:id` は envelope を active store から archive へ移す。`GET /api/snapshots` の一覧・`GET /api/snapshots/:id`・view route からは消える (view から見れば delete と同じく not-found に落ち、SSE の delete 通知も同じく流れる)
-- archive は per-snapshot の JSON file (`state/archive/<id>.json`) とする。active store の単一 JSON を常に小さく保てる利点がある — 「記録は残すが live store は肥やさない」がこの設計の肝で、肥大化した場合の read/write コストを archive 側に逃がす
-- archived snapshot の read は別経路 (`GET /api/snapshots/archived` 一覧 / `GET /api/snapshots/archived/:id`) に置き、既定の参照経路には混ざらない
+- archive は per-snapshot の JSON file (`state/archive/<id>.json`) とする。active store の単一 JSON を常に小さく保てる利点がある — 「記録は残すが live store は肥やさない」がこの設計の肝で、肥大化した場合の read/write コストを archive 側に逃がす。同じ id が再度 archive される場合は `state/archive/<id>.<archivedAt unixtime>.json` に分け、過去の記録を上書きしない (archive は append-only)
+- archived snapshot の read は query parameter で名前空間を分ける: `GET /api/snapshots?archived=1` (一覧) / `GET /api/snapshots/:id?archived=1` (個別)。`/api/snapshots/archived` のような literal segment は `:id` param と衝突するため置かない (Bun.serve の static-vs-param 解決順に依存させない)
 
 ### revive (再 post = restore)
 
-idempotencyKey の対応は archive 後も生かす。archive 済み snapshot と同じ key (`file:<abspath>` 等) で post された場合、その snapshot を **同じ id / URL のまま un-archive** する。envelope は self-contained なので再 post はそのまま復活を意味し、「再打ちで同じ view」という ingest の不変条件が archive に対しても保たれる。
+idempotencyKey の対応は archive 後も生かす。archive 済み snapshot と同じ key (`file:<abspath>` 等) で post された場合、その snapshot を **同じ id / URL のまま active に戻す**。
+
+このとき **post された新しい envelope が勝つ** (PUT と同じく post 側が内容の正本)。archive 側の写し — 書き戻された check 状態を含む — は archive に残ったまま消費されない。つまり archive は「移動」ではなく「active から外れて記録に残る」のであり、revive は archive を空にしない。版を跨いだ check 状態のマージ (revive 時に旧 check を新 tree に写す等) は項目対応の問題を再導入するため持たない — 記録は archive にあり、view は post された最新の内容から始まる。
 
 ### LLM への query 経路
 
 `GET /api/snapshots` 系は curl で既に引けるが、LLM の入口は CLI なので affordance を足す。
 
 - `syokan snapshots list [--archived]` — id / title / createdAt (+ archivedAt) の一覧。日付で絞れること
-- `syokan snapshots get <id> [--archived]` — envelope をそのまま出す
+- `syokan snapshots get <id>` — envelope をそのまま出す。**flag なしで active → archive の順に探す** — LLM が「この id」で引くときに archive かどうかを事前に知る必要はない (query 経路なので archived が既定経路に漏れる問題ではない)
 
 これで「昨日の daily 何してた」は `list` で昨日付の snapshot を引き、`get` で中身を読む2手に落ちる。書き戻された check 状態も envelope に含まれるため「何を済ませたか」まで答えられる。
 
@@ -48,7 +50,7 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 
 履歴・バックアップ・github.com 上の検索 UI は欲しいが、store / archive の backend を GitHub (git repo) にはしない。書き込み経路に外部 service を置くと、外部からの push / web 編集が store の write lock と CAS の合流点を迂回する — TreeDoc の file 参照と同型の split-brain になる上、localhost / offline / 秘密を持たない前提も崩れる。
 
-一方で archive → git repo への commit / push は「書き込み済み envelope の downstream 複製」なので問題にならない。向きが一方向 (store → git) で store へ戻らない限り同期の問題は存在しない。したがって GitHub 管理は運用層の sync (cron / launchd で `git -C archive commit && push`) で取るのが既定とし、product 側に入れる場合も `syokan archive sync` のような明示 command までとし、request path には入れない。
+一方で archive → git repo への commit / push は「書き込み済み envelope の downstream 複製」なので問題にならない。向きが一方向 (store → git) で store へ戻らない限り同期の問題は存在しない。したがって GitHub 管理は運用層の sync (cron / launchd で `git -C archive add -A && git commit -qm ... && git push`) で取るのが既定とし、product 側に入れる場合も `syokan archive sync` のような明示 command までとし、request path には入れない。
 
 ### Goals
 
@@ -71,15 +73,16 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 ## Acceptance Criteria
 
 - [ ] `DELETE /api/snapshots/:id` した snapshot が一覧と `GET /:id` から消え、archive に envelope が残る
-- [ ] archived snapshot は `GET /api/snapshots/archived` で一覧でき、個別に envelope を取得できる
+- [ ] archived snapshot は `GET /api/snapshots?archived=1` で一覧でき、`GET /api/snapshots/:id?archived=1` で個別に envelope を取得できる
 - [ ] archive 時に開いている view は従来の delete と同じく not-found に落ちる (SSE で通知される)
-- [ ] archive 済み snapshot と同じ idempotencyKey で post すると、同じ id / URL で revive する
+- [ ] archive 済み snapshot と同じ idempotencyKey で再 post すると同じ id / URL が active に戻り、新しい envelope の内容が採用される。archive 側の記録 (旧 check 状態を含む) は残る
 - [ ] `syokan snapshots list --archived` で archive 済みを含む一覧が引け、createdAt で日付を絞れる
-- [ ] `syokan snapshots get <id>` が archive 済み snapshot の envelope (書き戻された check 状態を含む) を返す
+- [ ] `syokan snapshots get <id>` が flag なしで archive 済み snapshot の envelope (書き戻された check 状態を含む) を返す
 
 ## Required Updates
 
-- `AGENTS.md` — ephemeral 原則の記述を「見かけは ephemeral・記録は archive に残る」に更新し、directory 記述に archive を足す
+- `AGENTS.md` — ephemeral 原則の記述を「見かけは ephemeral・記録は archive に残る」に更新し、directory 記述に archive を足す。XDG 3-way の表にある snapshots の backup 行 (`machine-local; survive restarts but need no backup`) も更新する — archive には check 状態を含む記録が入るため「no backup」の前提が変わる (downstream git sync がその受け皿)
+- `src/lib/paths.ts` — `state/archive/` の path 解決を足す
 - `skills/syokan/` — delete が archive になること、`syokan snapshots` で過去の snapshot を引けることを明記する
 - `apps/syokan/scripts/smoke.ts` — delete → archive → revive の leg を足す
 
