@@ -79,28 +79,24 @@ export function Checklist({ items, children }: ChecklistProps) {
     }
     const item = items[index];
     if (item === undefined) return;
-    // Identify the item by the label correspondence, not its index: the nth item
-    // carrying this exact label. An LLM insert/delete/reorder then can't redirect
-    // the write onto a different item undetected — a broken correspondence or a
-    // moved `expect` value gets the writeback refused instead.
-    const nth = items
+    // Identify the item by the label correspondence, not its index: the occurrence-th
+    // item carrying this exact label. An LLM insert/delete/reorder then can't
+    // redirect the write onto a different item undetected — a broken correspondence
+    // or a moved `expect` value gets the writeback refused instead.
+    const occurrence = items
       .slice(0, index + 1)
       .filter((other) => jsonEqual(other.label, item.label)).length;
-    // expect is the exact stored value — possibly an absent `checked` (undefined),
-    // which JSON.stringify simply omits from the body; the server reads a missing
-    // expect as "the location must be absent". Writing `false` here would clash
-    // with an absent checked and refuse the first toggle.
-    const expect = queuedRef.current.get(index) ?? item.checked;
+    // expect asserts the exact stored value — an absent `checked` is sent as `null`
+    // (JSON has no undefined), which the server reads as "the prop must be absent".
+    const expect = queuedRef.current.get(index) ?? item.checked ?? null;
     queuedRef.current.set(index, value);
     setPending((prev) => new Map(prev).set(index, value));
     const run = writeChain.current.then(() =>
-      patchSnapshot(target.snapshotId, target.nodeId, [
-        {
-          path: ["items", { label: item.label, nth }, "checked"],
-          expect,
-          value,
-        },
-      ]),
+      patchSnapshot(target.snapshotId, target.nodeId, {
+        item: { label: item.label, occurrence },
+        set: { checked: value },
+        expect: { checked: expect },
+      }),
     );
     writeChain.current = run.then(
       () => undefined,

@@ -16,7 +16,7 @@ import {
   type SnapshotEnvelope,
 } from "../src/schema";
 import { type SettingStore } from "./setting";
-import { type SnapshotStore } from "./store";
+import { FORBIDDEN_PROP_KEYS, type SnapshotStore } from "./store";
 import { type TemplateStore } from "./templates";
 
 // ids must be unique tree-wide: anchor lookup and UI-state keying both assume it.
@@ -43,26 +43,22 @@ const putInputSchema = inputBaseSchema
   .extend({ idempotencyKey: z.string().min(1) })
   .superRefine(uniqueRootIds);
 
-// The writeback body: conditional sets on the node carrying `nodeId`. A path walks
-// object keys and { label, nth } array correspondences — never indexes — and each
-// entry lands only if the value at `path` currently equals `expect`
-// (e.g. { nodeId: "todo", set: [{ path: ["items", { label: "x", nth: 1 }, "checked"], expect: false, value: true }] }).
-const labelMatchSchema = z
-  .object({ label: z.unknown(), nth: z.number().int().min(1) })
-  .strict();
-const patchSetEntrySchema = z
-  .object({
-    path: z.array(z.union([z.string().min(1), labelMatchSchema])).min(1),
-    // optional on the wire: an absent `expect` is the condition "the location must
-    // not exist" (JSON has no way to carry undefined as a value).
-    expect: z.unknown().optional(),
-    value: z.unknown(),
-  })
-  .strict();
+// The writeback body (PRD view-writeback): a conditional set on one Checklist item
+// of the node carrying `nodeId`. `item` identifies the item by label correspondence
+// — its label appearing `occurrence`th (1-based) among same-label items — never by
+// index; `expect` gates each listed prop on its current value (`null` = absent).
+// e.g. { nodeId: "todos", item: { label: "牛乳を買う", occurrence: 2 },
+//        set: { checked: true }, expect: { checked: false } }
 const patchInputSchema = z
   .object({
     nodeId: z.string().min(1),
-    set: z.array(patchSetEntrySchema).min(1),
+    item: z
+      .object({ label: z.unknown(), occurrence: z.number().int().min(1) })
+      .strict(),
+    set: z
+      .record(z.string(), z.unknown())
+      .refine((set) => Object.keys(set).length > 0, "set must not be empty"),
+    expect: z.record(z.string(), z.unknown()),
   })
   .strict();
 
@@ -187,16 +183,34 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       return Response.json(env);
     },
 
-    // Node-scoped writeback from a view (a Checklist check etc.). The set is
-    // conditional: it lands only when the target resolves by the label
-    // correspondence and its current value equals `expect`, and the resulting
-    // tree must still satisfy the catalog schema — a view can't corrupt the store.
+    // Node-scoped writeback from a view (a Checklist check). The set is
+    // conditional: it lands only when the item resolves by the label
+    // correspondence and every `expect`ed prop still holds its value, and the
+    // resulting tree must satisfy the catalog schema — a view can't corrupt
+    // the store.
     async patchSnapshot(req) {
       const deny = forbidden(req);
       if (deny) return deny;
       const id = req.params.id;
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
+      // Zod rebuilds records (Object.assign), which turns an own "__proto__" key
+      // into a prototype assignment and hides it from the parsed output — scan
+      // the raw body so such a key is rejected instead of silently dropped.
+      for (const map of [
+        (body.value as { set?: unknown }).set,
+        (body.value as { expect?: unknown }).expect,
+      ]) {
+        if (map === null || typeof map !== "object") continue;
+        for (const key of Object.keys(map)) {
+          if (FORBIDDEN_PROP_KEYS.has(key)) {
+            return jsonError(422, {
+              error: "invalid_set",
+              message: "The set does not satisfy the catalog schema",
+            });
+          }
+        }
+      }
       const parsed = patchInputSchema.safeParse(body.value);
       if (!parsed.success) {
         return jsonError(400, {
@@ -224,20 +238,20 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
               error: "node_not_found",
               message: `Node ${result.nodeId} is not in the latest tree`,
             });
-          // The path no longer resolves in the latest tree — the label
-          // correspondence broke (insert/delete/reorder), so the target can't be
-          // identified. Never redirect the write to a different target.
+          // The item can't be identified in the latest tree — the label is
+          // absent or `occurrence` is out of range (an LLM insert/delete/reorder
+          // broke the correspondence). Never redirect the write to another item.
           case "target_not_found":
             return jsonError(409, {
               error: "target_not_found",
-              message: "The set path does not resolve in the latest tree",
+              message: "The item is not identifiable in the latest tree",
             });
-          // The target's value moved since the view rendered it (an external
+          // The item's value moved since the view rendered it (an external
           // update): applying would silently overwrite that change.
           case "value_conflict":
             return jsonError(409, {
               error: "value_conflict",
-              message: "The target's current value does not match `expect`",
+              message: "The item's current value does not match `expect`",
             });
           case "invalid_set":
             return jsonError(422, {

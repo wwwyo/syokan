@@ -51,7 +51,7 @@ describe("patchSnapshot", () => {
     globalThis.fetch = realFetch;
   });
 
-  test("PATCHes { nodeId, set: [conditional entries] } to /api/snapshots/:id", async () => {
+  test("PATCHes { nodeId, item, set, expect } to /api/snapshots/:id", async () => {
     let seen: { url: string; method?: string; body: unknown } | undefined;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       seen = {
@@ -61,25 +61,28 @@ describe("patchSnapshot", () => {
       };
       return Response.json({}, { status: 200 });
     }) as unknown as typeof fetch;
-    const set = [
-      {
-        path: ["items", { label: "a", nth: 1 }, "checked"],
-        expect: undefined,
-        value: true,
-      },
-    ];
-    expect(await patchSnapshot("s1", "todo", set)).toBe(true);
+    const patch = {
+      item: { label: "a", occurrence: 2 },
+      set: { checked: true },
+      expect: { checked: null },
+    };
+    expect(await patchSnapshot("s1", "todo", patch)).toBe(true);
     expect(seen).toEqual({
       url: "/api/snapshots/s1",
       method: "PATCH",
-      body: { nodeId: "todo", set: [{ path: set[0]?.path, value: true }] },
+      body: { nodeId: "todo", ...patch },
     });
   });
 
   test("any non-OK (incl. a rejected write like 409) returns false so the view reverts", async () => {
+    const patch = {
+      item: { label: "a", occurrence: 1 },
+      set: { checked: true },
+      expect: {},
+    };
     for (const status of [409, 422, 404, 500]) {
       globalThis.fetch = (async () => new Response(null, { status })) as unknown as typeof fetch;
-      expect(await patchSnapshot("s1", "todo", [])).toBe(false);
+      expect(await patchSnapshot("s1", "todo", patch)).toBe(false);
     }
   });
 
@@ -87,6 +90,12 @@ describe("patchSnapshot", () => {
     globalThis.fetch = (async () => {
       throw new TypeError("Failed to fetch");
     }) as unknown as typeof fetch;
-    expect(await patchSnapshot("s1", "todo", [])).toBe(false);
+    expect(
+      await patchSnapshot("s1", "todo", {
+        item: { label: "a", occurrence: 1 },
+        set: { checked: true },
+        expect: {},
+      }),
+    ).toBe(false);
   });
 });

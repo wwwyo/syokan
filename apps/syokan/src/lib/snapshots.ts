@@ -45,23 +45,21 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
   }
 }
 
-// A writeback path: string keys walk objects; a { label, nth } matcher resolves the
-// nth same-label array element (the node-identity item correspondence — an index
-// would silently follow an LLM insert/reorder and land on a different item).
-export type PatchPathSegment = string | { label: unknown; nth: number };
-
-// One conditional set: lands only when the value at `path` currently equals
-// `expect`, i.e. the store still holds what the view rendered before the operation.
-export type PatchSetEntry = {
-  path: PatchPathSegment[];
-  expect: unknown;
-  value: unknown;
+// The writeback body (PRD view-writeback): a conditional set on one item of a
+// node's `items`. `item` identifies the item by label correspondence — its label
+// appearing `occurrence`th (1-based) among same-label items — never by index, so
+// an LLM insert/reorder can't redirect the write undetected. `expect` gates each
+// listed prop on its current value (`null` = absent); a mismatch refuses the set.
+export type ItemWriteback = {
+  item: { label: unknown; occurrence: number };
+  set: Record<string, unknown>;
+  expect: Record<string, unknown>;
 };
 
 /**
- * Write a node-scoped conditional edit back into the store (view writeback).
+ * Write an item-scoped conditional edit back into the store (view writeback).
  * Returns false on any refusal — a gone snapshot (404), a node id no longer in the
- * latest tree, a target the label correspondence can't identify, or a value that
+ * latest tree, an item the label correspondence can't identify, or a value that
  * moved since the view rendered it (409), or a schema-breaking set (422) — so the
  * caller can revert its optimistic display. The server pushes a change
  * notification on success; the open view picks up the stored state through the
@@ -70,13 +68,13 @@ export type PatchSetEntry = {
 export async function patchSnapshot(
   snapshotId: string,
   nodeId: string,
-  set: PatchSetEntry[],
+  patch: ItemWriteback,
 ): Promise<boolean> {
   try {
     const res = await fetch(`/api/snapshots/${encodeURIComponent(snapshotId)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ nodeId, set }),
+      body: JSON.stringify({ nodeId, ...patch }),
     });
     return res.ok;
   } catch {

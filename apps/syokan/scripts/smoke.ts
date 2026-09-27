@@ -158,16 +158,17 @@ try {
 
   await step("PATCH writes a view edit into the store (Checklist writeback)", async () => {
     const id = snapshotUrl.split("/snapshots/")[1];
-    // The conditional set: the item is addressed by label correspondence (not index),
-    // and a missing `expect` requires the location to be currently absent.
+    // The conditional set: the item is addressed by label correspondence (not
+    // index) — "a" is its first occurrence — and `expect: { checked: null }`
+    // requires the prop to still be absent.
     const res = await fetch(`${baseUrl}/api/snapshots/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         nodeId: "todo",
-        set: [
-          { path: ["items", { label: "a", nth: 1 }, "checked"], value: true },
-        ],
+        item: { label: "a", occurrence: 1 },
+        set: { checked: true },
+        expect: { checked: null },
       }),
     });
     if (!res.ok) throw new Error(`PATCH -> ${res.status}`);
@@ -187,13 +188,9 @@ try {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         nodeId: "todo",
-        set: [
-          {
-            path: ["items", { label: "a", nth: 1 }, "checked"],
-            expect: false, // the store holds true — the condition fails
-            value: false,
-          },
-        ],
+        item: { label: "a", occurrence: 1 },
+        set: { checked: false },
+        expect: { checked: false }, // the store holds true — the condition fails
       }),
     });
     if (res.status !== 409) throw new Error(`expected 409 value_conflict, got ${res.status}`);
@@ -206,9 +203,9 @@ try {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         nodeId: "gone",
-        set: [
-          { path: ["items", { label: "a", nth: 1 }, "checked"], value: true },
-        ],
+        item: { label: "a", occurrence: 1 },
+        set: { checked: true },
+        expect: { checked: null },
       }),
     });
     if (res.status !== 409) throw new Error(`expected 409 node_not_found, got ${res.status}`);

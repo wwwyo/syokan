@@ -660,11 +660,15 @@ describe("PATCH /api/snapshots/:id", () => {
     ],
   };
 
-  // A conditional set landing on item `label`'s nth occurrence.
-  const check = (label: string, nth = 1, expect?: unknown) => ({
-    path: ["items", { label, nth }, "checked"],
+  // A conditional set landing on the `occurrence`th same-label item's `checked`.
+  const check = (
+    label: string,
+    occurrence = 1,
+    expect: Record<string, unknown> = { checked: null },
+  ) => ({
+    item: { label, occurrence },
+    set: { checked: true },
     expect,
-    value: true,
   });
 
   beforeEach(async () => {
@@ -701,7 +705,7 @@ describe("PATCH /api/snapshots/:id", () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "todo",
-      set: [check("b")],
+      ...check("b"),
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -726,7 +730,7 @@ describe("PATCH /api/snapshots/:id", () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "gone",
-      set: [check("a")],
+      ...check("a"),
     });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string };
@@ -745,7 +749,7 @@ describe("PATCH /api/snapshots/:id", () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "todo",
-      set: [check("absent")],
+      ...check("absent"),
     });
     expect(res.status).toBe(409);
     expect(((await res.json()) as { error: string }).error).toBe(
@@ -765,11 +769,11 @@ describe("PATCH /api/snapshots/:id", () => {
   test("a set whose expect no longer matches the stored value is 409 value_conflict", async () => {
     const id = await postTree(checklistTree);
     // Land checked:true first, then a stale write that still expects it absent.
-    const first = await patch(id, { nodeId: "todo", set: [check("a")] });
+    const first = await patch(id, { nodeId: "todo", ...check("a") });
     expect(first.status).toBe(200);
     const stale = await patch(id, {
       nodeId: "todo",
-      set: [check("a")], // expect: undefined — but the store now holds true
+      ...check("a"), // expect: { checked: null } — but the store now holds true
     });
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as { error: string }).error).toBe(
@@ -780,7 +784,7 @@ describe("PATCH /api/snapshots/:id", () => {
   test("an unknown snapshot id is 404 not_found", async () => {
     const res = await patch("missing", {
       nodeId: "todo",
-      set: [check("a")],
+      ...check("a"),
     });
     expect(res.status).toBe(404);
   });
@@ -789,13 +793,9 @@ describe("PATCH /api/snapshots/:id", () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "todo",
-      set: [
-        {
-          path: ["items", { label: "a", nth: 1 }, "checked"],
-          expect: undefined,
-          value: "yes", // a string can never satisfy the boolean schema
-        },
-      ],
+      item: { label: "a", occurrence: 1 },
+      set: { checked: "yes" }, // a string can never satisfy the boolean schema
+      expect: { checked: null },
     });
     expect(res.status).toBe(422);
     expect(((await res.json()) as { error: string }).error).toBe("invalid_set");
@@ -808,19 +808,24 @@ describe("PATCH /api/snapshots/:id", () => {
     expect(stored.root.children[0].props.items[0]?.checked).toBeUndefined();
   });
 
-  test("a prototype-chain path is 422 invalid_set", async () => {
+  test("a prototype-chain prop key is 422 invalid_set", async () => {
     const id = await postTree(checklistTree);
-    const res = await patch(id, {
-      nodeId: "todo",
-      set: [{ path: ["__proto__", "polluted"], expect: undefined, value: true }],
-    });
+    // A raw JSON body: an object-literal "__proto__" key would set the prototype
+    // instead of surviving JSON.stringify, so build the payload as a string.
+    const req = new Request(`http://test/api/snapshots/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: '{"nodeId":"todo","item":{"label":"a","occurrence":1},"set":{"__proto__":true,"checked":true},"expect":{}}',
+    }) as Request & { params: Record<string, string> };
+    Object.defineProperty(req, "params", { value: { id } });
+    const res = await api.patchSnapshot(req as never);
     expect(res.status).toBe(422);
     expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
   });
 
   test("a malformed body is 400", async () => {
     const id = await postTree(checklistTree);
-    const res = await patch(id, { set: [check("a")] });
+    const res = await patch(id, { set: { checked: true }, expect: {} });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe(
       "validation_failed",
@@ -853,7 +858,7 @@ describe("PATCH /api/snapshots/:id", () => {
           body: JSON.stringify({ root: putRoot, idempotencyKey: "raced" }),
         }),
       ),
-      patch(id, { nodeId: "todo", set: [check("a")] }),
+      patch(id, { nodeId: "todo", ...check("a") }),
     ]);
     expect(putRes.status).toBe(200);
     // Serialized inside the write lock. If the patch ran last, the check landed;
@@ -933,13 +938,9 @@ describe("GET /api/snapshots/changes", () => {
       method: "PATCH",
       body: JSON.stringify({
         nodeId: "todo",
-        set: [
-          {
-            path: ["items", { label: "a", nth: 1 }, "checked"],
-            expect: undefined,
-            value: true,
-          },
-        ],
+        item: { label: "a", occurrence: 1 },
+        set: { checked: true },
+        expect: { checked: null },
       }),
     }) as Request & { params: Record<string, string> };
     Object.defineProperty(patchReq, "params", { value: { id } });
