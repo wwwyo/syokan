@@ -553,6 +553,20 @@ describe("SnapshotStore", () => {
     ).toBe(true);
   });
 
+  test("two parallel patches sharing one expect are serialized: the second refuses on the moved array", async () => {
+    const env = await store.create({ root: checklistRoot });
+    const input = { nodeId: "todo", ...checkItem("a") };
+    const [first, second] = await Promise.all([
+      store.patch(env.id, input, acceptAll),
+      store.patch(env.id, input, acceptAll),
+    ]);
+    // The write lock orders them; whichever runs second sees items already moved.
+    const results = [first, second];
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    const refused = results.find((r) => !r.ok);
+    expect(refused).toEqual({ ok: false, error: "value_conflict" });
+  });
+
   test("patch refuses when a same-label insertion shifted occurrences — the CAS catches what label+occurrence cannot", async () => {
     // CodeRabbit scenario: the view rendered [{x},{x}] and the user checks the
     // first x (occurrence 1). An external update inserts another x at the front;

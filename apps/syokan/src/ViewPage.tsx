@@ -21,9 +21,13 @@ function isFullBleed(env: SnapshotEnvelope): boolean {
 export type ViewPageProps = {
   envelope: SnapshotEnvelope;
   onDelete?: () => void;
+  // refetch the route's loader data — handed to writeback paths so a refused
+  // write can pull the latest tree (router.invalidate comes from the route
+  // component; ViewPage itself renders fine outside a router for tests/SSR)
+  refresh?: () => void;
 };
 
-export function ViewPage({ envelope, onDelete }: ViewPageProps) {
+export function ViewPage({ envelope, onDelete, refresh }: ViewPageProps) {
   const fullBleed = isFullBleed(envelope);
   const [showSource, setShowSource] = useState(false);
   useDocumentTitle(envelope.title);
@@ -46,7 +50,11 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
       {/* hidden, not unmounted: unmounting would wipe in-memory node state
           (Collapsible / Probe) on every toggle-back. */}
       <div hidden={showSource} className={fullBleed ? "h-full" : undefined}>
-        <ViewStateProvider scopeKey={envelope.id} snapshotId={envelope.id}>
+        <ViewStateProvider
+          scopeKey={envelope.id}
+          snapshotId={envelope.id}
+          refresh={refresh}
+        >
           <Render item={envelope.root} />
         </ViewStateProvider>
       </div>

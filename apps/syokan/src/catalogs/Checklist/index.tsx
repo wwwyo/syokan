@@ -107,10 +107,11 @@ export function Checklist({ items, children }: ChecklistProps) {
     );
     void run.then((ok) => {
       if (ok) return;
-      // The write didn't land — the target is unidentifiable or its value moved.
-      // Restore the pre-click display and surface the failure instead of silently
-      // dropping the click. Only drop this write's mark: a newer toggle of the same
-      // item may still be in flight and must not be reverted out from under it.
+      // The write didn't land — the store drifted from what was rendered. Pull the
+      // latest tree so the user sees the real state before re-operating, restore the
+      // pre-click display, and surface the failure instead of silently dropping the
+      // click. Only drop this write's mark: a newer toggle of the same item may
+      // still be in flight and must not be reverted out from under it.
       setPending((prev) => {
         if (prev.get(index) !== value) return prev;
         const next = new Map(prev);
@@ -120,6 +121,7 @@ export function Checklist({ items, children }: ChecklistProps) {
       if (queuedRef.current.get(index) === value) {
         queuedRef.current.delete(index);
       }
+      target.refresh();
       window.alert(t.checklist.writebackFailed);
     });
   };
