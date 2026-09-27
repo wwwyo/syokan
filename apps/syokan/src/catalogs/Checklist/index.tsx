@@ -1,9 +1,11 @@
 import { Children, type ReactNode, useRef, useState } from "react";
 import { z } from "zod";
+import { Notice } from "../../components/Notice";
 import { Checkbox } from "../../components/ui/checkbox";
 import { useReveal } from "../../lib/anchor";
 import { t } from "../../lib/i18n";
 import { jsonEqual } from "../../lib/json";
+import { labelOccurrenceAt } from "../../lib/labelOccurrence";
 import { patchSnapshot } from "../../lib/snapshots";
 import { cn } from "../../lib/utils";
 import { useNodeUiState, useWritebackTarget } from "../../lib/viewState";
@@ -43,23 +45,55 @@ export type ChecklistProps = z.infer<typeof checklistPropsSchema> & {
  */
 export function Checklist({ items, children }: ChecklistProps) {
   const bodies = Children.toArray(children);
+  const target = useWritebackTarget();
+  // Store-backed checklists derive their marks from props.items — the device-local
+  // override storage is unused, so park it (no storage reads, no refetch churn).
   const [overrides, setOverrides] = useNodeUiState<(boolean | null)[]>(
     "checks",
     [],
+    target === null,
   );
-  const target = useWritebackTarget();
-  // Optimistic display for in-flight writebacks. Pending marks are cleared when fresh
-  // items arrive (the change notification refetch carries the stored truth back in).
+  // Optimistic display for in-flight writebacks. Pending marks are cleared once the
+  // store's truth comes back (the change notification refetch carries it in).
   const [pending, setPending] = useState<ReadonlyMap<number, boolean>>(new Map());
   // The value our queued writes will leave the store at, per item index — folded into
   // the next click's expect.items compare-and-set. A ref (not the pending state) so a
   // second click in the same render batch still builds on the latest queued value.
   const queuedRef = useRef(new Map<number, boolean>());
+  // Bumped on a refused write: writes queued behind it assumed a store state that
+  // never landed, so they can't land either — they skip their request instead of
+  // cascading one refusal per click.
+  const epochRef = useRef(0);
+  // The last refused write, surfaced as an inline note until the next check attempt.
+  const [writeFailed, setWriteFailed] = useState(false);
   const itemsRef = useRef(items);
   if (itemsRef.current !== items) {
+    const prevItems = itemsRef.current;
     itemsRef.current = items;
-    queuedRef.current.clear();
-    if (pending.size > 0) setPending(new Map());
+    // A fresh fetch prunes the write marks it already reflects — but keep entries
+    // still in flight: a refetch racing ahead of its own PATCH doesn't see the
+    // write yet, and dropping its mark would build the next expect on state the
+    // store is about to move off (a guaranteed conflict on the following click).
+    const inFlight = (i: number, value: boolean): boolean => {
+      const fresh = items[i];
+      const prev = prevItems[i];
+      return (
+        fresh !== undefined &&
+        prev !== undefined &&
+        jsonEqual(fresh.label, prev.label) &&
+        (fresh.checked ?? false) !== value
+      );
+    };
+    for (const [i, value] of queuedRef.current) {
+      if (!inFlight(i, value)) queuedRef.current.delete(i);
+    }
+    if (pending.size > 0) {
+      const next = new Map<number, boolean>();
+      for (const [i, value] of pending) {
+        if (inFlight(i, value)) next.set(i, value);
+      }
+      if (next.size !== pending.size) setPending(next);
+    }
   }
   // Serialize a node's writes so toggles land in click order — parallel PATCHes of
   // the same item could arrive out of order and leave the store on a stale value.
@@ -81,9 +115,7 @@ export function Checklist({ items, children }: ChecklistProps) {
     if (item === undefined) return;
     // Identify the item by the label correspondence, not its index: the occurrence-th
     // item carrying this exact label.
-    const occurrence = items
-      .slice(0, index + 1)
-      .filter((other) => jsonEqual(other.label, item.label)).length;
+    const occurrence = labelOccurrenceAt(items, index);
     // The precondition is the whole items array the store must still hold — a
     // compare-and-set, so a same-label insertion (or any drift) can't silently
     // shift `occurrence` onto a different item. Include the values our queued
@@ -94,36 +126,35 @@ export function Checklist({ items, children }: ChecklistProps) {
     });
     queuedRef.current.set(index, value);
     setPending((prev) => new Map(prev).set(index, value));
-    const run = writeChain.current.then(() =>
-      patchSnapshot(target.snapshotId, target.nodeId, {
-        item: { label: item.label, occurrence },
-        set: { checked: value },
-        expect: { items: expectedItems },
-      }),
-    );
-    writeChain.current = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    void run.then((ok) => {
-      if (ok) return;
-      // The write didn't land — the store drifted from what was rendered. Pull the
-      // latest tree so the user sees the real state before re-operating, restore the
-      // pre-click display, and surface the failure instead of silently dropping the
-      // click. Only drop this write's mark: a newer toggle of the same item may
-      // still be in flight and must not be reverted out from under it.
-      setPending((prev) => {
-        if (prev.get(index) !== value) return prev;
-        const next = new Map(prev);
-        next.delete(index);
-        return next;
-      });
-      if (queuedRef.current.get(index) === value) {
-        queuedRef.current.delete(index);
-      }
-      target.refresh();
-      window.alert(t.checklist.writebackFailed);
-    });
+    setWriteFailed(false);
+    const epoch = epochRef.current;
+    writeChain.current = writeChain.current
+      .then(async () => {
+        // A write queued behind a refusal assumed a store state that never
+        // landed — its expect can't match, so don't send it. The fresh fetch
+        // the refusal triggered re-renders the truth.
+        if (epochRef.current !== epoch) return;
+        const ok = await patchSnapshot(target.snapshotId, target.nodeId, {
+          item: { label: item.label, occurrence },
+          set: { checked: value },
+          expect: { items: expectedItems },
+        });
+        if (ok) return;
+        // The write didn't land — the store drifted from what was rendered. Every
+        // write queued behind this one built its expect on it landing, so bump the
+        // epoch to skip them all, revert every optimistic mark, pull the latest
+        // tree, and surface the refusal once.
+        epochRef.current++;
+        queuedRef.current.clear();
+        setPending(new Map());
+        setWriteFailed(true);
+        target.refresh();
+      })
+      // a throwing link must not poison the chain for the clicks that follow
+      .then(
+        () => undefined,
+        () => undefined,
+      );
   };
   return (
     <div data-slot="checklist" className="flex flex-col gap-2">
@@ -145,6 +176,9 @@ export function Checklist({ items, children }: ChecklistProps) {
           />
         ))}
       </ul>
+      {writeFailed && (
+        <Notice slot="checklist-writeback">{t.checklist.writebackFailed}</Notice>
+      )}
     </div>
   );
 }

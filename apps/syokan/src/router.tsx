@@ -6,6 +6,7 @@ import {
   useParams,
   useRouter,
 } from "@tanstack/react-router";
+import { useCallback } from "react";
 import { AppShell } from "./components/AppShell";
 import { useDeleteSnapshot } from "./components/AppShell/useDeleteSnapshot";
 import { PageLayout } from "./components/PageLayout";
@@ -98,15 +99,17 @@ function ViewRouteComponent() {
   const envelope = viewRoute.useLoaderData();
   const del = useDeleteSnapshot();
   const router = useRouter();
+  // A refused writeback means the store drifted from what was rendered —
+  // refetch everything (the open view and the sidebar list alike). Stable via
+  // useCallback so ViewStateContext consumers don't re-render per render.
+  const refresh = useCallback(() => void router.invalidate(), [router]);
   return (
     <ViewPage
       // remount per snapshot so per-view state (source toggle etc.) never leaks across navigations
       key={envelope.id}
       envelope={envelope}
       onDelete={() => del(envelope.id, { isCurrent: true })}
-      // A refused writeback means the store drifted from what was rendered —
-      // refetch everything (the open view and the sidebar list alike).
-      refresh={() => void router.invalidate()}
+      refresh={refresh}
     />
   );
 }

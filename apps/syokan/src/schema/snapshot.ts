@@ -47,3 +47,31 @@ export function createSnapshotInputSchema(itemSchema: z.ZodType<Item>) {
     })
     .strict();
 }
+
+// The PATCH /api/snapshots/:id writeback body (PRD view-writeback): a conditional
+// set on one item of the node's `items`. `item` identifies the item by label
+// correspondence — its label appearing `occurrence`th (1-based) among same-label
+// items — never by index; `expect` gates node props on their current values —
+// a Checklist sends the whole `items` array it rendered (a compare-and-set), so
+// a same-label insertion that would silently shift `occurrence` is refused before
+// the wrong item is written. `null` in `expect` counts as "the prop is absent"
+// (JSON has no undefined).
+// e.g. { nodeId: "todos", item: { label: "牛乳を買う", occurrence: 2 },
+//        set: { checked: true },
+//        expect: { items: [ { label: "牛乳を買う", checked: false }, ... ] } }
+// Declared here so the client builder (lib/snapshots.ts), the store, and the route
+// validator share one contract and can't drift.
+export const snapshotPatchInputSchema = z
+  .object({
+    nodeId: z.string().min(1),
+    item: z
+      .object({ label: z.unknown(), occurrence: z.number().int().min(1) })
+      .strict(),
+    set: z
+      .record(z.string(), z.unknown())
+      .refine((set) => Object.keys(set).length > 0, "set must not be empty"),
+    expect: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+
+export type SnapshotPatchInput = z.infer<typeof snapshotPatchInputSchema>;

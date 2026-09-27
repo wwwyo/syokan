@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isRecord } from "../lib/json";
 
 export type Item = {
   type: string;
@@ -111,6 +112,27 @@ function buildUnion(
 }
 
 /**
+ * Depth-first search for the first node satisfying `pred`, or undefined. Stored
+ * trees are parsed without revalidation, so the walk tolerates non-record
+ * elements and non-array `children` rather than throwing — malformed subtrees
+ * are skipped, letting the caller decide how to refuse.
+ */
+export function findItem(
+  root: unknown,
+  pred: (item: Item) => boolean,
+): Item | undefined {
+  const stack: unknown[] = [root];
+  while (stack.length > 0) {
+    const item = stack.pop();
+    if (!isRecord(item)) continue;
+    const node = item as Item;
+    if (pred(node)) return node;
+    if (Array.isArray(node.children)) stack.push(...node.children);
+  }
+  return undefined;
+}
+
+/**
  * The first node id that appears more than once in the tree, or null. A cross-cutting
  * id must be unique tree-wide: anchor lookup takes the first match and UI-state keys on
  * (scope, id), so a duplicate id causes wrong jumps and colliding state. Checked at
@@ -118,17 +140,13 @@ function buildUnion(
  */
 export function findDuplicateId(root: Item): string | null {
   const seen = new Set<string>();
-  const stack: Item[] = [root];
-  while (stack.length > 0) {
-    const item = stack.pop();
-    if (item === undefined) break;
-    if (item.id !== undefined) {
-      if (seen.has(item.id)) return item.id;
-      seen.add(item.id);
-    }
-    if (item.children) stack.push(...item.children);
-  }
-  return null;
+  const dup = findItem(root, (item) => {
+    if (item.id === undefined) return false;
+    if (seen.has(item.id)) return true;
+    seen.add(item.id);
+    return false;
+  });
+  return dup?.id ?? null;
 }
 
 function findDuplicateTypes(specs: readonly ComponentSpec[]): string[] {

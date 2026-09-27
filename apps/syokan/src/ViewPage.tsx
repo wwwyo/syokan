@@ -31,7 +31,12 @@ export function ViewPage({ envelope, onDelete, refresh }: ViewPageProps) {
   const fullBleed = isFullBleed(envelope);
   const [showSource, setShowSource] = useState(false);
   useDocumentTitle(envelope.title);
-  const source = useMemo(() => JSON.stringify(envelope, null, 2), [envelope]);
+  const source = useMemo(
+    // the pane is almost always closed — don't pretty-print the whole tree
+    // on every refetch just to keep a hidden string warm
+    () => (showSource ? JSON.stringify(envelope, null, 2) : ""),
+    [envelope, showSource],
+  );
   return (
     <PageLayout
       fullBleed={fullBleed}

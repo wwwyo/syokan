@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Item } from "../src/schema";
 import { createSnapshotStore, type SnapshotStore } from "./store";
+import { checklistTree, checkWriteback } from "./testkit";
 
 const sampleRoot: Item = { type: "Stack", props: {} };
 
@@ -329,40 +330,13 @@ describe("SnapshotStore", () => {
     expect(items.length).toBe(4);
   });
 
-  const checklistRoot: Item = {
-    type: "Stack",
-    props: {},
-    children: [
-      {
-        type: "Checklist",
-        id: "todo",
-        props: { items: [{ label: "a" }, { label: "b" }] },
-      },
-    ],
-  };
   const acceptAll = () => true;
 
-  // A conditional set landing on the `occurrence`th same-label item's `checked`.
-  // `expect` carries the node's props as the view rendered them — the whole
-  // items array (compare-and-set), so any drift including a same-label
-  // insertion is refused before a wrong item can be rewritten.
-  const checkItem = (
-    label: string,
-    occurrence = 1,
-    expect: Record<string, unknown> = {
-      items: [{ label: "a" }, { label: "b" }],
-    },
-  ) => ({
-    item: { label, occurrence },
-    set: { checked: true },
-    expect,
-  });
-
   test("patch lands a conditional set on the item the label correspondence identifies", async () => {
-    const env = await store.create({ root: checklistRoot });
+    const env = await store.create({ root: checklistTree });
     const result = await store.patch(
       env.id,
-      { nodeId: "todo", ...checkItem("b") },
+      { nodeId: "todo", ...checkWriteback("b") },
       acceptAll,
     );
     expect(result.ok).toBe(true);
@@ -423,7 +397,7 @@ describe("SnapshotStore", () => {
     });
     const result = await store.patch(
       env.id,
-      { nodeId: "todo", ...checkItem("same", 2, { items }) },
+      { nodeId: "todo", ...checkWriteback("same", 2, { items }) },
       acceptAll,
     );
     expect(result.ok).toBe(true);
@@ -440,10 +414,10 @@ describe("SnapshotStore", () => {
   });
 
   test("patch persists across a store restart", async () => {
-    const env = await store.create({ root: checklistRoot });
+    const env = await store.create({ root: checklistTree });
     await store.patch(
       env.id,
-      { nodeId: "todo", ...checkItem("a") },
+      { nodeId: "todo", ...checkWriteback("a") },
       acceptAll,
     );
     const next = createSnapshotStore(dir);
@@ -454,17 +428,40 @@ describe("SnapshotStore", () => {
     ).toBe(true);
   });
 
+  test("patch tolerates a malformed stored tree — non-node elements don't throw", async () => {
+    // On-disk trees aren't revalidated: a children array can hold non-nodes.
+    const env = await store.create({
+      root: {
+        type: "Stack",
+        props: {},
+        children: [null as unknown as Item, checklistTree.children![0]!],
+      },
+    });
+    const result = await store.patch(
+      env.id,
+      { nodeId: "todo", ...checkWriteback("a") },
+      acceptAll,
+    );
+    expect(result.ok).toBe(true);
+    const gone = await store.patch(
+      env.id,
+      { nodeId: "ghost", ...checkWriteback("a") },
+      acceptAll,
+    );
+    expect(gone).toEqual({ ok: false, error: "node_not_found", nodeId: "ghost" });
+  });
+
   test("patch returns not_found for a missing snapshot, node_not_found for a missing node id", async () => {
-    const env = await store.create({ root: checklistRoot });
+    const env = await store.create({ root: checklistTree });
     const missing = await store.patch(
       "missing",
-      { nodeId: "todo", ...checkItem("a") },
+      { nodeId: "todo", ...checkWriteback("a") },
       acceptAll,
     );
     expect(missing).toEqual({ ok: false, error: "not_found" });
     const gone = await store.patch(
       env.id,
-      { nodeId: "gone", ...checkItem("a") },
+      { nodeId: "gone", ...checkWriteback("a") },
       acceptAll,
     );
     expect(gone).toEqual({ ok: false, error: "node_not_found", nodeId: "gone" });
@@ -476,7 +473,7 @@ describe("SnapshotStore", () => {
         type: "Stack",
         props: {},
         children: [
-          checklistRoot.children![0]!,
+          checklistTree.children![0]!,
           { type: "Heading", id: "head", props: { text: "no items" } },
         ],
       },
@@ -532,16 +529,16 @@ describe("SnapshotStore", () => {
   });
 
   test("patch refuses when the items array moved past expect (value_conflict)", async () => {
-    const env = await store.create({ root: checklistRoot });
+    const env = await store.create({ root: checklistTree });
     // Land checked:true first, then a stale write still expecting the old array.
     await store.patch(
       env.id,
-      { nodeId: "todo", ...checkItem("a") },
+      { nodeId: "todo", ...checkWriteback("a") },
       acceptAll,
     );
     const conflict = await store.patch(
       env.id,
-      { nodeId: "todo", ...checkItem("a") }, // expect.items is the pre-write array
+      { nodeId: "todo", ...checkWriteback("a") }, // expect.items is the pre-write array
       acceptAll,
     );
     expect(conflict).toEqual({ ok: false, error: "value_conflict" });
@@ -554,8 +551,8 @@ describe("SnapshotStore", () => {
   });
 
   test("two parallel patches sharing one expect are serialized: the second refuses on the moved array", async () => {
-    const env = await store.create({ root: checklistRoot });
-    const input = { nodeId: "todo", ...checkItem("a") };
+    const env = await store.create({ root: checklistTree });
+    const input = { nodeId: "todo", ...checkWriteback("a") };
     const [first, second] = await Promise.all([
       store.patch(env.id, input, acceptAll),
       store.patch(env.id, input, acceptAll),
@@ -619,7 +616,7 @@ describe("SnapshotStore", () => {
   });
 
   test("patch refuses a schema-breaking value (invalid_set) leaving the tree untouched", async () => {
-    const env = await store.create({ root: checklistRoot });
+    const env = await store.create({ root: checklistTree });
     const rejected = await store.patch(
       env.id,
       {
@@ -628,7 +625,7 @@ describe("SnapshotStore", () => {
         set: { checked: "yes" }, // a string can never satisfy the boolean schema
         expect: { items: [{ label: "a" }, { label: "b" }] },
       },
-      () => false, // validator rejects — as itemSchema would for a string `checked`
+      () => false, // validator rejects — as the node's propsSchema would for a string `checked`
     );
     expect(rejected).toEqual({ ok: false, error: "invalid_set" });
     const stored = await store.get(env.id);
@@ -638,7 +635,7 @@ describe("SnapshotStore", () => {
   });
 
   test("patch applies several set entries in one write", async () => {
-    const env = await store.create({ root: checklistRoot });
+    const env = await store.create({ root: checklistTree });
     const result = await store.patch(
       env.id,
       {
@@ -664,13 +661,13 @@ describe("SnapshotStore", () => {
     const seen: { id: string; kind: string }[] = [];
     const unsubscribe = store.subscribe((change) => seen.push(change));
 
-    const env = await store.create({ root: checklistRoot, idempotencyKey: "k" });
+    const env = await store.create({ root: checklistTree, idempotencyKey: "k" });
     // a deduped create is not a mutation — it must not notify
-    await store.create({ root: checklistRoot, idempotencyKey: "k" });
-    await store.update({ root: checklistRoot, idempotencyKey: "k" });
+    await store.create({ root: checklistTree, idempotencyKey: "k" });
+    await store.update({ root: checklistTree, idempotencyKey: "k" });
     await store.patch(
       env.id,
-      { nodeId: "todo", ...checkItem("a") },
+      { nodeId: "todo", ...checkWriteback("a") },
       acceptAll,
     );
     await store.delete(env.id);

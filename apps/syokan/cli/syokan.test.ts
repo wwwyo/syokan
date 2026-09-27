@@ -40,6 +40,8 @@ function makeDeps(opts: {
   stopped?: boolean;
   // stdin contents. Setting it marks it as a pipe (stdinIsPipe=true)
   stdin?: string;
+  // fileSize overrides per path (defaults to the content length of opts.files entries)
+  fileSizes?: Record<string, number>;
 }): Harness {
   const out: string[] = [];
   const err: string[] = [];
@@ -80,6 +82,12 @@ function makeDeps(opts: {
     },
     // Don't use real realpath; resolve deterministically to `/abs/<path>` (for assertions).
     resolvePath: (path) => `/abs/${path}`,
+    fileSize: (path) => {
+      const override = opts.fileSizes?.[path];
+      if (override !== undefined) return override;
+      const content = opts.files?.[path];
+      return content === undefined ? -1 : content.length;
+    },
     readStdin: async () => opts.stdin ?? "",
     stdinIsPipe: () => opts.stdin !== undefined,
     fetch: (async (input: string | URL, init?: RequestInit) => {
@@ -252,6 +260,19 @@ describe("cli main: post (default action)", () => {
     const result = await main(["dashboard.json"], deps);
     expect(result.exitCode).toBe(0);
     expect(calls.map((c) => c.method)).toEqual(["PUT"]);
+  });
+
+  test("a file over the size limit is rejected before reading (nothing posted)", async () => {
+    const { deps, calls, err } = makeDeps({
+      files: { "huge.json": "{}" },
+      fileSizes: { "huge.json": 9 * 1024 * 1024 },
+      respond: () => okResponse(),
+    });
+    const result = await main(["huge.json"], deps);
+    expect(result.exitCode).toBe(1);
+    expect(calls).toEqual([]);
+    const parsed = JSON.parse(err[0] as string) as { error: string };
+    expect(parsed.error).toBe("too_large");
   });
 
   test("non-JSON file is rejected with unsupported_input (nothing posted)", async () => {

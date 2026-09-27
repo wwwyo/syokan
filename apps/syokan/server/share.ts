@@ -109,6 +109,9 @@ export function createShareApp(deps: ShareServiceDeps) {
       return c.json({ login: result.login });
     })
     .delete("/api/auth/login", async (c) => {
+      if (crossOrigin(c.req.raw)) {
+        return c.json({ error: "forbidden" } satisfies ShareErrorResponse, 403);
+      }
       await service.logout();
       return c.json({ ok: true });
     })

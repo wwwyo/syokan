@@ -1,4 +1,8 @@
-import type { SnapshotEnvelope, SnapshotSummary } from "../schema";
+import type {
+  SnapshotEnvelope,
+  SnapshotPatchInput,
+  SnapshotSummary,
+} from "../schema";
 
 /**
  * Decide the "open next" id after deleting a snapshot from the list (newest first).
@@ -45,17 +49,10 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
   }
 }
 
-// The writeback body (PRD view-writeback): a conditional set on one item of a
-// node's `items`. `item` identifies the item by label correspondence — its label
-// appearing `occurrence`th (1-based) among same-label items — never by index.
-// `expect` is a prop-level precondition on the node: a Checklist sends the whole
-// `items` array it rendered (a compare-and-set), so a same-label insertion that
-// would silently shift `occurrence` is refused before the wrong item is written.
-export type ItemWriteback = {
-  item: { label: unknown; occurrence: number };
-  set: Record<string, unknown>;
-  expect: Record<string, unknown>;
-};
+// The writeback body (PRD view-writeback), minus the nodeId carried separately by
+// patchSnapshot — the shape is defined by snapshotPatchInputSchema in src/schema
+// so this client contract can't drift from the server's validator.
+export type ItemWriteback = Omit<SnapshotPatchInput, "nodeId">;
 
 /**
  * Write an item-scoped conditional edit back into the store (view writeback).

@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { mkdirSync, openSync, realpathSync } from "node:fs";
+import { mkdirSync, openSync, realpathSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,8 @@ export type StopResult = {
 export type CliDeps = {
   fetch: typeof fetch;
   readFile: (path: string) => Promise<string>;
+  // Byte size without reading — the over-limit rejection must happen before readFile.
+  fileSize: (path: string) => number;
   // Absolute-path resolution (canonicalization) for a posted file's dedup identifier.
   resolvePath: (path: string) => string;
   // Post input on bare invocation (`... | syokan`)
@@ -288,10 +290,22 @@ function inlineEnvelope(absPath: string, root: unknown): unknown {
 const UNSUPPORTED_INPUT_MESSAGE =
   "only JSON is accepted: a snapshot envelope ({ root: ... }) or a bare catalog tree ({ type: ..., props: ... }, posted as a self-contained snapshot)";
 
+// The file's contents are inlined verbatim into the posted snapshot, so there is no
+// "don't read it" fallback anymore — over this bound we reject before reading rather
+// than dragging a pathological input through parse/POST and into every store read.
+const FILE_SIZE_LIMIT = 8 * 1024 * 1024;
+
 // `syokan <path>`: an envelope posts as-is; a bare catalog tree is inlined into an envelope
 // (idempotent on the absolute path, so a re-post updates the same view); anything else —
 // non-JSON included — is rejected.
 export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
+  if (deps.fileSize(file) > FILE_SIZE_LIMIT) {
+    return argError(
+      deps,
+      "too_large",
+      `file exceeds the ${FILE_SIZE_LIMIT / 1024 / 1024}MB limit`,
+    );
+  }
   let text: string;
   try {
     text = await deps.readFile(file);
@@ -1043,6 +1057,13 @@ export async function runCli(): Promise<void> {
         return realpathSync(path);
       } catch {
         return resolve(path);
+      }
+    },
+    fileSize: (path) => {
+      try {
+        return statSync(path).size;
+      } catch {
+        return -1;
       }
     },
     readStdin: () => Bun.stdin.text(),

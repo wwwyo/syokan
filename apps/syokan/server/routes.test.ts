@@ -11,6 +11,7 @@ import {
 import { createSettingStore } from "./setting";
 import { createSnapshotStore, type SnapshotStore } from "./store";
 import { createTemplateStore } from "./templates";
+import { checklistTree, checkWriteback } from "./testkit";
 
 const baseInput = {
   root: {
@@ -24,8 +25,14 @@ function makeRequest(url: string, init?: RequestInit) {
   return new Request(`http://test${url}`, init);
 }
 
-function makeParamRequest(url: string, params: Record<string, string>) {
-  const req = new Request(`http://test${url}`) as Request & {
+function makeParamRequest(
+  url: string,
+  params: Record<string, string>,
+  init?: RequestInit,
+  // The request URL's own origin — the Origin/Referer header is compared against it
+  origin = "http://test",
+) {
+  const req = new Request(`${origin}${url}`, init) as Request & {
     params: Record<string, string>;
   };
   Object.defineProperty(req, "params", { value: params });
@@ -648,33 +655,6 @@ describe("PATCH /api/snapshots/:id", () => {
   let store: SnapshotStore;
   let api: ReturnType<typeof createApiHandlers>;
 
-  const checklistTree = {
-    type: "Stack",
-    props: {},
-    children: [
-      {
-        type: "Checklist",
-        id: "todo",
-        props: { items: [{ label: "a" }, { label: "b" }] },
-      },
-    ],
-  };
-
-  // A conditional set landing on the `occurrence`th same-label item's `checked`.
-  // `expect` is the node's props the view rendered — for a Checklist, the whole
-  // items array (compare-and-set).
-  const check = (
-    label: string,
-    occurrence = 1,
-    expect: Record<string, unknown> = {
-      items: [{ label: "a" }, { label: "b" }],
-    },
-  ) => ({
-    item: { label, occurrence },
-    set: { checked: true },
-    expect,
-  });
-
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "syokan-patch-api-"));
     store = createSnapshotStore(dir);
@@ -696,12 +676,11 @@ describe("PATCH /api/snapshots/:id", () => {
   }
 
   async function patch(id: string, body: unknown) {
-    const req = new Request(`http://test/api/snapshots/${id}`, {
+    const req = makeParamRequest(`/api/snapshots/${id}`, { id }, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }) as Request & { params: Record<string, string> };
-    Object.defineProperty(req, "params", { value: { id } });
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
     return api.patchSnapshot(req as never);
   }
 
@@ -709,7 +688,7 @@ describe("PATCH /api/snapshots/:id", () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "todo",
-      ...check("b"),
+      ...checkWriteback("b"),
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -734,7 +713,7 @@ describe("PATCH /api/snapshots/:id", () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "gone",
-      ...check("a"),
+      ...checkWriteback("a"),
     });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string };
@@ -753,7 +732,7 @@ describe("PATCH /api/snapshots/:id", () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "todo",
-      ...check("absent"),
+      ...checkWriteback("absent"),
     });
     expect(res.status).toBe(409);
     expect(((await res.json()) as { error: string }).error).toBe(
@@ -773,11 +752,11 @@ describe("PATCH /api/snapshots/:id", () => {
   test("a set whose expect no longer matches the stored items is 409 value_conflict", async () => {
     const id = await postTree(checklistTree);
     // Land checked:true first, then a stale write still expecting the old array.
-    const first = await patch(id, { nodeId: "todo", ...check("a") });
+    const first = await patch(id, { nodeId: "todo", ...checkWriteback("a") });
     expect(first.status).toBe(200);
     const stale = await patch(id, {
       nodeId: "todo",
-      ...check("a"), // expect.items is the pre-write array — the store moved on
+      ...checkWriteback("a"), // expect.items is the pre-write array — the store moved on
     });
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as { error: string }).error).toBe(
@@ -788,7 +767,7 @@ describe("PATCH /api/snapshots/:id", () => {
   test("an unknown snapshot id is 404 not_found", async () => {
     const res = await patch("missing", {
       nodeId: "todo",
-      ...check("a"),
+      ...checkWriteback("a"),
     });
     expect(res.status).toBe(404);
   });
@@ -816,13 +795,10 @@ describe("PATCH /api/snapshots/:id", () => {
     const id = await postTree(checklistTree);
     // A raw JSON body: an object-literal "__proto__" key would set the prototype
     // instead of surviving JSON.stringify, so build the payload as a string.
-    const req = new Request(`http://test/api/snapshots/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: '{"nodeId":"todo","item":{"label":"a","occurrence":1},"set":{"__proto__":true,"checked":true},"expect":{"items":[{"label":"a"},{"label":"b"}]}}',
-    }) as Request & { params: Record<string, string> };
-    Object.defineProperty(req, "params", { value: { id } });
-    const res = await api.patchSnapshot(req as never);
+    const res = await patch(
+      id,
+      '{"nodeId":"todo","item":{"label":"a","occurrence":1},"set":{"__proto__":true,"checked":true},"expect":{"items":[{"label":"a"},{"label":"b"}]}}',
+    );
     expect(res.status).toBe(422);
     expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
   });
@@ -834,6 +810,49 @@ describe("PATCH /api/snapshots/:id", () => {
     expect(((await res.json()) as { error: string }).error).toBe(
       "validation_failed",
     );
+  });
+
+  test("a `null` body is 400, not a 500", async () => {
+    const id = await postTree(checklistTree);
+    const res = await patch(id, "null");
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      "validation_failed",
+    );
+  });
+
+  test("a writeback lands in a snapshot carrying an unknown-type node (legacy trees aren't blocked by validation)", async () => {
+    // Stored trees aren't revalidated on read — a snapshot persisted before a
+    // catalog type was removed keeps the unknown node rendered as-is. The PATCH
+    // validates only the mutated node, so such a snapshot stays writable.
+    const env = await store.create({
+      root: {
+        type: "Stack",
+        props: {},
+        children: [
+          {
+            type: "Checklist",
+            id: "todo",
+            props: { items: [{ label: "a" }] },
+          },
+          { type: "GoneLongAgo", props: {} },
+        ],
+      },
+    });
+    const res = await patch(env.id, {
+      nodeId: "todo",
+      item: { label: "a", occurrence: 1 },
+      set: { checked: true },
+      expect: { items: [{ label: "a" }] },
+    });
+    expect(res.status).toBe(200);
+    const get = await api.getSnapshot(
+      makeParamRequest(`/api/snapshots/${env.id}`, { id: env.id }) as never,
+    );
+    const stored = (await get.json()) as {
+      root: { children: [{ props: { items: { checked?: boolean }[] } }] };
+    };
+    expect(stored.root.children[0].props.items[0]?.checked).toBe(true);
   });
 
   test("a patch racing a full PUT is serialized: the final tree is one coherent ordering", async () => {
@@ -862,7 +881,7 @@ describe("PATCH /api/snapshots/:id", () => {
           body: JSON.stringify({ root: putRoot, idempotencyKey: "raced" }),
         }),
       ),
-      patch(id, { nodeId: "todo", ...check("a") }),
+      patch(id, { nodeId: "todo", ...checkWriteback("a") }),
     ]);
     expect(putRes.status).toBe(200);
     // Serialized inside the write lock. If the patch ran last, the check landed;
@@ -938,17 +957,17 @@ describe("GET /api/snapshots/changes", () => {
     await readUntil(`"kind":"create"`);
     expect(buf).toContain(`"id":"${id}"`);
 
-    const patchReq = new Request(`http://test/api/snapshots/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        nodeId: "todo",
-        item: { label: "a", occurrence: 1 },
-        set: { checked: true },
-        expect: { items: [{ label: "a" }] },
-      }),
-    }) as Request & { params: Record<string, string> };
-    Object.defineProperty(patchReq, "params", { value: { id } });
-    await api.patchSnapshot(patchReq as never);
+    await api.patchSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }, {
+        method: "PATCH",
+        body: JSON.stringify({
+          nodeId: "todo",
+          item: { label: "a", occurrence: 1 },
+          set: { checked: true },
+          expect: { items: [{ label: "a" }] },
+        }),
+      }) as never,
+    );
     await readUntil(`"kind":"patch"`);
 
     await api.deleteSnapshot(
@@ -1000,19 +1019,24 @@ describe("cross-origin guard on mutations", () => {
     expect(put.status).toBe(403);
 
     const env = await store.create({ root: { type: "Stack", props: {} } });
-    const patchReq = new Request(`http://localhost:5773/api/snapshots/${env.id}`, {
-      method: "PATCH",
-      headers: { ...foreign, "content-type": "application/json" },
-      body: JSON.stringify({ nodeId: "x", set: [] }),
-    }) as Request & { params: Record<string, string> };
-    Object.defineProperty(patchReq, "params", { value: { id: env.id } });
+    const patchReq = makeParamRequest(
+      `/api/snapshots/${env.id}`,
+      { id: env.id },
+      {
+        method: "PATCH",
+        headers: { ...foreign, "content-type": "application/json" },
+        body: JSON.stringify({ nodeId: "x", set: [] }),
+      },
+      "http://localhost:5773",
+    );
     expect((await api.patchSnapshot(patchReq as never)).status).toBe(403);
 
-    const delReq = new Request(`http://localhost:5773/api/snapshots/${env.id}`, {
-      method: "DELETE",
-      headers: foreign,
-    }) as Request & { params: Record<string, string> };
-    Object.defineProperty(delReq, "params", { value: { id: env.id } });
+    const delReq = makeParamRequest(
+      `/api/snapshots/${env.id}`,
+      { id: env.id },
+      { method: "DELETE", headers: foreign },
+      "http://localhost:5773",
+    );
     expect((await api.deleteSnapshot(delReq as never)).status).toBe(403);
 
     // nothing was written, nothing was deleted

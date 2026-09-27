@@ -1,11 +1,14 @@
 import { mkdir, open, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeJsonAtomic } from "../src/lib/fsAtomic";
-import { jsonEqual } from "../src/lib/json";
+import { isRecord, jsonEqual } from "../src/lib/json";
+import { indexOfLabelOccurrence } from "../src/lib/labelOccurrence";
 import {
   CURRENT_SCHEMA_VERSION,
+  findItem,
   type Item,
   type SnapshotEnvelope,
+  type SnapshotPatchInput,
   type SnapshotSummary,
 } from "../src/schema";
 
@@ -34,25 +37,6 @@ export type UpdateResult =
   | { ok: true; envelope: SnapshotEnvelope }
   | { ok: false; error: "not_found" };
 
-export type PatchInput = {
-  // The writeback target: a node carrying this id in the tree (a Checklist today).
-  nodeId: string;
-  // Item identification by the node-identity correspondence: the element of the
-  // node's `items` whose `label` deep-equals, counting occurrences of that same
-  // label (occurrence, 1-based). There is no index addressing: an index silently
-  // follows an LLM's insert/delete/reorder and points at a different item
-  // undetected, while a broken label correspondence is refused as target_not_found.
-  item: { label: unknown; occurrence: number };
-  // Prop keys to write on the identified item (e.g. { checked: true }).
-  set: Record<string, unknown>;
-  // Prop-level precondition on the NODE: every entry must match the node's current
-  // prop value — `null` counts as "the prop is absent" (JSON has no undefined).
-  // A Checklist sends the rendered `items` array verbatim (a compare-and-set), so
-  // a same-label insertion that would silently shift `occurrence` is refused
-  // before it can rewrite a different item.
-  expect: Record<string, unknown>;
-};
-
 export type PatchResult =
   | { ok: true; envelope: SnapshotEnvelope }
   | { ok: false; error: "not_found" }
@@ -78,13 +62,13 @@ export type SnapshotStore = {
   update: (input: UpdateInput) => Promise<UpdateResult>;
   // Write a node-scoped edit (view writeback) into the latest tree inside the write lock,
   // so a concurrent PUT can't lose it or be rolled back by it. The set is conditional —
-  // it lands only when the addressed target exists by the label correspondence and its
-  // current value matches `expect` — and `validate` gates the write on the post-set
-  // root (routes.ts checks the whole tree against the catalog itemSchema).
+  // it lands only when the node's props still match `expect` and the addressed item
+  // resolves by the label correspondence — and `validate` gates the write on the
+  // mutated node's props (routes.ts checks them against the node's catalog schema).
   patch: (
     id: string,
-    input: PatchInput,
-    validate: (root: Item) => boolean,
+    input: SnapshotPatchInput,
+    validate: (node: Item) => boolean,
   ) => Promise<PatchResult>;
   get: (id: string) => Promise<SnapshotEnvelope | undefined>;
   list: () => Promise<SnapshotSummary[]>;
@@ -100,6 +84,9 @@ export type SnapshotStore = {
 // responses always match the current shape. The stored file is left as-is: snapshots
 // are ephemeral, so rewriting them at read time buys nothing a projection doesn't.
 function stripLegacyNodeFields(item: Item): Item {
+  // A stored tree's children aren't revalidated — pass malformed elements
+  // through untouched so the traversal (findItem) can skip them itself.
+  if (!isRecord(item)) return item;
   const { tags: _legacyTags, ...rest } = item as Item & { tags?: unknown };
   const copy = rest as Item;
   // On-disk snapshots are parsed without revalidation (that is why this function exists),
@@ -117,46 +104,12 @@ function stripLegacyNodeFields(item: Item): Item {
 
 const LOCK_TIMEOUT_MS = 5_000;
 
-// A set/expect map walks item prop keys. Never let a write walk the prototype chain.
+// A set map walks item prop keys. Never let a write walk the prototype chain.
 export const FORBIDDEN_PROP_KEYS = new Set([
   "__proto__",
   "constructor",
   "prototype",
 ]);
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-// The index of the element whose `label` deep-equals, at the given 1-based
-// occurrence of that same label — the node-identity correspondence for Checklist
-// items — or -1 when fewer than `occurrence` elements carry that label.
-function labelIndex(
-  array: unknown[],
-  item: { label: unknown; occurrence: number },
-): number {
-  let seen = 0;
-  for (let i = 0; i < array.length; i++) {
-    const element = array[i];
-    if (isPlainRecord(element) && jsonEqual(element.label, item.label)) {
-      seen++;
-      if (seen === item.occurrence) return i;
-    }
-  }
-  return -1;
-}
-
-function findNodeById(root: Item, id: string): Item | undefined {
-  const stack: Item[] = [root];
-  while (stack.length > 0) {
-    const item = stack.pop();
-    if (item === undefined) break;
-    if (item.id === id) return item;
-    // On-disk trees are not revalidated, so children may be a malformed shape.
-    if (Array.isArray(item.children)) stack.push(...item.children);
-  }
-  return undefined;
-}
 
 export function createSnapshotStore(dataDir: string): SnapshotStore {
   const file = join(dataDir, "snapshots.json");
@@ -392,24 +345,28 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
 
   function patch(
     id: string,
-    input: PatchInput,
-    validate: (root: Item) => boolean,
+    input: SnapshotPatchInput,
+    validate: (node: Item) => boolean,
   ): Promise<PatchResult> {
     return enqueue(() =>
       withLock(async () => {
         const data = await read();
         const existing = data.snapshots[id];
         if (!existing) return { ok: false, error: "not_found" };
-        // Apply onto a clone: a refused set or a failed schema check leaves the
-        // stored tree untouched.
-        const root = structuredClone(existing.root);
-        const node = findNodeById(root, input.nodeId);
-        if (!node) return { ok: false, error: "node_not_found", nodeId: input.nodeId };
+        // Reproject first: fields removed from the schema (e.g. `tags`) ride along
+        // in stored trees but must not count as schema violations. The reprojected
+        // tree is fresh — nothing retains it on a refusal, and `data` is discarded
+        // unwritten, so mutating it in place is unobservable.
+        const root = stripLegacyNodeFields(existing.root);
+        const node = findItem(root, (item) => item.id === input.nodeId);
+        if (!node) {
+          return { ok: false, error: "node_not_found", nodeId: input.nodeId };
+        }
         // The prop preconditions first: a Checklist asserts the whole `items`
         // array it rendered (compare-and-set). If it still matches, the label
         // correspondence resolves deterministically below; if it drifted — a
         // same-label insertion included — the write is refused as a conflict.
-        const props = isPlainRecord(node.props) ? node.props : {};
+        const props = isRecord(node.props) ? node.props : {};
         for (const [key, expected] of Object.entries(input.expect)) {
           const current = Object.hasOwn(props, key) ? props[key] : undefined;
           if (!jsonEqual(current ?? null, expected)) {
@@ -421,10 +378,14 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         let target: unknown;
         const items = props.items;
         if (Array.isArray(items)) {
-          const index = labelIndex(items, input.item);
+          const index = indexOfLabelOccurrence(
+            items,
+            input.item.label,
+            input.item.occurrence,
+          );
           if (index !== -1) target = items[index];
         }
-        if (!isPlainRecord(target)) {
+        if (!isRecord(target)) {
           return { ok: false, error: "target_not_found" };
         }
         for (const key of Object.keys(input.set)) {
@@ -435,13 +396,10 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         for (const [key, value] of Object.entries(input.set)) {
           target[key] = value;
         }
-        // Reproject before validating: fields removed from the schema (e.g. `tags`)
-        // ride along in stored trees but must not count as schema violations here.
-        const cleanRoot = stripLegacyNodeFields(root);
-        if (!validate(cleanRoot)) {
+        if (!validate(node)) {
           return { ok: false, error: "invalid_set" };
         }
-        existing.root = cleanRoot;
+        existing.root = root;
         await write(data);
         notify({ id: existing.id, kind: "patch" });
         return {

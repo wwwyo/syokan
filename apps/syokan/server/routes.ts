@@ -1,11 +1,12 @@
 import type { BunRequest } from "bun";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import { itemSchema } from "../src/catalogs";
+import { itemSchema, specs } from "../src/catalogs";
 import { catalogManifest, catalogEnvelopeSchema } from "../src/catalogs/manifest";
 import { probeCheckSchema } from "../src/catalogs/Probe/check";
 import { resolveRepoHead, runProbe } from "./probe";
 import { isFontValue } from "../src/lib/fonts";
+import { isRecord } from "../src/lib/json";
 import { crossOrigin } from "./origin";
 import {
   createSnapshotInputSchema,
@@ -14,6 +15,7 @@ import {
   type Item,
   settingPatchSchema,
   type SnapshotEnvelope,
+  snapshotPatchInputSchema,
 } from "../src/schema";
 import { type SettingStore } from "./setting";
 import { FORBIDDEN_PROP_KEYS, type SnapshotStore } from "./store";
@@ -42,25 +44,6 @@ const postInputSchema = inputBaseSchema.superRefine(uniqueRootIds);
 const putInputSchema = inputBaseSchema
   .extend({ idempotencyKey: z.string().min(1) })
   .superRefine(uniqueRootIds);
-
-// The writeback body (PRD view-writeback): a conditional set on one Checklist item
-// of the node carrying `nodeId`. `item` identifies the item by label correspondence
-// — its label appearing `occurrence`th (1-based) among same-label items — never by
-// index; `expect` gates each listed prop on its current value (`null` = absent).
-// e.g. { nodeId: "todos", item: { label: "牛乳を買う", occurrence: 2 },
-//        set: { checked: true }, expect: { checked: false } }
-const patchInputSchema = z
-  .object({
-    nodeId: z.string().min(1),
-    item: z
-      .object({ label: z.unknown(), occurrence: z.number().int().min(1) })
-      .strict(),
-    set: z
-      .record(z.string(), z.unknown())
-      .refine((set) => Object.keys(set).length > 0, "set must not be empty"),
-    expect: z.record(z.string(), z.unknown()),
-  })
-  .strict();
 
 function jsonError(
   status: number,
@@ -186,8 +169,8 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
     // Node-scoped writeback from a view (a Checklist check). The set is
     // conditional: it lands only when the item resolves by the label
     // correspondence and every `expect`ed prop still holds its value, and the
-    // resulting tree must satisfy the catalog schema — a view can't corrupt
-    // the store.
+    // mutated node's props must satisfy its catalog schema — a view can't
+    // corrupt the store.
     async patchSnapshot(req) {
       const deny = forbidden(req);
       if (deny) return deny;
@@ -197,21 +180,21 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       // Zod rebuilds records (Object.assign), which turns an own "__proto__" key
       // into a prototype assignment and hides it from the parsed output — scan
       // the raw body so such a key is rejected instead of silently dropped.
-      for (const map of [
-        (body.value as { set?: unknown }).set,
-        (body.value as { expect?: unknown }).expect,
-      ]) {
-        if (map === null || typeof map !== "object") continue;
-        for (const key of Object.keys(map)) {
-          if (FORBIDDEN_PROP_KEYS.has(key)) {
-            return jsonError(422, {
-              error: "invalid_set",
-              message: "The set does not satisfy the catalog schema",
-            });
+      // Anything but a record falls through to the schema check below (→ 400).
+      if (isRecord(body.value)) {
+        for (const map of [body.value.set, body.value.expect]) {
+          if (!isRecord(map)) continue;
+          for (const key of Object.keys(map)) {
+            if (FORBIDDEN_PROP_KEYS.has(key)) {
+              return jsonError(422, {
+                error: "invalid_set",
+                message: "The set does not satisfy the catalog schema",
+              });
+            }
           }
         }
       }
-      const parsed = patchInputSchema.safeParse(body.value);
+      const parsed = snapshotPatchInputSchema.safeParse(body.value);
       if (!parsed.success) {
         return jsonError(400, {
           error: "validation_failed",
@@ -219,11 +202,13 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
           issues: formatValidationError(parsed.error),
         });
       }
-      const result = await store.patch(
-        id,
-        parsed.data,
-        (root) => itemSchema.safeParse(root).success,
-      );
+      // Validate the mutated node only — stored trees aren't revalidated on read
+      // (a snapshot can carry a since-removed type rendered as unknown), so a
+      // whole-tree check would refuse writebacks on unrelated legacy nodes.
+      const result = await store.patch(id, parsed.data, (node) => {
+        const spec = specs.get(node.type);
+        return spec?.propsSchema.safeParse(node.props).success ?? false;
+      });
       if (!result.ok) {
         switch (result.error) {
           case "not_found":
@@ -295,7 +280,10 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
                 ),
               );
             } catch {
-              // Client already disconnected (can't enqueue). cancel handles the teardown.
+              // Client already disconnected (can't enqueue) — drop the listener now
+              // rather than waiting for cancel, or half-dead connections pile up in
+              // the subscriber set and get iterated on every mutation.
+              unsubscribe?.();
             }
           });
         },

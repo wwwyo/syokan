@@ -5,6 +5,7 @@ export {
   createCatalog,
   defineComponent,
   findDuplicateId,
+  findItem,
 } from "./catalog";
 export {
   type ValidationIssue,
@@ -21,8 +22,10 @@ export {
 } from "./setting";
 export {
   type SnapshotEnvelope,
+  type SnapshotPatchInput,
   type SnapshotSummary,
   CURRENT_SCHEMA_VERSION,
   createSnapshotEnvelopeSchema,
   createSnapshotInputSchema,
+  snapshotPatchInputSchema,
 } from "./snapshot";

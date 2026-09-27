@@ -2,6 +2,7 @@ import { Outlet, useRouter } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "../AppSidebar";
 import { SidebarProvider } from "../PageLayout/sidebarContext";
+import { shellRouteApi, viewRouteApi } from "./shellRouteApi";
 import { useResizeScrollAnchor } from "./useResizeScrollAnchor";
 
 // During client transitions the open/closed state lives in memory (the resident shell);
@@ -55,14 +56,35 @@ export function AppShell() {
     if (typeof window === "undefined") return;
     const source = new EventSource("/api/snapshots/changes");
     let connected = false;
-    source.addEventListener("change", (event) => {
-      const change = JSON.parse(event.data as string) as { id?: unknown };
-      const id = typeof change.id === "string" ? change.id : undefined;
+    // Coalesce a burst of mutations into one invalidation — each event otherwise
+    // fires its own refetch pair (an LLM re-posting in a loop, a click burst).
+    let changedIds = new Set<string>();
+    let listChanged = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = () => {
+      const ids = changedIds;
+      const list = listChanged;
+      changedIds = new Set();
+      listChanged = false;
+      timer = undefined;
       void router.invalidate({
         filter: (m) =>
-          m.routeId === "/_shell" ||
-          (m.routeId === "/_shell/snapshots/$id" && m.params.id === id),
+          (m.routeId === shellRouteApi.id && list) ||
+          (m.routeId === viewRouteApi.id &&
+            typeof m.params.id === "string" &&
+            ids.has(m.params.id)),
       });
+    };
+    source.addEventListener("change", (event) => {
+      const change = JSON.parse(event.data as string) as {
+        id?: unknown;
+        kind?: unknown;
+      };
+      // A patch only writes a node's props — id/title/createdAt can't move, so the
+      // sidebar list is unaffected; only the view showing that snapshot refetches.
+      if (change.kind !== "patch") listChanged = true;
+      if (typeof change.id === "string") changedIds.add(change.id);
+      timer ??= setTimeout(flush, 80);
     });
     source.addEventListener("open", () => {
       // A reconnect means events may have been missed — resync once. The first open
@@ -70,7 +92,10 @@ export function AppShell() {
       if (connected) void router.invalidate();
       connected = true;
     });
-    return () => source.close();
+    return () => {
+      source.close();
+      if (timer !== undefined) clearTimeout(timer);
+    };
   }, [router]);
 
   // Snapshot creation happens outside the app (CLI/LLM), so there is no in-app trigger. On
@@ -81,7 +106,9 @@ export function AppShell() {
     if (typeof window === "undefined") return;
     const onActive = () => {
       if (document.visibilityState !== "hidden") {
-        void router.invalidate({ filter: (m) => m.routeId === "/_shell" });
+        void router.invalidate({
+          filter: (m) => m.routeId === shellRouteApi.id,
+        });
       }
     };
     window.addEventListener("focus", onActive);

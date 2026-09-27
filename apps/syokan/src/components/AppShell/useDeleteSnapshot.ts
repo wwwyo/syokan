@@ -14,7 +14,7 @@ export type DeleteOptions = {
 // Imperatively read the latest list after invalidate (useLoaderData is a hook and can't be
 // called from a callback). _shell is the ancestor of every route, so it is always in matches.
 function shellItems(router: ReturnType<typeof useRouter>): SnapshotSummary[] {
-  const match = router.state.matches.find((m) => m.routeId === "/_shell");
+  const match = router.state.matches.find((m) => m.routeId === shellRouteApi.id);
   return (match?.loaderData ?? []) as SnapshotSummary[];
 }
 
@@ -39,7 +39,9 @@ export function useDeleteSnapshot() {
       // display (avoids momentarily falling to not-found when viewing the deleted target). The
       // link to the gone snapshot disappears from the list, and a back navigation re-runs the
       // loader with staleTime=0 and surfaces a 404.
-      await router.invalidate({ filter: (m) => m.routeId === "/_shell" });
+      await router.invalidate({
+        filter: (m) => m.routeId === shellRouteApi.id,
+      });
       if (isCurrent) {
         // Open the computed target only if it still exists in the post-deletion list. Otherwise go home.
         const after = shellItems(router);

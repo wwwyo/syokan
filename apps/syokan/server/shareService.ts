@@ -206,9 +206,11 @@ export function createShareService(deps: ShareServiceDeps): ShareService {
     },
 
     async publish(id, expiresIn) {
-      const envelope = await deps.store.get(id);
+      const [envelope, auth] = await Promise.all([
+        deps.store.get(id),
+        readAuth(deps.authFilePath),
+      ]);
       if (!envelope) return { ok: false, kind: "not_found", id };
-      const auth = await readAuth(deps.authFilePath);
       if (!auth) return { ok: false, kind: "not_logged_in" };
       let res: Awaited<ReturnType<typeof client.api.v1.shares.$post>>;
       try {
