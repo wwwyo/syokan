@@ -102,6 +102,7 @@ PATCH /api/snapshots/:id
 
 - `item` が項目の同定で、そのラベルが Checklist 内で occurrence 番目 (1-based) に出る項目を指す
 - `expect` が props 単位の前提条件で、指定した prop が最新の tree と一致しないときは適用せず拒否する。Checklist の書き戻しでは、描画時点の `items` 配列をそのまま渡す
+- 連続する書き戻しは、直前の応答で確定した `items` を次の `expect` に使う。同じ `expect` を持つ2つの PATCH が並行しても、適用は store lock で直列化され、先に入った方が `items` を変えるため後者は expect 不一致で拒否される。view は拒否後に最新を取り直して利用者の再操作を待つ
 
 文言の inline 編集など他の操作も同じ PATCH で表現できるが、UI 面の検討が別途要るため本 PRD では扱わない (Non-Goals)。
 
