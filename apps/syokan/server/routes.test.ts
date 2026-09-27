@@ -661,10 +661,14 @@ describe("PATCH /api/snapshots/:id", () => {
   };
 
   // A conditional set landing on the `occurrence`th same-label item's `checked`.
+  // `expect` is the node's props the view rendered — for a Checklist, the whole
+  // items array (compare-and-set).
   const check = (
     label: string,
     occurrence = 1,
-    expect: Record<string, unknown> = { checked: null },
+    expect: Record<string, unknown> = {
+      items: [{ label: "a" }, { label: "b" }],
+    },
   ) => ({
     item: { label, occurrence },
     set: { checked: true },
@@ -766,14 +770,14 @@ describe("PATCH /api/snapshots/:id", () => {
     ).toBe(true);
   });
 
-  test("a set whose expect no longer matches the stored value is 409 value_conflict", async () => {
+  test("a set whose expect no longer matches the stored items is 409 value_conflict", async () => {
     const id = await postTree(checklistTree);
-    // Land checked:true first, then a stale write that still expects it absent.
+    // Land checked:true first, then a stale write still expecting the old array.
     const first = await patch(id, { nodeId: "todo", ...check("a") });
     expect(first.status).toBe(200);
     const stale = await patch(id, {
       nodeId: "todo",
-      ...check("a"), // expect: { checked: null } — but the store now holds true
+      ...check("a"), // expect.items is the pre-write array — the store moved on
     });
     expect(stale.status).toBe(409);
     expect(((await stale.json()) as { error: string }).error).toBe(
@@ -795,7 +799,7 @@ describe("PATCH /api/snapshots/:id", () => {
       nodeId: "todo",
       item: { label: "a", occurrence: 1 },
       set: { checked: "yes" }, // a string can never satisfy the boolean schema
-      expect: { checked: null },
+      expect: { items: [{ label: "a" }, { label: "b" }] },
     });
     expect(res.status).toBe(422);
     expect(((await res.json()) as { error: string }).error).toBe("invalid_set");
@@ -815,7 +819,7 @@ describe("PATCH /api/snapshots/:id", () => {
     const req = new Request(`http://test/api/snapshots/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: '{"nodeId":"todo","item":{"label":"a","occurrence":1},"set":{"__proto__":true,"checked":true},"expect":{}}',
+      body: '{"nodeId":"todo","item":{"label":"a","occurrence":1},"set":{"__proto__":true,"checked":true},"expect":{"items":[{"label":"a"},{"label":"b"}]}}',
     }) as Request & { params: Record<string, string> };
     Object.defineProperty(req, "params", { value: { id } });
     const res = await api.patchSnapshot(req as never);
@@ -940,7 +944,7 @@ describe("GET /api/snapshots/changes", () => {
         nodeId: "todo",
         item: { label: "a", occurrence: 1 },
         set: { checked: true },
-        expect: { checked: null },
+        expect: { items: [{ label: "a" }] },
       }),
     }) as Request & { params: Record<string, string> };
     Object.defineProperty(patchReq, "params", { value: { id } });

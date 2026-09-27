@@ -51,9 +51,9 @@ export function Checklist({ items, children }: ChecklistProps) {
   // Optimistic display for in-flight writebacks. Pending marks are cleared when fresh
   // items arrive (the change notification refetch carries the stored truth back in).
   const [pending, setPending] = useState<ReadonlyMap<number, boolean>>(new Map());
-  // The value our queued writes will leave the store at, per item index — the `expect`
-  // of the next click on that item. A ref (not the pending state) so a second click in
-  // the same render batch still builds its condition on the latest queued value.
+  // The value our queued writes will leave the store at, per item index — folded into
+  // the next click's expect.items compare-and-set. A ref (not the pending state) so a
+  // second click in the same render batch still builds on the latest queued value.
   const queuedRef = useRef(new Map<number, boolean>());
   const itemsRef = useRef(items);
   if (itemsRef.current !== items) {
@@ -80,22 +80,25 @@ export function Checklist({ items, children }: ChecklistProps) {
     const item = items[index];
     if (item === undefined) return;
     // Identify the item by the label correspondence, not its index: the occurrence-th
-    // item carrying this exact label. An LLM insert/delete/reorder then can't
-    // redirect the write onto a different item undetected — a broken correspondence
-    // or a moved `expect` value gets the writeback refused instead.
+    // item carrying this exact label.
     const occurrence = items
       .slice(0, index + 1)
       .filter((other) => jsonEqual(other.label, item.label)).length;
-    // expect asserts the exact stored value — an absent `checked` is sent as `null`
-    // (JSON has no undefined), which the server reads as "the prop must be absent".
-    const expect = queuedRef.current.get(index) ?? item.checked ?? null;
+    // The precondition is the whole items array the store must still hold — a
+    // compare-and-set, so a same-label insertion (or any drift) can't silently
+    // shift `occurrence` onto a different item. Include the values our queued
+    // writes will already have landed so consecutive toggles build on them.
+    const expectedItems = items.map((entry, i) => {
+      const queued = queuedRef.current.get(i);
+      return queued === undefined ? entry : { ...entry, checked: queued };
+    });
     queuedRef.current.set(index, value);
     setPending((prev) => new Map(prev).set(index, value));
     const run = writeChain.current.then(() =>
       patchSnapshot(target.snapshotId, target.nodeId, {
         item: { label: item.label, occurrence },
         set: { checked: value },
-        expect: { checked: expect },
+        expect: { items: expectedItems },
       }),
     );
     writeChain.current = run.then(

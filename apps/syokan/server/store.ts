@@ -45,9 +45,11 @@ export type PatchInput = {
   item: { label: unknown; occurrence: number };
   // Prop keys to write on the identified item (e.g. { checked: true }).
   set: Record<string, unknown>;
-  // Value-level precondition: every entry must match the item's current value —
-  // `null` counts as "the prop is absent" (JSON has no undefined). A mismatch means
-  // the item moved under the view (an external PUT) and the writeback is refused.
+  // Prop-level precondition on the NODE: every entry must match the node's current
+  // prop value — `null` counts as "the prop is absent" (JSON has no undefined).
+  // A Checklist sends the rendered `items` array verbatim (a compare-and-set), so
+  // a same-label insertion that would silently shift `occurrence` is refused
+  // before it can rewrite a different item.
   expect: Record<string, unknown>;
 };
 
@@ -403,24 +405,27 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         const root = structuredClone(existing.root);
         const node = findNodeById(root, input.nodeId);
         if (!node) return { ok: false, error: "node_not_found", nodeId: input.nodeId };
+        // The prop preconditions first: a Checklist asserts the whole `items`
+        // array it rendered (compare-and-set). If it still matches, the label
+        // correspondence resolves deterministically below; if it drifted — a
+        // same-label insertion included — the write is refused as a conflict.
+        const props = isPlainRecord(node.props) ? node.props : {};
+        for (const [key, expected] of Object.entries(input.expect)) {
+          const current = Object.hasOwn(props, key) ? props[key] : undefined;
+          if (!jsonEqual(current ?? null, expected)) {
+            return { ok: false, error: "value_conflict" };
+          }
+        }
         // A stored tree isn't revalidated, so items may be a malformed shape — any
         // of these is simply "the item can't be identified", never a partial write.
-        const items = isPlainRecord(node.props) ? node.props.items : undefined;
         let target: unknown;
+        const items = props.items;
         if (Array.isArray(items)) {
           const index = labelIndex(items, input.item);
           if (index !== -1) target = items[index];
         }
         if (!isPlainRecord(target)) {
           return { ok: false, error: "target_not_found" };
-        }
-        // The value precondition: the item must still hold what the view saw —
-        // `null` in expect stands for an absent (or inherited) prop.
-        for (const [key, expected] of Object.entries(input.expect)) {
-          const current = Object.hasOwn(target, key) ? target[key] : undefined;
-          if (!jsonEqual(current ?? null, expected)) {
-            return { ok: false, error: "value_conflict" };
-          }
         }
         for (const key of Object.keys(input.set)) {
           if (FORBIDDEN_PROP_KEYS.has(key)) {

@@ -343,10 +343,15 @@ describe("SnapshotStore", () => {
   const acceptAll = () => true;
 
   // A conditional set landing on the `occurrence`th same-label item's `checked`.
+  // `expect` carries the node's props as the view rendered them — the whole
+  // items array (compare-and-set), so any drift including a same-label
+  // insertion is refused before a wrong item can be rewritten.
   const checkItem = (
     label: string,
     occurrence = 1,
-    expect: Record<string, unknown> = { checked: null },
+    expect: Record<string, unknown> = {
+      items: [{ label: "a" }, { label: "b" }],
+    },
   ) => ({
     item: { label, occurrence },
     set: { checked: true },
@@ -394,7 +399,14 @@ describe("SnapshotStore", () => {
       },
     });
     // The LLM inserts an item at the front and inserts a third same-label item —
-    // every index shifts; the label correspondence must not.
+    // every index shifts; the label correspondence must not. expect.items carries
+    // the post-update array the view rendered (the write is conditional on it).
+    const items = [
+      { label: "other" },
+      { label: "same" },
+      { label: "same" },
+      { label: "same" },
+    ];
     await store.update({
       idempotencyKey: "reorder",
       root: {
@@ -404,34 +416,27 @@ describe("SnapshotStore", () => {
           {
             type: "Checklist",
             id: "todo",
-            props: {
-              items: [
-                { label: "other" },
-                { label: "same" },
-                { label: "same" },
-                { label: "same" },
-              ],
-            },
+            props: { items },
           },
         ],
       },
     });
     const result = await store.patch(
       env.id,
-      { nodeId: "todo", ...checkItem("same", 2) },
+      { nodeId: "todo", ...checkItem("same", 2, { items }) },
       acceptAll,
     );
     expect(result.ok).toBe(true);
     const stored = await store.get(env.id);
-    const items = (
+    const storedItems = (
       stored?.root.children?.[0]?.props as {
         items: { label: string; checked?: boolean }[];
       }
     ).items;
-    expect(items[0]).toEqual({ label: "other" });
-    expect(items[1]).toEqual({ label: "same" });
-    expect(items[2]).toEqual({ label: "same", checked: true });
-    expect(items[3]).toEqual({ label: "same" });
+    expect(storedItems[0]).toEqual({ label: "other" });
+    expect(storedItems[1]).toEqual({ label: "same" });
+    expect(storedItems[2]).toEqual({ label: "same", checked: true });
+    expect(storedItems[3]).toEqual({ label: "same" });
   });
 
   test("patch persists across a store restart", async () => {
@@ -477,13 +482,25 @@ describe("SnapshotStore", () => {
       },
     });
     for (const input of [
-      { nodeId: "todo", item: { label: "absent", occurrence: 1 } }, // no such label
-      { nodeId: "todo", item: { label: "a", occurrence: 2 } }, // occurrence out of range
-      { nodeId: "head", item: { label: "a", occurrence: 1 } }, // node has no items array
+      {
+        nodeId: "todo",
+        item: { label: "absent", occurrence: 1 }, // no such label
+        expect: { items: [{ label: "a" }, { label: "b" }] },
+      },
+      {
+        nodeId: "todo",
+        item: { label: "a", occurrence: 2 }, // occurrence out of range
+        expect: { items: [{ label: "a" }, { label: "b" }] },
+      },
+      {
+        nodeId: "head",
+        item: { label: "a", occurrence: 1 }, // node has no items array
+        expect: { items: null }, // "items must be absent" — then nothing resolves
+      },
     ]) {
       const result = await store.patch(
         env.id,
-        { ...input, set: { checked: true }, expect: { checked: null } },
+        { ...input, set: { checked: true } },
         acceptAll,
       );
       expect(result.ok).toBe(false);
@@ -514,9 +531,9 @@ describe("SnapshotStore", () => {
     expect(Object.prototype.hasOwnProperty.call({}, "x")).toBe(false);
   });
 
-  test("patch refuses when the current value moved past expect (value_conflict)", async () => {
+  test("patch refuses when the items array moved past expect (value_conflict)", async () => {
     const env = await store.create({ root: checklistRoot });
-    // The view rendered checked absent; the store already holds true.
+    // Land checked:true first, then a stale write still expecting the old array.
     await store.patch(
       env.id,
       { nodeId: "todo", ...checkItem("a") },
@@ -524,7 +541,7 @@ describe("SnapshotStore", () => {
     );
     const conflict = await store.patch(
       env.id,
-      { nodeId: "todo", ...checkItem("a") }, // still expects absent
+      { nodeId: "todo", ...checkItem("a") }, // expect.items is the pre-write array
       acceptAll,
     );
     expect(conflict).toEqual({ ok: false, error: "value_conflict" });
@@ -536,6 +553,57 @@ describe("SnapshotStore", () => {
     ).toBe(true);
   });
 
+  test("patch refuses when a same-label insertion shifted occurrences — the CAS catches what label+occurrence cannot", async () => {
+    // CodeRabbit scenario: the view rendered [{x},{x}] and the user checks the
+    // first x (occurrence 1). An external update inserts another x at the front;
+    // occurrence 1 now resolves to the inserted item — but expect.items no
+    // longer matches, so the write must be refused instead of landing wrong.
+    const rendered = [{ label: "x" }, { label: "x" }];
+    const env = await store.create({
+      idempotencyKey: "dup",
+      root: {
+        type: "Stack",
+        props: {},
+        children: [
+          { type: "Checklist", id: "todo", props: { items: rendered } },
+        ],
+      },
+    });
+    await store.update({
+      idempotencyKey: "dup",
+      root: {
+        type: "Stack",
+        props: {},
+        children: [
+          {
+            type: "Checklist",
+            id: "todo",
+            props: { items: [{ label: "x" }, ...rendered] },
+          },
+        ],
+      },
+    });
+    const result = await store.patch(
+      env.id,
+      {
+        nodeId: "todo",
+        item: { label: "x", occurrence: 1 },
+        set: { checked: true },
+        expect: { items: rendered },
+      },
+      acceptAll,
+    );
+    expect(result).toEqual({ ok: false, error: "value_conflict" });
+    const stored = await store.get(env.id);
+    expect(
+      (
+        stored?.root.children?.[0]?.props as {
+          items: { checked?: boolean }[];
+        }
+      ).items.every((i) => i.checked === undefined),
+    ).toBe(true);
+  });
+
   test("patch refuses a schema-breaking value (invalid_set) leaving the tree untouched", async () => {
     const env = await store.create({ root: checklistRoot });
     const rejected = await store.patch(
@@ -544,7 +612,7 @@ describe("SnapshotStore", () => {
         nodeId: "todo",
         item: { label: "a", occurrence: 1 },
         set: { checked: "yes" }, // a string can never satisfy the boolean schema
-        expect: { checked: null },
+        expect: { items: [{ label: "a" }, { label: "b" }] },
       },
       () => false, // validator rejects — as itemSchema would for a string `checked`
     );
@@ -563,7 +631,7 @@ describe("SnapshotStore", () => {
         nodeId: "todo",
         item: { label: "a", occurrence: 1 },
         set: { checked: true, note: "done" },
-        expect: { checked: null },
+        expect: { items: [{ label: "a" }, { label: "b" }] },
       },
       acceptAll,
     );

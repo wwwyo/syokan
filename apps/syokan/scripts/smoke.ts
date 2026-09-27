@@ -159,8 +159,8 @@ try {
   await step("PATCH writes a view edit into the store (Checklist writeback)", async () => {
     const id = snapshotUrl.split("/snapshots/")[1];
     // The conditional set: the item is addressed by label correspondence (not
-    // index) — "a" is its first occurrence — and `expect: { checked: null }`
-    // requires the prop to still be absent.
+    // index) — "a" is its first occurrence — and expect.items is the rendered
+    // array verbatim (compare-and-set on the node props).
     const res = await fetch(`${baseUrl}/api/snapshots/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -168,7 +168,7 @@ try {
         nodeId: "todo",
         item: { label: "a", occurrence: 1 },
         set: { checked: true },
-        expect: { checked: null },
+        expect: { items: [{ label: "a" }] },
       }),
     });
     if (!res.ok) throw new Error(`PATCH -> ${res.status}`);
@@ -190,7 +190,8 @@ try {
         nodeId: "todo",
         item: { label: "a", occurrence: 1 },
         set: { checked: false },
-        expect: { checked: false }, // the store holds true — the condition fails
+        // The rendered items array no longer matches — the CAS fails.
+        expect: { items: [{ label: "a" }] },
       }),
     });
     if (res.status !== 409) throw new Error(`expected 409 value_conflict, got ${res.status}`);
@@ -205,7 +206,7 @@ try {
         nodeId: "gone",
         item: { label: "a", occurrence: 1 },
         set: { checked: true },
-        expect: { checked: null },
+        expect: { items: [{ label: "a" }] },
       }),
     });
     if (res.status !== 409) throw new Error(`expected 409 node_not_found, got ${res.status}`);

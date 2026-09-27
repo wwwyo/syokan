@@ -47,9 +47,10 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
 
 // The writeback body (PRD view-writeback): a conditional set on one item of a
 // node's `items`. `item` identifies the item by label correspondence — its label
-// appearing `occurrence`th (1-based) among same-label items — never by index, so
-// an LLM insert/reorder can't redirect the write undetected. `expect` gates each
-// listed prop on its current value (`null` = absent); a mismatch refuses the set.
+// appearing `occurrence`th (1-based) among same-label items — never by index.
+// `expect` is a prop-level precondition on the node: a Checklist sends the whole
+// `items` array it rendered (a compare-and-set), so a same-label insertion that
+// would silently shift `occurrence` is refused before the wrong item is written.
 export type ItemWriteback = {
   item: { label: unknown; occurrence: number };
   set: Record<string, unknown>;

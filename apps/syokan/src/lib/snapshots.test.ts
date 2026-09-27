@@ -64,7 +64,7 @@ describe("patchSnapshot", () => {
     const patch = {
       item: { label: "a", occurrence: 2 },
       set: { checked: true },
-      expect: { checked: null },
+      expect: { items: [{ label: "a" }, { label: "a" }] },
     };
     expect(await patchSnapshot("s1", "todo", patch)).toBe(true);
     expect(seen).toEqual({
@@ -78,7 +78,7 @@ describe("patchSnapshot", () => {
     const patch = {
       item: { label: "a", occurrence: 1 },
       set: { checked: true },
-      expect: {},
+      expect: { items: [{ label: "a" }] },
     };
     for (const status of [409, 422, 404, 500]) {
       globalThis.fetch = (async () => new Response(null, { status })) as unknown as typeof fetch;
@@ -94,7 +94,7 @@ describe("patchSnapshot", () => {
       await patchSnapshot("s1", "todo", {
         item: { label: "a", occurrence: 1 },
         set: { checked: true },
-        expect: {},
+        expect: { items: [{ label: "a" }] },
       }),
     ).toBe(false);
   });
