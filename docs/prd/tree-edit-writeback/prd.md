@@ -1,5 +1,7 @@
 # PRD: tree-edit-writeback
 
+> **Superseded by [`../view-writeback/`](../view-writeback/prd.md).** 本 PRD が想定した書き戻し先は TreeDoc の参照ファイルだったが、view の正本は snapshot store に一本化されることになった。Problem の問題設定 (view 上の操作に受け皿がない) は有効だが、node 単位マージ・位置照合・ファイル健全性・「TreeDoc 配下のみ編集可」の境界は、正本が store になることで不要になった。
+
 ## Problem
 
 TreeDoc の live sync は一方向である。
