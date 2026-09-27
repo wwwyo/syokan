@@ -100,9 +100,9 @@ syokan meeting.json
 
 `Code` with no `lang` is still the right choice for content that must render verbatim (raw logs, ASCII tables) rather than be parsed as markdown.
 
-## Example 4: live-synced view (TreeDoc)
+## Example 4: posting a tree file
 
-Write a bare catalog tree (no envelope) to a file and syokan the path — it is auto-wrapped in a `TreeDoc` and the view follows every save.
+Write a bare catalog tree (no envelope) to a file and syokan the path — it is inlined into a self-contained snapshot (`title` = file name, `idempotencyKey` = `file:<absolute path>`), so re-running the same command after an edit updates the same view in place.
 This is the shape of the *file content*, not a POST body:
 
 ```json
@@ -117,28 +117,14 @@ This is the shape of the *file content*, not a POST body:
 ```
 
 ```bash
-syokan ./status.json   # keep rewriting status.json; the view updates in place
+syokan ./status.json   # rewrite status.json and re-run; the same view updates
 ```
 
-To embed a synced subtree inside a larger static view, place the node yourself (absolute path only; `TreeDoc` cannot appear inside the synced tree itself):
-
-```json
-{
-  "title": "Ops dashboard",
-  "root": {
-    "type": "Stack",
-    "props": {},
-    "children": [
-      { "type": "Heading", "props": { "text": "Ops dashboard", "level": 1 } },
-      { "type": "TreeDoc", "props": { "path": "/Users/me/status.json" } }
-    ]
-  }
-}
-```
+The view is the stored snapshot, not the file — nothing watches the file, so a snapshot you compose by hand can mix this tree freely under `root` once you post it as an envelope.
 
 ## Example 5: review risk panel (interactive primitives)
 
-Stat row → Table cockpit whose rows jump to finding headings (`Link` with `href:"#<id>"`, the `id` on the `Heading`) → evidence folded in `Collapsible` → "no findings" claims backed by re-runnable `Probe`s → reviewer `Checklist`. Interaction state stays in the viewer's browser; post only the initial state.
+Stat row → Table cockpit whose rows jump to finding headings (`Link` with `href:"#<id>"`, the `id` on the `Heading`) → evidence folded in `Collapsible` → "no findings" claims backed by re-runnable `Probe`s → reviewer `Checklist`. Post only the initial state: `Checklist` checks write back into the snapshot (it needs its `id` for that), while folds and probe re-runs stay in the viewer's browser.
 
 ```json
 {

@@ -328,4 +328,134 @@ describe("SnapshotStore", () => {
     const items = await createSnapshotStore(dir).list();
     expect(items.length).toBe(4);
   });
+
+  const checklistRoot: Item = {
+    type: "Stack",
+    props: {},
+    children: [
+      {
+        type: "Checklist",
+        id: "todo",
+        props: { items: [{ label: "a" }, { label: "b" }] },
+      },
+    ],
+  };
+  const acceptAll = () => true;
+
+  test("patch sets a prop path on the node carrying nodeId", async () => {
+    const env = await store.create({ root: checklistRoot });
+    const result = await store.patch(
+      env.id,
+      { nodeId: "todo", set: { "items.1.checked": true } },
+      acceptAll,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const items = (
+        result.envelope.root.children?.[0]?.props as {
+          items: { checked?: boolean }[];
+        }
+      ).items;
+      expect(items[0]?.checked).toBeUndefined();
+      expect(items[1]?.checked).toBe(true);
+    }
+    const stored = await store.get(env.id);
+    expect(
+      (stored?.root.children?.[0]?.props as { items: unknown[] }).items[1],
+    ).toEqual({ label: "b", checked: true });
+  });
+
+  test("patch persists across a store restart", async () => {
+    const env = await store.create({ root: checklistRoot });
+    await store.patch(
+      env.id,
+      { nodeId: "todo", set: { "items.0.checked": true } },
+      acceptAll,
+    );
+    const next = createSnapshotStore(dir);
+    const got = await next.get(env.id);
+    expect(
+      (got?.root.children?.[0]?.props as { items: { checked?: boolean }[] })
+        .items[0]?.checked,
+    ).toBe(true);
+  });
+
+  test("patch returns not_found for a missing snapshot, node_not_found for a missing node id", async () => {
+    const env = await store.create({ root: checklistRoot });
+    const missing = await store.patch(
+      "missing",
+      { nodeId: "todo", set: { "items.0.checked": true } },
+      acceptAll,
+    );
+    expect(missing).toEqual({ ok: false, error: "not_found" });
+    const gone = await store.patch(
+      env.id,
+      { nodeId: "gone", set: { "items.0.checked": true } },
+      acceptAll,
+    );
+    expect(gone).toEqual({ ok: false, error: "node_not_found", nodeId: "gone" });
+  });
+
+  test("patch rejects a set that does not apply (bad path) or fails validation, leaving the tree untouched", async () => {
+    const env = await store.create({ root: checklistRoot });
+    for (const set of [
+      { "items.9.checked": true },
+      { "items.0.checked.deep": true },
+      { "__proto__.x": true },
+    ]) {
+      const result = await store.patch(env.id, { nodeId: "todo", set }, acceptAll);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toBe("invalid_set");
+    }
+    const rejected = await store.patch(
+      env.id,
+      { nodeId: "todo", set: { "items.0.checked": true } },
+      () => false,
+    );
+    expect(rejected.ok).toBe(false);
+    const stored = await store.get(env.id);
+    expect(
+      (stored?.root.children?.[0]?.props as { items: unknown[] }).items[0],
+    ).toEqual({ label: "a" });
+    expect(Object.prototype.hasOwnProperty.call({}, "x")).toBe(false);
+  });
+
+  test("patch applies several set entries in one write", async () => {
+    const env = await store.create({ root: checklistRoot });
+    const result = await store.patch(
+      env.id,
+      { nodeId: "todo", set: { "items.0.checked": true, "items.1.checked": true } },
+      acceptAll,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const items = (
+        result.envelope.root.children?.[0]?.props as { items: { checked?: boolean }[] }
+      ).items;
+      expect(items.every((i) => i.checked === true)).toBe(true);
+    }
+  });
+
+  test("subscribers are notified once per mutation with the snapshot id and kind", async () => {
+    const seen: { id: string; kind: string }[] = [];
+    const unsubscribe = store.subscribe((change) => seen.push(change));
+
+    const env = await store.create({ root: checklistRoot, idempotencyKey: "k" });
+    // a deduped create is not a mutation — it must not notify
+    await store.create({ root: checklistRoot, idempotencyKey: "k" });
+    await store.update({ root: checklistRoot, idempotencyKey: "k" });
+    await store.patch(env.id, { nodeId: "todo", set: { "items.0.checked": true } }, acceptAll);
+    await store.delete(env.id);
+
+    expect(seen).toEqual([
+      { id: env.id, kind: "create" },
+      { id: env.id, kind: "update" },
+      { id: env.id, kind: "patch" },
+      { id: env.id, kind: "delete" },
+    ]);
+
+    unsubscribe();
+    await store.create({ root: sampleRoot });
+    expect(seen.length).toBe(4);
+  });
 });

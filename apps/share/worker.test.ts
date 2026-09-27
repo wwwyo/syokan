@@ -339,24 +339,6 @@ describe("POST /api/v1/shares", () => {
 		expect(root.children?.[0]?.id).toBe("risk-1");
 	});
 
-	test("a TreeDoc anywhere in the tree is 400", async () => {
-		const { env } = createEnv();
-		const { token } = await login(env);
-		const res = await publish(env, token, {
-			envelope: makeEnvelope({
-				root: {
-					type: "Stack",
-					props: {},
-					children: [{ type: "TreeDoc", props: { path: "/tmp/a.json" } }],
-				},
-			}),
-		});
-		expect(res.status).toBe(400);
-		expect(((await res.json()) as { error: string }).error).toBe(
-			"treedoc_not_allowed",
-		);
-	});
-
 	test("an envelope over SHARE_MAX_BYTES is 413", async () => {
 		const { env } = createEnv();
 		const { token } = await login(env);

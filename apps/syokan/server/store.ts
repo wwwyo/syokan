@@ -33,6 +33,27 @@ export type UpdateResult =
   | { ok: true; envelope: SnapshotEnvelope }
   | { ok: false; error: "not_found" };
 
+export type PatchInput = {
+  // The writeback target: a node carrying this id in the tree.
+  nodeId: string;
+  // prop path → value (e.g. { "items.2.checked": true }). Intermediate segments must
+  // already exist; the leaf is created when absent.
+  set: Record<string, unknown>;
+};
+
+export type PatchResult =
+  | { ok: true; envelope: SnapshotEnvelope }
+  | { ok: false; error: "not_found" }
+  | { ok: false; error: "node_not_found"; nodeId: string }
+  | { ok: false; error: "invalid_set"; path?: string };
+
+// Emitted to subscribers after a store mutation lands (in-process only — mutations
+// written by another process are visible via read-through but never pushed here).
+export type SnapshotChange = {
+  id: string;
+  kind: "create" | "update" | "delete" | "patch";
+};
+
 export type SnapshotStore = {
   // Create anew. If idempotencyKey is already registered, return the existing one instead of creating (dedup).
   create: (input: CreateInput) => Promise<SnapshotEnvelope>;
@@ -41,9 +62,19 @@ export type SnapshotStore = {
   // use create when you want to create anew. So that a missed target never silently creates,
   // update never breaks its "must already exist" premise).
   update: (input: UpdateInput) => Promise<UpdateResult>;
+  // Write a node-scoped edit (view writeback) into the latest tree inside the write lock,
+  // so a concurrent PUT can't lose it or be rolled back by it. `validate` gates the write
+  // on the post-set node (routes.ts checks the node's propsSchema).
+  patch: (
+    id: string,
+    input: PatchInput,
+    validate: (node: Item) => boolean,
+  ) => Promise<PatchResult>;
   get: (id: string) => Promise<SnapshotEnvelope | undefined>;
   list: () => Promise<SnapshotSummary[]>;
   delete: (id: string) => Promise<boolean>;
+  // Subscribe to mutations issued through this store instance. Returns the unsubscribe.
+  subscribe: (listener: (change: SnapshotChange) => void) => () => void;
 };
 
 // Old JSON files on disk are read without schema revalidation (read() below just
@@ -70,12 +101,95 @@ function stripLegacyNodeFields(item: Item): Item {
 
 const LOCK_TIMEOUT_MS = 5_000;
 
+// A set path like "items.2.checked": dot-separated segments, numeric segments indexing
+// into arrays. Never let a lookup/write walk the prototype chain.
+const FORBIDDEN_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+
+function isArrayIndex(segment: string): boolean {
+  return /^(0|[1-9]\d*)$/.test(segment);
+}
+
+// Write `value` at `path` inside `props`. Intermediate segments must resolve to an
+// existing object/array (no implicit structure creation — a typo'd path must fail
+// loudly rather than grow a parallel shape); the leaf is set even when absent.
+function setPropPath(
+  props: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): boolean {
+  const segments = path.split(".");
+  if (segments.some((s) => s === "" || FORBIDDEN_PATH_SEGMENTS.has(s))) {
+    return false;
+  }
+  let target: unknown = props;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const segment = segments[i] as string;
+    if (Array.isArray(target)) {
+      if (!isArrayIndex(segment)) return false;
+      target = target[Number(segment)];
+    } else if (typeof target === "object" && target !== null) {
+      target = (target as Record<string, unknown>)[segment];
+    } else {
+      return false;
+    }
+    if (typeof target !== "object" || target === null) return false;
+  }
+  const leaf = segments[segments.length - 1] as string;
+  if (Array.isArray(target)) {
+    // An out-of-bounds index would punch a hole into the array — refuse it.
+    if (!isArrayIndex(leaf) || Number(leaf) >= target.length) return false;
+    target[Number(leaf)] = value;
+    return true;
+  }
+  if (typeof target === "object" && target !== null) {
+    (target as Record<string, unknown>)[leaf] = value;
+    return true;
+  }
+  return false;
+}
+
+function findNodeById(root: Item, id: string): Item | undefined {
+  const stack: Item[] = [root];
+  while (stack.length > 0) {
+    const item = stack.pop();
+    if (item === undefined) break;
+    if (item.id === id) return item;
+    // On-disk trees are not revalidated, so children may be a malformed shape.
+    if (Array.isArray(item.children)) stack.push(...item.children);
+  }
+  return undefined;
+}
+
 export function createSnapshotStore(dataDir: string): SnapshotStore {
   const file = join(dataDir, "snapshots.json");
   const lockFile = `${file}.lock`;
   // Serialize writes (create/delete) within one process (in-process mutex).
   // Prevents idempotency violations / lost updates from interleaved read-modify-write.
   let writeChain: Promise<unknown> = Promise.resolve();
+
+  // In-process mutation subscribers (drives the SSE change notification). Not persisted.
+  const listeners = new Set<(change: SnapshotChange) => void>();
+
+  // Called only after a mutation has been written. A throwing listener must never
+  // break the write path.
+  function notify(change: SnapshotChange): void {
+    for (const listener of listeners) {
+      try {
+        listener(change);
+      } catch {
+        // listener bugs are their own problem
+      }
+    }
+  }
+
+  function subscribe(
+    listener: (change: SnapshotChange) => void,
+  ): () => void {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }
 
   function isProcessAlive(pid: number): boolean {
     try {
@@ -249,6 +363,7 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
           data.idempotency[input.idempotencyKey] = id;
         }
         await write(data);
+        notify({ id, kind: "create" });
         return envelope;
       }),
     );
@@ -271,7 +386,46 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
         );
         data.snapshots[envelope.id] = envelope;
         await write(data);
+        notify({ id: envelope.id, kind: "update" });
         return { ok: true, envelope };
+      }),
+    );
+  }
+
+  function patch(
+    id: string,
+    input: PatchInput,
+    validate: (node: Item) => boolean,
+  ): Promise<PatchResult> {
+    return enqueue(() =>
+      withLock(async () => {
+        const data = await read();
+        const existing = data.snapshots[id];
+        if (!existing) return { ok: false, error: "not_found" };
+        const node = findNodeById(existing.root, input.nodeId);
+        if (!node) return { ok: false, error: "node_not_found", nodeId: input.nodeId };
+        // Apply onto a props copy so a failed set leaves nothing half-written.
+        const props = structuredClone(node.props);
+        for (const [path, value] of Object.entries(input.set)) {
+          if (!setPropPath(props, path, value)) {
+            return { ok: false, error: "invalid_set", path };
+          }
+        }
+        if (!validate({ ...node, props })) {
+          return { ok: false, error: "invalid_set" };
+        }
+        node.props = props;
+        await write(data);
+        notify({ id: existing.id, kind: "patch" });
+        return {
+          ok: true,
+          envelope: buildEnvelope(
+            existing.id,
+            existing.createdAt,
+            existing.root,
+            existing.title,
+          ),
+        };
       }),
     );
   }
@@ -309,10 +463,11 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
           if (data.idempotency[key] === id) delete data.idempotency[key];
         }
         await write(data);
+        notify({ id, kind: "delete" });
         return true;
       }),
     );
   }
 
-  return { create, update, get, list, delete: remove };
+  return { create, update, patch, get, list, delete: remove, subscribe };
 }

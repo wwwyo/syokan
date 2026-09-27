@@ -1,11 +1,12 @@
 import type { BunRequest } from "bun";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import { itemSchema } from "../src/catalogs";
+import { itemSchema, specs } from "../src/catalogs";
 import { catalogManifest, catalogEnvelopeSchema } from "../src/catalogs/manifest";
 import { probeCheckSchema } from "../src/catalogs/Probe/check";
 import { resolveRepoHead, runProbe } from "./probe";
 import { isFontValue } from "../src/lib/fonts";
+import { crossOrigin } from "./origin";
 import {
   createSnapshotInputSchema,
   findDuplicateId,
@@ -14,12 +15,6 @@ import {
   settingPatchSchema,
   type SnapshotEnvelope,
 } from "../src/schema";
-import {
-  type FileWatcher,
-  FILE_SIZE_LIMIT,
-  type ReadFileFailure,
-  readTextFile,
-} from "./fileSource";
 import { type SettingStore } from "./setting";
 import { type SnapshotStore } from "./store";
 import { type TemplateStore } from "./templates";
@@ -47,6 +42,15 @@ const postInputSchema = inputBaseSchema.superRefine(uniqueRootIds);
 const putInputSchema = inputBaseSchema
   .extend({ idempotencyKey: z.string().min(1) })
   .superRefine(uniqueRootIds);
+
+// The writeback body: set prop paths on the node carrying `nodeId`
+// (e.g. { nodeId: "todo", set: { "items.2.checked": true } }).
+const patchInputSchema = z
+  .object({
+    nodeId: z.string().min(1),
+    set: z.record(z.string(), z.unknown()),
+  })
+  .strict();
 
 function jsonError(
   status: number,
@@ -103,17 +107,33 @@ function snapshotResponse(
   );
 }
 
+// Mutation endpoints reject requests carrying a foreign Origin (a browser page on
+// another origin — another localhost port included — must not drive writes). GETs are
+// unguarded: cross-origin reads can't read the response under the same-origin policy.
+function forbidden(req: Request): Response | null {
+  return crossOrigin(req)
+    ? jsonError(403, {
+        error: "forbidden",
+        message: "cross-origin requests are not accepted",
+      })
+    : null;
+}
+
 export type ApiHandlers = {
   createSnapshot: (req: Request) => Promise<Response>;
   updateSnapshot: (req: Request) => Promise<Response>;
   listSnapshots: () => Promise<Response>;
   getSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
+  patchSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
   deleteSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
+  watchChanges: () => Response;
 };
 
 export function createApiHandlers(store: SnapshotStore): ApiHandlers {
   return {
     async createSnapshot(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await parseSnapshotBody(req, postInputSchema);
       if (!body.ok) return body.response;
       const envelope = await store.create(body.value);
@@ -122,6 +142,8 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
 
     // 404 if there's no match (AIP-134's Update default; use POST when you want to create).
     async updateSnapshot(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await parseSnapshotBody(req, putInputSchema);
       if (!body.ok) return body.response;
       const result = await store.update(body.value);
@@ -151,7 +173,57 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       return Response.json(env);
     },
 
+    // Node-scoped writeback from a view (a Checklist check etc.). The set paths apply
+    // inside the node's props only, and the write goes through only if the result still
+    // satisfies the node's props schema — a view can't corrupt the stored tree.
+    async patchSnapshot(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
+      const id = req.params.id;
+      const body = await readJsonBody(req);
+      if (!body.ok) return body.response;
+      const parsed = patchInputSchema.safeParse(body.value);
+      if (!parsed.success) {
+        return jsonError(400, {
+          error: "validation_failed",
+          message: "Request body does not satisfy the patch schema",
+          issues: formatValidationError(parsed.error),
+        });
+      }
+      const result = await store.patch(id, parsed.data, (node) => {
+        const spec = specs.get(node.type);
+        return (
+          spec !== undefined && spec.propsSchema.safeParse(node.props).success
+        );
+      });
+      if (!result.ok) {
+        switch (result.error) {
+          case "not_found":
+            return jsonError(404, {
+              error: "not_found",
+              message: `Snapshot ${id} not found`,
+            });
+          // The node's id is gone from the latest tree (an LLM rewrote it): the view
+          // must revert the operation — the writeback was refused, not dropped.
+          case "node_not_found":
+            return jsonError(409, {
+              error: "node_not_found",
+              message: `Node ${result.nodeId} is not in the latest tree`,
+            });
+          case "invalid_set":
+            return jsonError(422, {
+              error: "invalid_set",
+              message: "The set does not apply to the node's props",
+              ...(result.path !== undefined ? { path: result.path } : {}),
+            });
+        }
+      }
+      return snapshotResponse(result.envelope);
+    },
+
     async deleteSnapshot(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const id = req.params.id;
       const ok = await store.delete(id);
       if (!ok) {
@@ -161,6 +233,41 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
         });
       }
       return Response.json({ ok: true });
+    },
+
+    // Store mutations → open views/list. Same shape as the old files/watch: only "it
+    // changed" is pushed; the client re-fetches content with GET. In-process only —
+    // mutations by another server process don't reach subscribers (the focus-refetch
+    // floor covers that edge).
+    watchChanges() {
+      const encoder = new TextEncoder();
+      let unsubscribe: (() => void) | undefined;
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(": connected\n\n"));
+          unsubscribe = store.subscribe((change) => {
+            try {
+              controller.enqueue(
+                encoder.encode(
+                  `event: change\ndata: ${JSON.stringify(change)}\n\n`,
+                ),
+              );
+            } catch {
+              // Client already disconnected (can't enqueue). cancel handles the teardown.
+            }
+          });
+        },
+        // On client disconnect Bun calls cancel → unsubscribe.
+        cancel() {
+          unsubscribe?.();
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "content-type": "text/event-stream",
+          "cache-control": "no-cache",
+        },
+      });
     },
   };
 }
@@ -192,6 +299,8 @@ export type ProbeApiHandlers = {
 export function createProbeHandlers(): ProbeApiHandlers {
   return {
     async runProbe(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = probeRunInputSchema.safeParse(body.value);
@@ -207,6 +316,8 @@ export function createProbeHandlers(): ProbeApiHandlers {
 
     // current HEAD of a repo — the client compares it with a result's ref for staleness
     async resolveRef(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = probeRefInputSchema.safeParse(body.value);
@@ -257,6 +368,8 @@ export function createTemplateHandlers(
     },
 
     async createTemplate(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = templateInputSchema.safeParse(body.value);
@@ -284,6 +397,8 @@ export function createTemplateHandlers(
     },
 
     async deleteTemplate(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const id = req.params.id;
       const ok = await store.remove(id);
       if (!ok) {
@@ -293,96 +408,6 @@ export function createTemplateHandlers(
         });
       }
       return Response.json({ ok: true });
-    },
-  };
-}
-
-// Map failure reasons to HTTP status codes. The client branches on status (FR-9~12).
-const FILE_FAILURE_STATUS: Record<ReadFileFailure, number> = {
-  not_found: 404,
-  not_regular_file: 422,
-  permission_denied: 403,
-  too_large: 413,
-  not_text: 415,
-};
-
-export type FileApiHandlers = {
-  readFile: (req: Request) => Promise<Response>;
-  watchFile: (req: Request) => Response;
-};
-
-// File-reference node (TreeDoc) read + change watching. The read returns the body/error via GET,
-// and watching notifies only "it changed" over SSE (the client re-fetches the content via GET). Watchers are
-// runtime state scoped to the server process's lifetime — not persisted.
-// Extract and validate the path query param. Relative paths depend on the server CWD and could point
-// at an unintended file, so only absolute paths are accepted (the CLI always passes an absolute path).
-function readPathParam(
-  req: Request,
-): { ok: true; path: string } | { ok: false; response: Response } {
-  const path = new URL(req.url).searchParams.get("path");
-  if (!path) {
-    return {
-      ok: false,
-      response: jsonError(400, {
-        error: "missing_path",
-        message: "query param 'path' is required",
-      }),
-    };
-  }
-  if (!isAbsolute(path)) {
-    return {
-      ok: false,
-      response: jsonError(400, {
-        error: "invalid_path",
-        message: "path must be absolute",
-      }),
-    };
-  }
-  return { ok: true, path };
-}
-
-export function createFileHandlers(watcher: FileWatcher): FileApiHandlers {
-  return {
-    async readFile(req) {
-      const param = readPathParam(req);
-      if (!param.ok) return param.response;
-      const result = await readTextFile(param.path);
-      if (result.ok) return Response.json({ content: result.content });
-      const status = FILE_FAILURE_STATUS[result.reason];
-      return jsonError(status, {
-        error: result.reason,
-        ...(result.reason === "too_large" ? { limit: FILE_SIZE_LIMIT } : {}),
-      });
-    },
-
-    watchFile(req) {
-      const param = readPathParam(req);
-      if (!param.ok) return param.response;
-      const path = param.path;
-      const encoder = new TextEncoder();
-      let unsubscribe: (() => void) | undefined;
-      const stream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(encoder.encode(": connected\n\n"));
-          unsubscribe = watcher.subscribe(path, () => {
-            try {
-              controller.enqueue(encoder.encode("event: change\ndata: {}\n\n"));
-            } catch {
-              // Client already disconnected (can't enqueue). cancel handles the teardown.
-            }
-          });
-        },
-        // On client disconnect Bun calls cancel → unsubscribe (= watcher refcount--).
-        cancel() {
-          unsubscribe?.();
-        },
-      });
-      return new Response(stream, {
-        headers: {
-          "content-type": "text/event-stream",
-          "cache-control": "no-cache",
-        },
-      });
     },
   };
 }
@@ -399,6 +424,8 @@ export function createSettingHandlers(store: SettingStore): SettingApiHandlers {
     },
 
     async updateSetting(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
       const body = await readJsonBody(req);
       if (!body.ok) return body.response;
       const parsed = settingPatchSchema.safeParse(body.value);

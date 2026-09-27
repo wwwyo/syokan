@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { mkdirSync, openSync, realpathSync, statSync } from "node:fs";
+import { mkdirSync, openSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,10 +21,8 @@ export type StopResult = {
 export type CliDeps = {
   fetch: typeof fetch;
   readFile: (path: string) => Promise<string>;
-  // Absolute-path resolution (canonicalization) when wrapping in a TreeDoc. Used as the dedup identifier.
+  // Absolute-path resolution (canonicalization) for a posted file's dedup identifier.
   resolvePath: (path: string) => string;
-  // File size (bytes). -1 when stat fails (missing, etc.). Used to reject huge files without reading them.
-  fileSize: (path: string) => number;
   // Post input on bare invocation (`... | syokan`)
   readStdin: () => Promise<string>;
   // On bare invocation, whether stdin is a pipe / redirect (i.e. not a terminal)
@@ -260,8 +258,8 @@ function looksLikeEnvelope(value: unknown): boolean {
 
 // Lightweight check for whether it's a bare catalog tree (`{ type: string, props: object }`).
 // Requiring props keeps unrelated JSON that happens to carry a type field (e.g. package.json's
-// "type": "module") on the rejection path. A broken tree passes here and lets the client render /
-// publish validation surface the error.
+// "type": "module") on the rejection path. A broken tree passes here and lets the server's
+// strict validation surface the error.
 function looksLikeTree(value: unknown): boolean {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -275,34 +273,25 @@ function looksLikeTree(value: unknown): boolean {
   );
 }
 
-// Wrap a tree file into an envelope of a single TreeDoc node. title is the
-// basename; so a re-post of the same file points at the same id/url, the dedup identifier
-// (idempotencyKey) is the absolute path.
-function wrapTreeDoc(absPath: string): unknown {
+// Inline a tree file into a self-contained envelope: the file content at invocation time
+// becomes the snapshot (this is a snapshot of the file, not a live reference). title is the
+// basename; the dedup identifier (idempotencyKey) is the absolute path, so re-posting the
+// same path updates the same view in place.
+function inlineEnvelope(absPath: string, root: unknown): unknown {
   return {
     title: basename(absPath),
-    root: { type: "TreeDoc", props: { path: absPath } },
-    idempotencyKey: `treedoc:${absPath}`,
+    root,
+    idempotencyKey: `file:${absPath}`,
   };
 }
 
 const UNSUPPORTED_INPUT_MESSAGE =
-  "only JSON is accepted: a snapshot envelope ({ root: ... }, posted once) or a bare catalog tree ({ type: ..., props: ... }, summoned as a live TreeDoc)";
+  "only JSON is accepted: a snapshot envelope ({ root: ... }) or a bare catalog tree ({ type: ..., props: ... }, posted as a self-contained snapshot)";
 
-// Match TreeDoc's display limit. A file over this can't be sniffed without risking OOM.
-const SNIFF_SIZE_LIMIT = 2 * 1024 * 1024;
-
-// `syokan <path>`: an envelope posts once; a bare catalog tree is wrapped in a TreeDoc (resolved
-// to the absolute path) and follows edits; anything else — non-JSON included — is rejected.
+// `syokan <path>`: an envelope posts as-is; a bare catalog tree is inlined into an envelope
+// (idempotent on the absolute path, so a re-post updates the same view); anything else —
+// non-JSON included — is rejected.
 export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
-  // Over the sniff limit the contents aren't read. A .json file is still wrapped as a TreeDoc so
-  // the view surfaces too_large; anything else can't be valid input, so reject it here.
-  if (deps.fileSize(file) > SNIFF_SIZE_LIMIT) {
-    if (file.toLowerCase().endsWith(".json")) {
-      return postWithServer(deps, wrapTreeDoc(deps.resolvePath(file)));
-    }
-    return argError(deps, "unsupported_input", UNSUPPORTED_INPUT_MESSAGE);
-  }
   let text: string;
   try {
     text = await deps.readFile(file);
@@ -320,7 +309,7 @@ export async function runPost(file: string, deps: CliDeps): Promise<CliResult> {
     return postWithServer(deps, parsed);
   }
   if (looksLikeTree(parsed)) {
-    return postWithServer(deps, wrapTreeDoc(deps.resolvePath(file)));
+    return postWithServer(deps, inlineEnvelope(deps.resolvePath(file), parsed));
   }
   return argError(deps, "unsupported_input", UNSUPPORTED_INPUT_MESSAGE);
 }
@@ -638,14 +627,6 @@ function reportShareFailure(
   if (result.status === 404 && error === "not_found") {
     return argError(deps, "not_found", notFoundMessage);
   }
-  if (error === "materialize_failed") {
-    const d = result.data as { path?: string; reason?: string };
-    return argError(
-      deps,
-      "materialize_failed",
-      `could not read ${d.path} (${d.reason}); fix the file and retry`,
-    );
-  }
   if (error === "share_api_unreachable") {
     return argError(
       deps,
@@ -852,7 +833,7 @@ export const helpManifest = {
     {
       usage: "syokan <file>",
       summary:
-        "Post a JSON file: an envelope is posted once; a bare catalog tree is summoned as a live TreeDoc that follows edits. Non-JSON input is rejected. Prints the view URL",
+        "Post a JSON file: an envelope is posted as-is; a bare catalog tree is posted as a self-contained snapshot (re-run after editing the file to update the same view in place). Non-JSON input is rejected. Prints the view URL",
     },
     { usage: "<json> | syokan", summary: "Post a snapshot envelope from stdin" },
     {
@@ -898,7 +879,7 @@ export const helpManifest = {
     {
       code: 1,
       summary:
-        "error: invalid_json | unsupported_input | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand | unknown_option | not_logged_in | login_failed | invalid_expires | materialize_failed | share_api_unreachable",
+        "error: invalid_json | unsupported_input | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand | unknown_option | not_logged_in | login_failed | invalid_expires | share_api_unreachable",
     },
   ],
 };
@@ -1062,13 +1043,6 @@ export async function runCli(): Promise<void> {
         return realpathSync(path);
       } catch {
         return resolve(path);
-      }
-    },
-    fileSize: (path) => {
-      try {
-        return statSync(path).size;
-      } catch {
-        return -1;
       }
     },
     readStdin: () => Bun.stdin.text(),

@@ -40,8 +40,6 @@ function makeDeps(opts: {
   stopped?: boolean;
   // stdin contents. Setting it marks it as a pipe (stdinIsPipe=true)
   stdin?: string;
-  // stat size (bytes) per path. 0 if unset.
-  fileSizes?: Record<string, number>;
 }): Harness {
   const out: string[] = [];
   const err: string[] = [];
@@ -82,7 +80,6 @@ function makeDeps(opts: {
     },
     // Don't use real realpath; resolve deterministically to `/abs/<path>` (for assertions).
     resolvePath: (path) => `/abs/${path}`,
-    fileSize: (path) => opts.fileSizes?.[path] ?? 0,
     readStdin: async () => opts.stdin ?? "",
     stdinIsPipe: () => opts.stdin !== undefined,
     fetch: (async (input: string | URL, init?: RequestInit) => {
@@ -203,14 +200,10 @@ describe("cli main: post (default action)", () => {
     expect(parsed.error).toBe("invalid_json");
   });
 
-  test("bare catalog tree file is wrapped as a live TreeDoc (title/key = basename/abs path)", async () => {
+  test("bare catalog tree file is inlined as a self-contained snapshot (title/key = basename/abs path)", async () => {
+    const tree = { type: "Heading", props: { text: "hi" } };
     const { deps, out, calls } = makeDeps({
-      files: {
-        "dashboard.json": JSON.stringify({
-          type: "Heading",
-          props: { text: "hi" },
-        }),
-      },
+      files: { "dashboard.json": JSON.stringify(tree) },
       respond: () => okResponse("tree-1"),
     });
     const result = await main(["dashboard.json"], deps);
@@ -218,13 +211,13 @@ describe("cli main: post (default action)", () => {
     expect(out).toEqual(["http://localhost:5773/snapshots/tree-1"]);
     const body = calls[0]?.body as {
       title: string;
-      root: { type: string; props: { path: string } };
+      root: { type: string; props: { text: string } };
       idempotencyKey: string;
     };
-    expect(body.root.type).toBe("TreeDoc");
-    expect(body.root.props.path).toBe("/abs/dashboard.json");
+    // the file's content becomes the snapshot — not a file reference
+    expect(body.root).toEqual(tree);
     expect(body.title).toBe("dashboard.json");
-    expect(body.idempotencyKey).toBe("treedoc:/abs/dashboard.json");
+    expect(body.idempotencyKey).toBe("file:/abs/dashboard.json");
     // A payload with an idempotencyKey tries PUT (update) first.
     expect(calls[0]?.method).toBe("PUT");
   });
@@ -298,46 +291,6 @@ describe("cli main: post (default action)", () => {
     });
     const result = await main(["package.json"], deps);
     expect(result.exitCode).toBe(1);
-    expect(calls).toEqual([]);
-    expect((JSON.parse(err[0] as string) as { error: string }).error).toBe(
-      "unsupported_input",
-    );
-  });
-
-  test("a .json file over the sniff limit is wrapped as a TreeDoc without reading its contents", async () => {
-    let read = false;
-    const { deps, calls } = makeDeps({
-      fileSizes: { "huge.json": 5 * 1024 * 1024 },
-      respond: () => okResponse(),
-    });
-    // Record if readFile is called (confirming a huge file isn't read).
-    const orig = deps.readFile;
-    deps.readFile = async (p) => {
-      read = true;
-      return orig(p);
-    };
-    const result = await main(["huge.json"], deps);
-    expect(result.exitCode).toBe(0);
-    expect(read).toBe(false);
-    const body = calls[0]?.body as { root: { type: string; props: { path: string } } };
-    expect(body.root.type).toBe("TreeDoc");
-    expect(body.root.props.path).toBe("/abs/huge.json");
-  });
-
-  test("a non-.json file over the sniff limit is rejected without reading its contents", async () => {
-    let read = false;
-    const { deps, calls, err } = makeDeps({
-      fileSizes: { "huge.log": 5 * 1024 * 1024 },
-      respond: () => okResponse(),
-    });
-    const orig = deps.readFile;
-    deps.readFile = async (p) => {
-      read = true;
-      return orig(p);
-    };
-    const result = await main(["huge.log"], deps);
-    expect(result.exitCode).toBe(1);
-    expect(read).toBe(false);
     expect(calls).toEqual([]);
     expect((JSON.parse(err[0] as string) as { error: string }).error).toBe(
       "unsupported_input",
@@ -1035,23 +988,15 @@ describe("cli main: share commands (login / logout / publish / shares / unpublis
     expect(parsed.message).toContain("syokan login");
   });
 
-  test("publish: 422 materialize_failed is reported with path + reason", async () => {
+  test("publish: an unmapped error status prints the raw body", async () => {
     const { deps, err } = makeDeps({
       respond: () =>
-        Response.json(
-          { error: "materialize_failed", path: "/x/gone.md", reason: "not_found" },
-          { status: 422 },
-        ),
+        Response.json({ error: "quota_exceeded" }, { status: 429 }),
     });
     const result = await main(["publish", "abc"], deps);
     expect(result.exitCode).toBe(1);
-    const parsed = JSON.parse(err[0] as string) as {
-      error: string;
-      message: string;
-    };
-    expect(parsed.error).toBe("materialize_failed");
-    expect(parsed.message).toContain("/x/gone.md");
-    expect(parsed.message).toContain("not_found");
+    const parsed = JSON.parse(err[0] as string) as { error: string };
+    expect(parsed.error).toBe("quota_exceeded");
   });
 
   test("publish: an invalid --expires value is an arg error (no request is made)", async () => {

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { parseTreeContent } from "../lib/treeSource";
 import { graphPropsSchema } from "./Graph";
 import { components } from "./index";
 import { markdownPropsSchema } from "./Markdown";
@@ -84,22 +83,6 @@ describe("catalogManifest", () => {
     );
     expect(byType.get("Markdown")?.notes).toContain("raw HTML");
     expect(byType.get("Markdown")?.notes).toContain("are rejected");
-
-    // TreeDoc: bare-tree requirement + the nested-TreeDoc ban (parseTreeContent)
-    expect(
-      parseTreeContent(JSON.stringify({ root: { type: "Text", props: {} } })).ok,
-    ).toBe(false);
-    expect(
-      parseTreeContent(
-        JSON.stringify({
-          type: "Stack",
-          props: {},
-          children: [{ type: "TreeDoc", props: { path: "/tmp/x.json" } }],
-        }),
-      ).ok,
-    ).toBe(false);
-    expect(byType.get("TreeDoc")?.notes).toContain("nesting is rejected");
-    expect(byType.get("TreeDoc")?.notes).toContain("not a snapshot envelope");
   });
 
   test("Heading.href documents that it links the heading itself", () => {

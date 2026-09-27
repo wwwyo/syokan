@@ -46,7 +46,7 @@ export function ViewPage({ envelope, onDelete }: ViewPageProps) {
       {/* hidden, not unmounted: unmounting would wipe in-memory node state
           (Collapsible / Probe) on every toggle-back. */}
       <div hidden={showSource} className={fullBleed ? "h-full" : undefined}>
-        <ViewStateProvider scopeKey={envelope.id}>
+        <ViewStateProvider scopeKey={envelope.id} snapshotId={envelope.id}>
           <Render item={envelope.root} />
         </ViewStateProvider>
       </div>

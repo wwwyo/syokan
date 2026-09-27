@@ -43,13 +43,13 @@ export const en = {
       step2Body:
         "Pass the returned id to open it in the browser (the server starts automatically if it is not running). Summoned snapshots are also reachable from the menu at the top left.",
       step2Code: "syokan open k3f9q2",
-      step3Title: "3. Live-sync a tree file — syokan <tree.json>",
+      step3Title: "3. Post a tree file — syokan <tree.json>",
       step3Body:
-        "A file holding a bare catalog tree is summoned as a TreeDoc: every save of the file updates the view in place.",
+        "A file holding a bare catalog tree is posted as a self-contained snapshot. Re-run the same command after editing the file to update the same view in place — an open view follows without a reload.",
       step3Code: "syokan ./dashboard.json",
       typesTitle: "Available types",
       typesBody:
-        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / Mermaid / TreeDoc. Each type's props are listed by syokan catalog (GET /api/catalog). Trees that do not match the schema are rejected with 400.",
+        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / Mermaid. Each type's props are listed by syokan catalog (GET /api/catalog). Trees that do not match the schema are rejected with 400.",
     },
   },
   shell: {
@@ -83,22 +83,9 @@ export const en = {
   headingMinimap: {
     label: "Page outline",
   },
-  treeDoc: {
-    errors: {
-      not_found: "File not found (it may have been deleted).",
-      not_regular_file: "Not a regular file, so it cannot be displayed.",
-      permission_denied: "No permission to read the file.",
-      too_large: "File is too large to display (limit: 2 MiB).",
-      not_text: "Cannot be read as text (binary / non-UTF-8).",
-      missing_path: "No path specified.",
-      invalid_path: "The path is not usable (an absolute local path is required).",
-      network: "Failed to load (cannot reach the server).",
-      error: "Failed to load.",
-      invalid_json: "The file is not valid JSON.",
-      invalid_tree: "The JSON does not match the catalog tree schema.",
-      nested_treedoc: "TreeDoc cannot be nested inside a synced tree.",
-    },
-    staleNotice: "Showing the last valid content.",
+  checklist: {
+    writebackFailed:
+      "Could not save the check — the snapshot may have been updated or deleted. The change was reverted.",
   },
   mermaid: {
     renderFailed: "This diagram could not be rendered.",
@@ -136,8 +123,6 @@ export const en = {
     activeShares: "Active shares",
     copyUrl: "Copy URL",
     errors: {
-      materializeFailed: (path: string) =>
-        `A referenced file could not be read, so nothing was published: ${path}`,
       unreachable: "Could not reach the share service.",
       network: "Could not reach the local server.",
       generic: "Failed to share.",

@@ -12,7 +12,7 @@ import {
   SHARE_API_DEFAULT_ORIGIN,
   type ShareErrorResponse,
 } from "../../share/types";
-import { materializeTree } from "./materialize";
+import { redactTree } from "./redact";
 import type { SnapshotStore } from "./store";
 
 type AuthData = { token: string; login: string };
@@ -71,8 +71,7 @@ const authResponseSchema = z
   .loose();
 
 // Worker error bodies pass through only on this status set so the hc-visible response types
-// stay literal (422 is deliberately absent: it is reserved for the local materialize_failed).
-// Anything else — unknown status or a body without an `error` string — folds into 502.
+// stay literal. Anything else — unknown status or a body without an `error` string — folds into 502.
 const PASS_THROUGH_STATUSES = [400, 401, 403, 404, 413, 429] as const;
 
 const workerErrorBodySchema = z.object({ error: z.string() }).loose();
@@ -101,7 +100,6 @@ export type ServiceFailure =
   | { ok: false; kind: "bad_response" }
   | { ok: false; kind: "not_logged_in" }
   | { ok: false; kind: "not_found"; id: string }
-  | { ok: false; kind: "materialize_failed"; path: string; reason: string }
   | { ok: false; kind: "worker_error"; status: WorkerFailure["status"]; body: WorkerFailure["body"] };
 
 // Parse a Worker success body; a broken proxy that returns non-JSON folds into bad_response.
@@ -142,8 +140,8 @@ export type ShareServiceDeps = {
 };
 
 /**
- * The share operations: exchange/hold the Worker token, freeze a snapshot's TreeDoc nodes and
- * publish it, and proxy authenticated list/delete to the Worker. HTTP concerns (request parsing,
+ * The share operations: exchange/hold the Worker token, publish a snapshot after probe
+ * redaction, and proxy authenticated list/delete to the Worker. HTTP concerns (request parsing,
  * CSRF, response shaping) belong to the entrypoint (share.ts); this layer returns domain results.
  * A stored-token 401 from the Worker means "log in again", so publish/list/delete fold it into
  * not_logged_in, whereas login forwards its 401 (GitHub verification failure) as worker_error.
@@ -210,25 +208,16 @@ export function createShareService(deps: ShareServiceDeps): ShareService {
     async publish(id, expiresIn) {
       const envelope = await deps.store.get(id);
       if (!envelope) return { ok: false, kind: "not_found", id };
-      // Check auth before materializing; reading every TreeDoc file is wasted work when not logged in.
       const auth = await readAuth(deps.authFilePath);
       if (!auth) return { ok: false, kind: "not_logged_in" };
-      const materialized = await materializeTree(envelope.root);
-      if (!materialized.ok) {
-        // Don't publish with an unreadable node missing: a single failure fails the whole publish.
-        return {
-          ok: false,
-          kind: "materialize_failed",
-          path: materialized.path,
-          reason: materialized.reason,
-        };
-      }
       let res: Awaited<ReturnType<typeof client.api.v1.shares.$post>>;
       try {
         res = await client.api.v1.shares.$post(
           {
             json: {
-              envelope: { ...envelope, root: materialized.root },
+              // Snapshots are already self-contained; publish only strips probe
+              // args/results (which can carry local paths) unless shareVisible.
+              envelope: { ...envelope, root: redactTree(envelope.root) },
               sourceSnapshotId: envelope.id,
               ...(expiresIn !== undefined ? { expiresIn } : {}),
             },

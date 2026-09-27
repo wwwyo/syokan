@@ -12,10 +12,8 @@ import { DEFAULT_PORT } from "../src/lib/port";
 import index from "../index.html";
 // version is a compatibility marker so the CLI doesn't silently reuse a server from an old build.
 import pkg from "../package.json";
-import { createFileWatcher } from "./fileSource";
 import {
   createApiHandlers,
-  createFileHandlers,
   createProbeHandlers,
   createSettingHandlers,
   createTemplateHandlers,
@@ -56,8 +54,6 @@ export function startServer() {
   const api = createApiHandlers(store);
   const templates = createTemplateHandlers(createTemplateStore(templatesDir()));
   const setting = createSettingHandlers(createSettingStore(settingFile()));
-  // File watching is connection-scoped runtime state, never persisted. It lives as long as the server.
-  const file = createFileHandlers(createFileWatcher());
   const probe = createProbeHandlers();
   const shareApp = createShareApp({
     store,
@@ -79,8 +75,11 @@ export function startServer() {
         PUT: api.updateSnapshot,
         GET: api.listSnapshots,
       },
+      // Store-change notification stream (SSE): "it changed" only — clients re-GET.
+      "/api/snapshots/changes": { GET: api.watchChanges },
       "/api/snapshots/:id": {
         GET: api.getSnapshot,
+        PATCH: api.patchSnapshot,
         DELETE: api.deleteSnapshot,
       },
       // public share: publish freezes a store snapshot and sends it to the Worker; auth
@@ -105,9 +104,6 @@ export function startServer() {
         GET: setting.getSetting,
         PUT: setting.updateSetting,
       },
-      // File-reference node body read (GET) and change watching (SSE).
-      "/api/files": { GET: file.readFile },
-      "/api/files/watch": { GET: file.watchFile },
       // Probe: predefined read-only checks (run) and repo HEAD resolution (staleness).
       "/api/probes/run": { POST: probe.runProbe },
       "/api/probes/ref": { POST: probe.resolveRef },
@@ -118,8 +114,8 @@ export function startServer() {
     },
     development: process.env.NODE_ENV !== "production",
     port: resolvePort(),
-    // Bind to localhost only, so /api/files (which reads arbitrary files) isn't exposed to the LAN
-    // (PRD's trust boundary = localhost bind + user permissions).
+    // Bind to localhost only: Probe checks read local paths, so the API must not be
+    // exposed to the LAN (the trust boundary is this bind + user permissions).
     hostname: "127.0.0.1",
   });
   console.log(`syokan listening on ${server.url}`);

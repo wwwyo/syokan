@@ -1,9 +1,11 @@
-import { Children, type ReactNode, useState } from "react";
+import { Children, type ReactNode, useRef, useState } from "react";
 import { z } from "zod";
 import { Checkbox } from "../../components/ui/checkbox";
 import { useReveal } from "../../lib/anchor";
+import { t } from "../../lib/i18n";
+import { patchSnapshot } from "../../lib/snapshots";
 import { cn } from "../../lib/utils";
-import { useNodeUiState } from "../../lib/viewState";
+import { useNodeUiState, useWritebackTarget } from "../../lib/viewState";
 import { buttonInlineContentSchema, InlineContentView } from "../inline";
 
 export const checklistPropsSchema = z
@@ -14,7 +16,8 @@ export const checklistPropsSchema = z
           .object({
             // a checked item's label becomes a toggle button, so use the link-free inline set
             label: buttonInlineContentSchema,
-            // initial state from the producer; interactions live in device-local UI state
+            // on an id-carrying node this is the stored check state; on an id-less node
+            // it is the initial state for device-local interactions
             checked: z.boolean().optional(),
           })
           .strict(),
@@ -30,9 +33,11 @@ export type ChecklistProps = z.infer<typeof checklistPropsSchema> & {
 /**
  * Checkable enumeration (review points, TODO, procedures). children[i] is the expanded
  * body of items[i] (omit children for label-only lists). Checking an item folds its body
- * to the label line; the label re-opens it transiently; unchecking restores it. Checks are
- * device-local UI state, never written back to the snapshot (ephemeral principle) — give
- * the node an id to keep progress across reloads.
+ * to the label line; the label re-opens it transiently; unchecking restores it.
+ * On a node carrying an id inside a store-backed view, checks write back into the
+ * snapshot (PATCH items[i].checked) — the same check is then visible in GET responses,
+ * other devices, and published shares. Without an id (or on a share viewer) checks stay
+ * device-local UI state.
  */
 export function Checklist({ items, children }: ChecklistProps) {
   const bodies = Children.toArray(children);
@@ -40,12 +45,55 @@ export function Checklist({ items, children }: ChecklistProps) {
     "checks",
     [],
   );
-  const checked = items.map((item, i) => overrides[i] ?? item.checked ?? false);
+  const target = useWritebackTarget();
+  // Optimistic display for in-flight writebacks. Pending marks are cleared when fresh
+  // items arrive (the change notification refetch carries the stored truth back in).
+  const [pending, setPending] = useState<ReadonlyMap<number, boolean>>(new Map());
+  const itemsRef = useRef(items);
+  if (itemsRef.current !== items) {
+    itemsRef.current = items;
+    if (pending.size > 0) setPending(new Map());
+  }
+  // Serialize a node's writes so toggles land in click order — parallel PATCHes of
+  // the same item could arrive out of order and leave the store on a stale value.
+  const writeChain = useRef<Promise<unknown>>(Promise.resolve());
+  const checked = items.map((item, i) =>
+    target === null
+      ? (overrides[i] ?? item.checked ?? false)
+      : (pending.get(i) ?? item.checked ?? false),
+  );
   const done = checked.filter(Boolean).length;
   const setChecked = (index: number, value: boolean) => {
-    const next = items.map((_, i) => overrides[i] ?? null);
-    next[index] = value;
-    setOverrides(next);
+    if (target === null) {
+      const next = items.map((_, i) => overrides[i] ?? null);
+      next[index] = value;
+      setOverrides(next);
+      return;
+    }
+    setPending((prev) => new Map(prev).set(index, value));
+    const run = writeChain.current.then(() =>
+      patchSnapshot(target.snapshotId, target.nodeId, {
+        [`items.${index}.checked`]: value,
+      }),
+    );
+    writeChain.current = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    void run.then((ok) => {
+      if (ok) return;
+      // The write didn't land — the node may be gone from the latest tree. Restore the
+      // pre-click display and surface the failure instead of silently dropping the click.
+      // Only drop this write's mark: a newer toggle of the same item may still be in
+      // flight and must not be reverted out from under it.
+      setPending((prev) => {
+        if (prev.get(index) !== value) return prev;
+        const next = new Map(prev);
+        next.delete(index);
+        return next;
+      });
+      window.alert(t.checklist.writebackFailed);
+    });
   };
   return (
     <div data-slot="checklist" className="flex flex-col gap-2">

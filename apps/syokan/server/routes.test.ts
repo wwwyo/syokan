@@ -1,11 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFileWatcher } from "./fileSource";
 import {
   createApiHandlers,
-  createFileHandlers,
   createSettingHandlers,
   createTemplateHandlers,
   getCatalog,
@@ -645,74 +643,342 @@ describe("setting routes", () => {
   });
 });
 
-describe("file routes", () => {
-  let fileDir: string;
-  let watcher: ReturnType<typeof createFileWatcher>;
-  let file: ReturnType<typeof createFileHandlers>;
+describe("PATCH /api/snapshots/:id", () => {
+  let dir: string;
+  let store: SnapshotStore;
+  let api: ReturnType<typeof createApiHandlers>;
+
+  const checklistTree = {
+    type: "Stack",
+    props: {},
+    children: [
+      {
+        type: "Checklist",
+        id: "todo",
+        props: { items: [{ label: "a" }, { label: "b" }] },
+      },
+    ],
+  };
 
   beforeEach(async () => {
-    fileDir = await mkdtemp(join(tmpdir(), "syokan-files-"));
-    watcher = createFileWatcher({ releaseDelayMs: 20, notifyDebounceMs: 5 });
-    file = createFileHandlers(watcher);
+    dir = await mkdtemp(join(tmpdir(), "syokan-patch-api-"));
+    store = createSnapshotStore(dir);
+    api = createApiHandlers(store);
   });
 
   afterEach(async () => {
-    watcher.closeAll();
-    await rm(fileDir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
   });
 
-  test("GET /api/files returns the content of a text file", async () => {
-    const p = join(fileDir, "a.md");
-    await writeFile(p, "# hi");
-    const res = await file.readFile(
-      makeRequest(`/api/files?path=${encodeURIComponent(p)}`),
+  async function postTree(root: unknown): Promise<string> {
+    const res = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
+        method: "POST",
+        body: JSON.stringify({ root }),
+      }),
     );
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  async function patch(id: string, body: unknown) {
+    const req = new Request(`http://test/api/snapshots/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }) as Request & { params: Record<string, string> };
+    Object.defineProperty(req, "params", { value: { id } });
+    return api.patchSnapshot(req as never);
+  }
+
+  test("a prop-path set applies to the node carrying nodeId and is visible via GET", async () => {
+    const id = await postTree(checklistTree);
+    const res = await patch(id, {
+      nodeId: "todo",
+      set: { "items.1.checked": true },
+    });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ content: "# hi" });
-  });
+    const body = (await res.json()) as {
+      snapshot: {
+        root: {
+          children: [{ props: { items: { checked?: boolean }[] } }];
+        };
+      };
+    };
+    const items = body.snapshot.root.children[0].props.items;
+    expect(items[0]?.checked).toBeUndefined();
+    expect(items[1]?.checked).toBe(true);
 
-  test("GET /api/files without path → 400", async () => {
-    const res = await file.readFile(makeRequest("/api/files"));
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("missing_path");
-  });
-
-  test("GET /api/files with a relative path → 400 invalid_path", async () => {
-    const res = await file.readFile(
-      makeRequest(`/api/files?path=${encodeURIComponent("relative/notes.md")}`),
+    const get = await api.getSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
     );
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe("invalid_path");
+    const stored = (await get.json()) as typeof body.snapshot;
+    expect(stored.root.children[0].props.items[1]?.checked).toBe(true);
   });
 
-  test("GET /api/files for a missing file → 404 not_found", async () => {
-    const res = await file.readFile(
-      makeRequest(`/api/files?path=${encodeURIComponent(join(fileDir, "x"))}`),
+  test("a node id absent from the latest tree is 409 node_not_found (the view reverts)", async () => {
+    const id = await postTree(checklistTree);
+    const res = await patch(id, {
+      nodeId: "gone",
+      set: { "items.0.checked": true },
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("node_not_found");
+    // nothing was written
+    const get = await api.getSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
     );
+    const stored = (await get.json()) as {
+      root: { children: [{ props: { items: { checked?: boolean }[] } }] };
+    };
+    expect(stored.root.children[0].props.items[0]?.checked).toBeUndefined();
+  });
+
+  test("an unknown snapshot id is 404 not_found", async () => {
+    const res = await patch("missing", {
+      nodeId: "todo",
+      set: { "items.0.checked": true },
+    });
     expect(res.status).toBe(404);
-    expect((await res.json()).error).toBe("not_found");
   });
 
-  test("GET /api/files/watch emits an SSE stream and releases on cancel", async () => {
-    const p = join(fileDir, "w.txt");
-    await writeFile(p, "v1");
-    const res = file.watchFile(
-      makeRequest(`/api/files/watch?path=${encodeURIComponent(p)}`),
-    );
-    expect(res.headers.get("content-type")).toBe("text/event-stream");
-    const reader = res.body!.getReader();
-    // Receive the comment line sent right after connecting.
-    const first = await reader.read();
-    expect(new TextDecoder().decode(first.value)).toContain(": connected");
-    expect(watcher.activeCount()).toBe(1);
-    // Client disconnect = stream cancel → unsubscribe.
-    await reader.cancel();
-    await new Promise((r) => setTimeout(r, 40));
-    expect(watcher.activeCount()).toBe(0);
+  test("a set that breaks the node's props schema is 422 invalid_set", async () => {
+    const id = await postTree(checklistTree);
+    const res = await patch(id, {
+      nodeId: "todo",
+      set: { "items.0.checked": "yes" },
+    });
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { error: string }).error).toBe("invalid_set");
   });
 
-  test("GET /api/files/watch without path → 400", async () => {
-    const res = file.watchFile(makeRequest("/api/files/watch"));
+  test("an out-of-bounds array index is 422 invalid_set", async () => {
+    const id = await postTree(checklistTree);
+    const res = await patch(id, {
+      nodeId: "todo",
+      set: { "items.9.checked": true },
+    });
+    expect(res.status).toBe(422);
+  });
+
+  test("a prototype-chain path is 422 invalid_set", async () => {
+    const id = await postTree(checklistTree);
+    const res = await patch(id, {
+      nodeId: "todo",
+      set: { "__proto__.polluted": true, "items.0.checked": true },
+    });
+    expect(res.status).toBe(422);
+    expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
+  });
+
+  test("a malformed body is 400", async () => {
+    const id = await postTree(checklistTree);
+    const res = await patch(id, { set: { "items.0.checked": true } });
     expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      "validation_failed",
+    );
+  });
+
+  test("a patch racing a full PUT is serialized: the final tree is one coherent ordering", async () => {
+    const post = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
+        method: "POST",
+        body: JSON.stringify({ root: checklistTree, idempotencyKey: "raced" }),
+      }),
+    );
+    const { id } = (await post.json()) as { id: string };
+    const putRoot = {
+      type: "Stack",
+      props: {},
+      children: [
+        {
+          type: "Checklist",
+          id: "todo",
+          props: { items: [{ label: "a" }] },
+        },
+      ],
+    };
+    const [putRes, patchRes] = await Promise.all([
+      api.updateSnapshot(
+        makeRequest("/api/snapshots", {
+          method: "PUT",
+          body: JSON.stringify({ root: putRoot, idempotencyKey: "raced" }),
+        }),
+      ),
+      patch(id, { nodeId: "todo", set: { "items.0.checked": true } }),
+    ]);
+    expect(putRes.status).toBe(200);
+    expect(patchRes.status).toBe(200);
+    // Serialized inside the write lock: the final tree is the PUT's tree, with the
+    // check present iff the patch landed last — never a half-merged blob.
+    const get = await api.getSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
+    );
+    const stored = (await get.json()) as { root: unknown };
+    const patchedLast = {
+      type: "Stack",
+      props: {},
+      children: [
+        {
+          type: "Checklist",
+          id: "todo",
+          props: { items: [{ label: "a", checked: true }] },
+        },
+      ],
+    };
+    expect([putRoot, patchedLast] as unknown[]).toContainEqual(stored.root);
+  });
+});
+
+describe("GET /api/snapshots/changes", () => {
+  let dir: string;
+  let store: SnapshotStore;
+  let api: ReturnType<typeof createApiHandlers>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "syokan-changes-api-"));
+    store = createSnapshotStore(dir);
+    api = createApiHandlers(store);
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("streams ': connected' then a change event per mutation (create/patch/delete)", async () => {
+    const res = api.watchChanges();
+    expect(res.headers.get("content-type")).toBe("text/event-stream");
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("no body");
+    const decoder = new TextDecoder();
+    let buf = "";
+    const readUntil = async (needle: string) => {
+      for (let i = 0; i < 100; i++) {
+        if (buf.includes(needle)) return;
+        const { done, value } = await reader.read();
+        if (done) throw new Error(`stream ended before ${needle}`);
+        buf += decoder.decode(value, { stream: true });
+      }
+      throw new Error(`timed out waiting for ${needle}`);
+    };
+
+    await readUntil(": connected");
+
+    const post = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
+        method: "POST",
+        body: JSON.stringify({
+          root: {
+            type: "Checklist",
+            id: "todo",
+            props: { items: [{ label: "a" }] },
+          },
+        }),
+      }),
+    );
+    const { id } = (await post.json()) as { id: string };
+    await readUntil(`"kind":"create"`);
+    expect(buf).toContain(`"id":"${id}"`);
+
+    const patchReq = new Request(`http://test/api/snapshots/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ nodeId: "todo", set: { "items.0.checked": true } }),
+    }) as Request & { params: Record<string, string> };
+    Object.defineProperty(patchReq, "params", { value: { id } });
+    await api.patchSnapshot(patchReq as never);
+    await readUntil(`"kind":"patch"`);
+
+    await api.deleteSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
+    );
+    await readUntil(`"kind":"delete"`);
+
+    await reader.cancel();
+  });
+});
+
+describe("cross-origin guard on mutations", () => {
+  let dir: string;
+  let store: SnapshotStore;
+  let api: ReturnType<typeof createApiHandlers>;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "syokan-csrf-api-"));
+    store = createSnapshotStore(dir);
+    api = createApiHandlers(store);
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  // A page on another origin — a different localhost port included — must not be able
+  // to write. The request Host here is "localhost:5773" via the request URL.
+  test("POST/PUT/PATCH/DELETE carrying a foreign Origin are rejected 403 without executing", async () => {
+    const foreign = { origin: "http://localhost:9999" };
+    const body = JSON.stringify({ root: baseInput.root });
+
+    const post = await api.createSnapshot(
+      new Request("http://localhost:5773/api/snapshots", {
+        method: "POST",
+        headers: { ...foreign, "content-type": "application/json" },
+        body,
+      }),
+    );
+    expect(post.status).toBe(403);
+
+    const put = await api.updateSnapshot(
+      new Request("http://localhost:5773/api/snapshots", {
+        method: "PUT",
+        headers: { ...foreign, "content-type": "application/json" },
+        body: JSON.stringify({ root: baseInput.root, idempotencyKey: "k" }),
+      }),
+    );
+    expect(put.status).toBe(403);
+
+    const env = await store.create({ root: { type: "Stack", props: {} } });
+    const patchReq = new Request(`http://localhost:5773/api/snapshots/${env.id}`, {
+      method: "PATCH",
+      headers: { ...foreign, "content-type": "application/json" },
+      body: JSON.stringify({ nodeId: "x", set: {} }),
+    }) as Request & { params: Record<string, string> };
+    Object.defineProperty(patchReq, "params", { value: { id: env.id } });
+    expect((await api.patchSnapshot(patchReq as never)).status).toBe(403);
+
+    const delReq = new Request(`http://localhost:5773/api/snapshots/${env.id}`, {
+      method: "DELETE",
+      headers: foreign,
+    }) as Request & { params: Record<string, string> };
+    Object.defineProperty(delReq, "params", { value: { id: env.id } });
+    expect((await api.deleteSnapshot(delReq as never)).status).toBe(403);
+
+    // nothing was written, nothing was deleted
+    expect(await store.get(env.id)).toBeDefined();
+    expect((await store.list()).length).toBe(1);
+  });
+
+  test("a same-origin Origin and an absent Origin are both allowed", async () => {
+    const sameOrigin = await api.createSnapshot(
+      new Request("http://localhost:5773/api/snapshots", {
+        method: "POST",
+        headers: {
+          origin: "http://localhost:5773",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ root: baseInput.root }),
+      }),
+    );
+    expect(sameOrigin.status).toBe(201);
+
+    // CLI / curl send no Origin at all
+    const noOrigin = await api.createSnapshot(
+      new Request("http://localhost:5773/api/snapshots", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ root: baseInput.root }),
+      }),
+    );
+    expect(noOrigin.status).toBe(201);
   });
 });

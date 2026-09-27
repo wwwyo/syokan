@@ -44,3 +44,27 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Write a node-scoped edit back into the store (view writeback). Returns false on any
+ * failure — a gone snapshot (404), a node id no longer in the latest tree (409), a
+ * rejected set (422) — so the caller can revert its optimistic display. The server
+ * pushes a change notification on success; the open view picks up the stored state
+ * through the following refetch.
+ */
+export async function patchSnapshot(
+  snapshotId: string,
+  nodeId: string,
+  set: Record<string, unknown>,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/snapshots/${encodeURIComponent(snapshotId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nodeId, set }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

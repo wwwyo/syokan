@@ -4,6 +4,7 @@ import { validator } from "hono/validator";
 import { z } from "zod";
 import { formatValidationError } from "../src/schema";
 import type { ShareErrorResponse } from "../../share/types";
+import { crossOrigin } from "./origin";
 import {
   createShareService,
   type ServiceFailure,
@@ -15,24 +16,10 @@ const loginInputSchema = z
   .strict();
 
 // Keep min(60) in sync with the Worker's createShareSchema. Returning 400 up front
-// avoids leaking the Worker's validation_failed after a materialize + round-trip.
+// avoids leaking the Worker's validation_failed after a store read + round-trip.
 const publishInputSchema = z
   .object({ expiresIn: z.number().int().min(60).optional() })
   .strict();
-
-// The localhost server is only hit by the same-origin app and the Origin-less CLI. Reject any
-// cross-origin request that carries an Origin (a malicious web page CSRFing publish to leak local
-// file contents to a public URL). CLI/curl send no Origin, so they pass.
-function crossOrigin(req: Request): boolean {
-  const origin = req.headers.get("origin");
-  if (!origin) return false;
-  try {
-    const host = new URL(origin).hostname;
-    return host !== "localhost" && host !== "127.0.0.1" && host !== "[::1]";
-  } catch {
-    return true;
-  }
-}
 
 // Accept no body / empty body as {} (omitting expiresIn is the normal path for publish).
 async function parseOptionalJsonBody(
@@ -70,15 +57,6 @@ function emitFailure(c: Context, failure: ServiceFailure) {
         { error: "not_found", message: `Snapshot ${failure.id} not found` },
         404,
       );
-    case "materialize_failed":
-      return c.json(
-        {
-          error: "materialize_failed",
-          path: failure.path,
-          reason: failure.reason,
-        } satisfies ShareErrorResponse,
-        422,
-      );
     case "worker_error":
       return c.json(failure.body, failure.status);
   }
@@ -88,7 +66,7 @@ function emitFailure(c: Context, failure: ServiceFailure) {
  * The share API as a Hono sub-app so the response types reach the frontend via hc (the FE imports
  * ShareAppType only; the Worker's shape reaches it solely through this proxy). This entrypoint owns
  * routing, the cross-origin (CSRF) guard, and request/response shaping; the Worker calls, auth-file
- * handling, and TreeDoc freezing live in the service layer (shareService.ts).
+ * handling, and publish-time probe redaction live in the service layer (shareService.ts).
  */
 export function createShareApp(deps: ShareServiceDeps) {
   const service = createShareService(deps);

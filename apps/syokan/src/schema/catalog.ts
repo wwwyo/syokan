@@ -95,7 +95,7 @@ function buildUnion(
           .string()
           .min(1)
           .describe(
-            "In-view anchor and UI-state identity. A Link with href \"#<id>\" scrolls to the node, temporarily highlighting it and revealing it if inside a closed Collapsible or a checked-folded Checklist item. Interactive nodes (Checklist/Collapsible/Probe) persist their state across reloads only when they carry an id. Must be unique across the whole tree — a duplicate id is rejected at ingest.",
+            "In-view anchor, UI-state identity, and writeback target. A Link with href \"#<id>\" scrolls to the node, temporarily highlighting it and revealing it if inside a closed Collapsible or a checked-folded Checklist item. Interactive nodes (Checklist/Collapsible/Probe) keep their state across reloads only when they carry an id — Checklist checks are written back into the snapshot itself (visible to later reads and publishes); Collapsible/Probe state stays viewer-local. Must be unique across the whole tree — a duplicate id is rejected at ingest.",
           )
           .optional(),
       })
@@ -114,8 +114,7 @@ function buildUnion(
  * The first node id that appears more than once in the tree, or null. A cross-cutting
  * id must be unique tree-wide: anchor lookup takes the first match and UI-state keys on
  * (scope, id), so a duplicate id causes wrong jumps and colliding state. Checked at
- * every ingest point (envelope POST/PUT, TreeDoc parse), the same way Graph enforces
- * uniqueness within a single graph.
+ * ingest (envelope POST/PUT), the same way Graph enforces uniqueness within a single graph.
  */
 export function findDuplicateId(root: Item): string | null {
   const seen = new Set<string>();

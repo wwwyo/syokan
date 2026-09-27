@@ -44,13 +44,13 @@ export const ja: Messages = {
       step2Body:
         "返ってきた id を渡すとブラウザで開く（server が無ければ自動起動）。作った snapshot は左上のメニューからも辿れる。",
       step2Code: "syokan open k3f9q2",
-      step3Title: "3. tree ファイルを live sync — syokan <tree.json>",
+      step3Title: "3. tree ファイルを投げる — syokan <tree.json>",
       step3Body:
-        "裸の catalog tree を持つファイルは TreeDoc として召喚され、保存のたびに view がその場で更新される。",
+        "裸の catalog tree を持つファイルは自己完結の snapshot として post される。ファイルを編集したら同じコマンドを再実行すると、同じ view がその場で更新される（開いている view は reload なしに追従する）。",
       step3Code: "syokan ./dashboard.json",
       typesTitle: "投げられる type",
       typesBody:
-        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / Mermaid / TreeDoc。各 type の props は syokan catalog（GET /api/catalog）で確認できる。schema に合わない tree は 400 で弾かれる。",
+        "Stack / Card / Heading / Text / Link / Badge / Time / Code / Diff / Mermaid。各 type の props は syokan catalog（GET /api/catalog）で確認できる。schema に合わない tree は 400 で弾かれる。",
     },
   },
   shell: {
@@ -84,22 +84,9 @@ export const ja: Messages = {
   headingMinimap: {
     label: "見出し一覧",
   },
-  treeDoc: {
-    errors: {
-      not_found: "ファイルが見つかりません（削除された可能性があります）。",
-      not_regular_file: "通常ファイルではないため表示できません。",
-      permission_denied: "読み取り権限がありません。",
-      too_large: "ファイルが大きすぎるため表示できません（上限 2 MiB）。",
-      not_text: "テキストとして読めません（バイナリ / 非 UTF-8）。",
-      missing_path: "パスが指定されていません。",
-      invalid_path: "パスが使えません（絶対パスのみ指定できます）。",
-      network: "読み込みに失敗しました（サーバに接続できません）。",
-      error: "読み込みに失敗しました。",
-      invalid_json: "ファイルが正しい JSON ではありません。",
-      invalid_tree: "JSON が catalog tree の schema に一致しません。",
-      nested_treedoc: "sync 対象の tree の中に TreeDoc は置けません。",
-    },
-    staleNotice: "最後に正常だった内容を表示しています。",
+  checklist: {
+    writebackFailed:
+      "チェックを保存できませんでした。snapshot が更新または削除された可能性があります。変更は元に戻しました。",
   },
   mermaid: {
     renderFailed: "この図を表示できませんでした。",
@@ -137,8 +124,6 @@ export const ja: Messages = {
     activeShares: "公開中のリンク",
     copyUrl: "URL をコピー",
     errors: {
-      materializeFailed: (path: string) =>
-        `参照ファイルを読めなかったため公開を中止しました: ${path}`,
       unreachable: "共有サービスに接続できません。",
       network: "サーバに接続できません。",
       generic: "共有に失敗しました。",

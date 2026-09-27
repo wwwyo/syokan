@@ -75,11 +75,6 @@ const authTokenSchema = z.object({
 	githubAccessToken: z.string().min(1),
 });
 
-function containsType(item: StructuralItem, type: string): boolean {
-	if (item.type === type) return true;
-	return item.children?.some((child) => containsType(child, type)) ?? false;
-}
-
 async function sha256Hex(input: string): Promise<string> {
 	const digest = await crypto.subtle.digest(
 		"SHA-256",
@@ -220,14 +215,6 @@ const app = new Hono<Env>()
 		async (c) => {
 			const auth = c.get("auth");
 			const { envelope, sourceSnapshotId, expiresIn } = c.req.valid("json");
-			// The local server freezes TreeDoc at publish time (the primary defense); this is the last
-			// line of defense so a file-referencing node can never land in a public payload.
-			if (containsType(envelope.root, "TreeDoc")) {
-				return c.json(
-					{ error: "treedoc_not_allowed" } satisfies ShareErrorResponse,
-					400,
-				);
-			}
 			// SHARE_MAX_BYTES is a byte count. JSON.stringify(...).length counts UTF-16 code units,
 			// which underestimates multi-byte characters, so measure the real byte length with TextEncoder.
 			if (new TextEncoder().encode(JSON.stringify(envelope)).byteLength > SHARE_MAX_BYTES) {

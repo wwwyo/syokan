@@ -45,6 +45,34 @@ export function AppShell() {
     }
   }, [open]);
 
+  // Store mutations (post/put/patch/delete from CLI, LLM, or this view's own writeback)
+  // arrive as SSE change notifications. Re-run the shell loader on every change so the
+  // sidebar follows, and re-run the view loader only when the change targets the open
+  // snapshot — which also surfaces a deletion of the open view as not-found. The
+  // focus/visibility refetch below stays as the floor for events missed while
+  // disconnected (mutations by another server process never reach this stream).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const source = new EventSource("/api/snapshots/changes");
+    let connected = false;
+    source.addEventListener("change", (event) => {
+      const change = JSON.parse(event.data as string) as { id?: unknown };
+      const id = typeof change.id === "string" ? change.id : undefined;
+      void router.invalidate({
+        filter: (m) =>
+          m.routeId === "/_shell" ||
+          (m.routeId === "/_shell/snapshots/$id" && m.params.id === id),
+      });
+    });
+    source.addEventListener("open", () => {
+      // A reconnect means events may have been missed — resync once. The first open
+      // right after mount would only duplicate the fresh loader fetch.
+      if (connected) void router.invalidate();
+      connected = true;
+    });
+    return () => source.close();
+  }, [router]);
+
   // Snapshot creation happens outside the app (CLI/LLM), so there is no in-app trigger. On
   // tab return / becoming visible, re-fetch only the shell loader so an app left open also
   // picks up the new list. Being a background revalidation, stale-while-revalidate means the

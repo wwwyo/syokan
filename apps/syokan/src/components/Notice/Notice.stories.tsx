@@ -18,16 +18,14 @@ export const MessageOnly: Story = {
   },
 };
 
-/** How TreeDoc uses it: a long path with no useful break points wraps at any character. */
+/** A long token with no useful break points (a path, a hash) wraps at any character. */
 export const WithPathDetail: Story = {
   args: {
-    slot: "tree-doc-error",
+    slot: "demo-notice",
     className: "my-4",
     children: (
       <>
-        <p>
-          The file is not valid JSON. Showing the last valid content.
-        </p>
+        <p>The referenced file could not be read.</p>
         <NoticeDetail wrap="break">
           /Users/example/very/deeply/nested/directory/structure/review-panel-tree.json
         </NoticeDetail>
