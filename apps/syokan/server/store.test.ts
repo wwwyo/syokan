@@ -342,11 +342,20 @@ describe("SnapshotStore", () => {
   };
   const acceptAll = () => true;
 
-  test("patch sets a prop path on the node carrying nodeId", async () => {
+  const checkItem = (label: string, nth = 1) => ({
+    path: ["items", { label, nth }, "checked"] as (
+      | string
+      | { label: unknown; nth: number }
+    )[],
+    expect: undefined,
+    value: true,
+  });
+
+  test("patch lands a conditional set on the item the label correspondence identifies", async () => {
     const env = await store.create({ root: checklistRoot });
     const result = await store.patch(
       env.id,
-      { nodeId: "todo", set: { "items.1.checked": true } },
+      { nodeId: "todo", set: [checkItem("b")] },
       acceptAll,
     );
     expect(result.ok).toBe(true);
@@ -365,13 +374,67 @@ describe("SnapshotStore", () => {
     ).toEqual({ label: "b", checked: true });
   });
 
-  test("patch persists across a store restart", async () => {
-    const env = await store.create({ root: checklistRoot });
-    await store.patch(
+  test("patch follows the label through an LLM reorder, and nth picks among same-label items", async () => {
+    const env = await store.create({
+      idempotencyKey: "reorder",
+      root: {
+        type: "Stack",
+        props: {},
+        children: [
+          {
+            type: "Checklist",
+            id: "todo",
+            props: {
+              items: [{ label: "same" }, { label: "same" }],
+            },
+          },
+        ],
+      },
+    });
+    // The LLM inserts an item at the front and inserts a third same-label item —
+    // every index shifts; the label correspondence must not.
+    await store.update({
+      idempotencyKey: "reorder",
+      root: {
+        type: "Stack",
+        props: {},
+        children: [
+          {
+            type: "Checklist",
+            id: "todo",
+            props: {
+              items: [
+                { label: "other" },
+                { label: "same" },
+                { label: "same" },
+                { label: "same" },
+              ],
+            },
+          },
+        ],
+      },
+    });
+    const result = await store.patch(
       env.id,
-      { nodeId: "todo", set: { "items.0.checked": true } },
+      { nodeId: "todo", set: [checkItem("same", 2)] },
       acceptAll,
     );
+    expect(result.ok).toBe(true);
+    const stored = await store.get(env.id);
+    const items = (
+      stored?.root.children?.[0]?.props as {
+        items: { label: string; checked?: boolean }[];
+      }
+    ).items;
+    expect(items[0]).toEqual({ label: "other" });
+    expect(items[1]).toEqual({ label: "same" });
+    expect(items[2]).toEqual({ label: "same", checked: true });
+    expect(items[3]).toEqual({ label: "same" });
+  });
+
+  test("patch persists across a store restart", async () => {
+    const env = await store.create({ root: checklistRoot });
+    await store.patch(env.id, { nodeId: "todo", set: [checkItem("a")] }, acceptAll);
     const next = createSnapshotStore(dir);
     const got = await next.get(env.id);
     expect(
@@ -384,47 +447,103 @@ describe("SnapshotStore", () => {
     const env = await store.create({ root: checklistRoot });
     const missing = await store.patch(
       "missing",
-      { nodeId: "todo", set: { "items.0.checked": true } },
+      { nodeId: "todo", set: [checkItem("a")] },
       acceptAll,
     );
     expect(missing).toEqual({ ok: false, error: "not_found" });
     const gone = await store.patch(
       env.id,
-      { nodeId: "gone", set: { "items.0.checked": true } },
+      { nodeId: "gone", set: [checkItem("a")] },
       acceptAll,
     );
     expect(gone).toEqual({ ok: false, error: "node_not_found", nodeId: "gone" });
   });
 
-  test("patch rejects a set that does not apply (bad path) or fails validation, leaving the tree untouched", async () => {
+  test("patch refuses a path the correspondence can't resolve (target_not_found) — never redirecting to another item", async () => {
     const env = await store.create({ root: checklistRoot });
     for (const set of [
-      { "items.9.checked": true },
-      { "items.0.checked.deep": true },
-      { "__proto__.x": true },
+      [checkItem("absent")], // no such label
+      [checkItem("a", 2)], // nth beyond the same-label count
+      [
+        {
+          path: ["items", { label: "a", nth: 1 }, "checked", "deep"],
+          expect: undefined,
+          value: true,
+        },
+      ], // leaf walks into a boolean — not an object
     ]) {
       const result = await store.patch(env.id, { nodeId: "todo", set }, acceptAll);
       expect(result.ok).toBe(false);
-      if (!result.ok) expect(result.error).toBe("invalid_set");
+      if (!result.ok) expect(result.error).toBe("target_not_found");
     }
+    // A prototype-chain segment is malformed on its own — invalid_set, not a miss.
+    const proto = await store.patch(
+      env.id,
+      {
+        nodeId: "todo",
+        set: [{ path: ["__proto__", "x"], expect: undefined, value: true }],
+      },
+      acceptAll,
+    );
+    expect(proto).toEqual({ ok: false, error: "invalid_set" });
+    const stored = await store.get(env.id);
+    const items = (stored?.root.children?.[0]?.props as { items: unknown[] })
+      .items;
+    expect(items[0]).toEqual({ label: "a" });
+    expect(items[1]).toEqual({ label: "b" });
+    expect(Object.prototype.hasOwnProperty.call({}, "x")).toBe(false);
+  });
+
+  test("patch refuses when the current value moved past expect (value_conflict)", async () => {
+    const env = await store.create({ root: checklistRoot });
+    // The view rendered checked:false (absent), but the store already holds true.
+    await store.patch(
+      env.id,
+      { nodeId: "todo", set: [checkItem("a")] },
+      acceptAll,
+    );
+    const conflict = await store.patch(
+      env.id,
+      { nodeId: "todo", set: [checkItem("a")] }, // still expects absent
+      acceptAll,
+    );
+    expect(conflict).toEqual({ ok: false, error: "value_conflict" });
+    // And the value did not change a second time.
+    const stored = await store.get(env.id);
+    expect(
+      (stored?.root.children?.[0]?.props as { items: { checked?: boolean }[] })
+        .items[0]?.checked,
+    ).toBe(true);
+  });
+
+  test("patch refuses a schema-breaking value (invalid_set) leaving the tree untouched", async () => {
+    const env = await store.create({ root: checklistRoot });
     const rejected = await store.patch(
       env.id,
-      { nodeId: "todo", set: { "items.0.checked": true } },
-      () => false,
+      {
+        nodeId: "todo",
+        set: [
+          {
+            path: ["items", { label: "a", nth: 1 }, "checked"],
+            expect: undefined,
+            value: "yes",
+          },
+        ],
+      },
+      () => false, // validator rejects — as itemSchema would for a string `checked`
     );
-    expect(rejected.ok).toBe(false);
+    expect(rejected).toEqual({ ok: false, error: "invalid_set" });
     const stored = await store.get(env.id);
     expect(
       (stored?.root.children?.[0]?.props as { items: unknown[] }).items[0],
     ).toEqual({ label: "a" });
-    expect(Object.prototype.hasOwnProperty.call({}, "x")).toBe(false);
   });
 
   test("patch applies several set entries in one write", async () => {
     const env = await store.create({ root: checklistRoot });
     const result = await store.patch(
       env.id,
-      { nodeId: "todo", set: { "items.0.checked": true, "items.1.checked": true } },
+      { nodeId: "todo", set: [checkItem("a"), checkItem("b")] },
       acceptAll,
     );
     expect(result.ok).toBe(true);
@@ -444,7 +563,7 @@ describe("SnapshotStore", () => {
     // a deduped create is not a mutation — it must not notify
     await store.create({ root: checklistRoot, idempotencyKey: "k" });
     await store.update({ root: checklistRoot, idempotencyKey: "k" });
-    await store.patch(env.id, { nodeId: "todo", set: { "items.0.checked": true } }, acceptAll);
+    await store.patch(env.id, { nodeId: "todo", set: [checkItem("a")] }, acceptAll);
     await store.delete(env.id);
 
     expect(seen).toEqual([

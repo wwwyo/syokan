@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Checkbox } from "../../components/ui/checkbox";
 import { useReveal } from "../../lib/anchor";
 import { t } from "../../lib/i18n";
+import { jsonEqual } from "../../lib/json";
 import { patchSnapshot } from "../../lib/snapshots";
 import { cn } from "../../lib/utils";
 import { useNodeUiState, useWritebackTarget } from "../../lib/viewState";
@@ -35,9 +36,10 @@ export type ChecklistProps = z.infer<typeof checklistPropsSchema> & {
  * body of items[i] (omit children for label-only lists). Checking an item folds its body
  * to the label line; the label re-opens it transiently; unchecking restores it.
  * On a node carrying an id inside a store-backed view, checks write back into the
- * snapshot (PATCH items[i].checked) — the same check is then visible in GET responses,
- * other devices, and published shares. Without an id (or on a share viewer) checks stay
- * device-local UI state.
+ * snapshot (a conditional PATCH on the item's `checked`, addressed by label
+ * correspondence rather than index) — the same check is then visible in GET
+ * responses, other devices, and published shares. Without an id (or on a share
+ * viewer) checks stay device-local UI state.
  */
 export function Checklist({ items, children }: ChecklistProps) {
   const bodies = Children.toArray(children);
@@ -49,9 +51,14 @@ export function Checklist({ items, children }: ChecklistProps) {
   // Optimistic display for in-flight writebacks. Pending marks are cleared when fresh
   // items arrive (the change notification refetch carries the stored truth back in).
   const [pending, setPending] = useState<ReadonlyMap<number, boolean>>(new Map());
+  // The value our queued writes will leave the store at, per item index — the `expect`
+  // of the next click on that item. A ref (not the pending state) so a second click in
+  // the same render batch still builds its condition on the latest queued value.
+  const queuedRef = useRef(new Map<number, boolean>());
   const itemsRef = useRef(items);
   if (itemsRef.current !== items) {
     itemsRef.current = items;
+    queuedRef.current.clear();
     if (pending.size > 0) setPending(new Map());
   }
   // Serialize a node's writes so toggles land in click order — parallel PATCHes of
@@ -70,11 +77,30 @@ export function Checklist({ items, children }: ChecklistProps) {
       setOverrides(next);
       return;
     }
+    const item = items[index];
+    if (item === undefined) return;
+    // Identify the item by the label correspondence, not its index: the nth item
+    // carrying this exact label. An LLM insert/delete/reorder then can't redirect
+    // the write onto a different item undetected — a broken correspondence or a
+    // moved `expect` value gets the writeback refused instead.
+    const nth = items
+      .slice(0, index + 1)
+      .filter((other) => jsonEqual(other.label, item.label)).length;
+    // expect is the exact stored value — possibly an absent `checked` (undefined),
+    // which JSON.stringify simply omits from the body; the server reads a missing
+    // expect as "the location must be absent". Writing `false` here would clash
+    // with an absent checked and refuse the first toggle.
+    const expect = queuedRef.current.get(index) ?? item.checked;
+    queuedRef.current.set(index, value);
     setPending((prev) => new Map(prev).set(index, value));
     const run = writeChain.current.then(() =>
-      patchSnapshot(target.snapshotId, target.nodeId, {
-        [`items.${index}.checked`]: value,
-      }),
+      patchSnapshot(target.snapshotId, target.nodeId, [
+        {
+          path: ["items", { label: item.label, nth }, "checked"],
+          expect,
+          value,
+        },
+      ]),
     );
     writeChain.current = run.then(
       () => undefined,
@@ -82,16 +108,19 @@ export function Checklist({ items, children }: ChecklistProps) {
     );
     void run.then((ok) => {
       if (ok) return;
-      // The write didn't land — the node may be gone from the latest tree. Restore the
-      // pre-click display and surface the failure instead of silently dropping the click.
-      // Only drop this write's mark: a newer toggle of the same item may still be in
-      // flight and must not be reverted out from under it.
+      // The write didn't land — the target is unidentifiable or its value moved.
+      // Restore the pre-click display and surface the failure instead of silently
+      // dropping the click. Only drop this write's mark: a newer toggle of the same
+      // item may still be in flight and must not be reverted out from under it.
       setPending((prev) => {
         if (prev.get(index) !== value) return prev;
         const next = new Map(prev);
         next.delete(index);
         return next;
       });
+      if (queuedRef.current.get(index) === value) {
+        queuedRef.current.delete(index);
+      }
       window.alert(t.checklist.writebackFailed);
     });
   };

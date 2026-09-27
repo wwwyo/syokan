@@ -158,10 +158,17 @@ try {
 
   await step("PATCH writes a view edit into the store (Checklist writeback)", async () => {
     const id = snapshotUrl.split("/snapshots/")[1];
+    // The conditional set: the item is addressed by label correspondence (not index),
+    // and a missing `expect` requires the location to be currently absent.
     const res = await fetch(`${baseUrl}/api/snapshots/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ nodeId: "todo", set: { "items.0.checked": true } }),
+      body: JSON.stringify({
+        nodeId: "todo",
+        set: [
+          { path: ["items", { label: "a", nth: 1 }, "checked"], value: true },
+        ],
+      }),
     });
     if (!res.ok) throw new Error(`PATCH -> ${res.status}`);
     const got = await fetch(`${baseUrl}/api/snapshots/${id}`);
@@ -173,12 +180,36 @@ try {
     }
   });
 
+  await step("a stale expect (the value moved) is rejected without writing", async () => {
+    const id = snapshotUrl.split("/snapshots/")[1];
+    const res = await fetch(`${baseUrl}/api/snapshots/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        nodeId: "todo",
+        set: [
+          {
+            path: ["items", { label: "a", nth: 1 }, "checked"],
+            expect: false, // the store holds true — the condition fails
+            value: false,
+          },
+        ],
+      }),
+    });
+    if (res.status !== 409) throw new Error(`expected 409 value_conflict, got ${res.status}`);
+  });
+
   await step("PATCH against a node missing from the latest tree is rejected", async () => {
     const id = snapshotUrl.split("/snapshots/")[1];
     const res = await fetch(`${baseUrl}/api/snapshots/${id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ nodeId: "gone", set: { "items.0.checked": true } }),
+      body: JSON.stringify({
+        nodeId: "gone",
+        set: [
+          { path: ["items", { label: "a", nth: 1 }, "checked"], value: true },
+        ],
+      }),
     });
     if (res.status !== 409) throw new Error(`expected 409 node_not_found, got ${res.status}`);
   });

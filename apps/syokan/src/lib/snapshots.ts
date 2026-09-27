@@ -45,17 +45,32 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
   }
 }
 
+// A writeback path: string keys walk objects; a { label, nth } matcher resolves the
+// nth same-label array element (the node-identity item correspondence — an index
+// would silently follow an LLM insert/reorder and land on a different item).
+export type PatchPathSegment = string | { label: unknown; nth: number };
+
+// One conditional set: lands only when the value at `path` currently equals
+// `expect`, i.e. the store still holds what the view rendered before the operation.
+export type PatchSetEntry = {
+  path: PatchPathSegment[];
+  expect: unknown;
+  value: unknown;
+};
+
 /**
- * Write a node-scoped edit back into the store (view writeback). Returns false on any
- * failure — a gone snapshot (404), a node id no longer in the latest tree (409), a
- * rejected set (422) — so the caller can revert its optimistic display. The server
- * pushes a change notification on success; the open view picks up the stored state
- * through the following refetch.
+ * Write a node-scoped conditional edit back into the store (view writeback).
+ * Returns false on any refusal — a gone snapshot (404), a node id no longer in the
+ * latest tree, a target the label correspondence can't identify, or a value that
+ * moved since the view rendered it (409), or a schema-breaking set (422) — so the
+ * caller can revert its optimistic display. The server pushes a change
+ * notification on success; the open view picks up the stored state through the
+ * following refetch.
  */
 export async function patchSnapshot(
   snapshotId: string,
   nodeId: string,
-  set: Record<string, unknown>,
+  set: PatchSetEntry[],
 ): Promise<boolean> {
   try {
     const res = await fetch(`/api/snapshots/${encodeURIComponent(snapshotId)}`, {

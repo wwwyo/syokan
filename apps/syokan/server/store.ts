@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeJsonAtomic } from "../src/lib/fsAtomic";
+import { jsonEqual } from "../src/lib/json";
 import {
   CURRENT_SCHEMA_VERSION,
   type Item,
@@ -33,19 +34,37 @@ export type UpdateResult =
   | { ok: true; envelope: SnapshotEnvelope }
   | { ok: false; error: "not_found" };
 
+// A writeback path segment: a string walks an object key; a label matcher resolves an
+// array element by the node-identity correspondence — the element whose `label`
+// deep-equals, counting occurrences of that same label (nth, 1-based). There is no
+// index addressing: an index silently follows an LLM's insert/delete/reorder and
+// points at a different item undetected, while a broken label correspondence
+// surfaces as target_not_found and can be refused.
+export type PatchPathSegment = string | { label: unknown; nth: number };
+
+export type PatchSetEntry = {
+  // A path into the node's props (e.g. ["items", { label: "x", nth: 1 }, "checked"]).
+  path: PatchPathSegment[];
+  // The condition: the write applies only when the value currently at `path`
+  // deep-equals `expect` (the value the view rendered before the operation). An
+  // absent location only matches expect=undefined.
+  expect: unknown;
+  value: unknown;
+};
+
 export type PatchInput = {
   // The writeback target: a node carrying this id in the tree.
   nodeId: string;
-  // prop path → value (e.g. { "items.2.checked": true }). Intermediate segments must
-  // already exist; the leaf is created when absent.
-  set: Record<string, unknown>;
+  set: PatchSetEntry[];
 };
 
 export type PatchResult =
   | { ok: true; envelope: SnapshotEnvelope }
   | { ok: false; error: "not_found" }
   | { ok: false; error: "node_not_found"; nodeId: string }
-  | { ok: false; error: "invalid_set"; path?: string };
+  | { ok: false; error: "target_not_found" }
+  | { ok: false; error: "value_conflict" }
+  | { ok: false; error: "invalid_set" };
 
 // Emitted to subscribers after a store mutation lands (in-process only — mutations
 // written by another process are visible via read-through but never pushed here).
@@ -63,12 +82,14 @@ export type SnapshotStore = {
   // update never breaks its "must already exist" premise).
   update: (input: UpdateInput) => Promise<UpdateResult>;
   // Write a node-scoped edit (view writeback) into the latest tree inside the write lock,
-  // so a concurrent PUT can't lose it or be rolled back by it. `validate` gates the write
-  // on the post-set node (routes.ts checks the node's propsSchema).
+  // so a concurrent PUT can't lose it or be rolled back by it. The set is conditional —
+  // it lands only when the addressed target exists by the label correspondence and its
+  // current value matches `expect` — and `validate` gates the write on the post-set
+  // root (routes.ts checks the whole tree against the catalog itemSchema).
   patch: (
     id: string,
     input: PatchInput,
-    validate: (node: Item) => boolean,
+    validate: (root: Item) => boolean,
   ) => Promise<PatchResult>;
   get: (id: string) => Promise<SnapshotEnvelope | undefined>;
   list: () => Promise<SnapshotSummary[]>;
@@ -101,51 +122,94 @@ function stripLegacyNodeFields(item: Item): Item {
 
 const LOCK_TIMEOUT_MS = 5_000;
 
-// A set path like "items.2.checked": dot-separated segments, numeric segments indexing
-// into arrays. Never let a lookup/write walk the prototype chain.
+// A set path walks object keys and label correspondences. Never let a lookup/write
+// walk the prototype chain.
 const FORBIDDEN_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
 
-function isArrayIndex(segment: string): boolean {
-  return /^(0|[1-9]\d*)$/.test(segment);
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Write `value` at `path` inside `props`. Intermediate segments must resolve to an
-// existing object/array (no implicit structure creation — a typo'd path must fail
-// loudly rather than grow a parallel shape); the leaf is set even when absent.
-function setPropPath(
-  props: Record<string, unknown>,
-  path: string,
-  value: unknown,
-): boolean {
-  const segments = path.split(".");
-  if (segments.some((s) => s === "" || FORBIDDEN_PATH_SEGMENTS.has(s))) {
-    return false;
-  }
-  let target: unknown = props;
-  for (let i = 0; i < segments.length - 1; i++) {
-    const segment = segments[i] as string;
-    if (Array.isArray(target)) {
-      if (!isArrayIndex(segment)) return false;
-      target = target[Number(segment)];
-    } else if (typeof target === "object" && target !== null) {
-      target = (target as Record<string, unknown>)[segment];
-    } else {
-      return false;
+// The index of the nth (1-based) array element whose `label` deep-equals the
+// matcher's — the node-identity correspondence for Checklist items — or -1 when
+// fewer than nth elements carry that label.
+function labelIndex(
+  array: unknown[],
+  matcher: { label: unknown; nth: number },
+): number {
+  let seen = 0;
+  for (let i = 0; i < array.length; i++) {
+    const element = array[i];
+    if (isPlainRecord(element) && jsonEqual(element.label, matcher.label)) {
+      seen++;
+      if (seen === matcher.nth) return i;
     }
-    if (typeof target !== "object" || target === null) return false;
   }
-  const leaf = segments[segments.length - 1] as string;
-  if (Array.isArray(target)) {
-    // An out-of-bounds index would punch a hole into the array — refuse it.
-    if (!isArrayIndex(leaf) || Number(leaf) >= target.length) return false;
-    target[Number(leaf)] = value;
-    return true;
+  return -1;
+}
+
+// Resolve `entry.path` inside `props` to the leaf location (holder + key to set).
+// Every segment must resolve — no implicit structure creation — so a path that no
+// longer matches anything in the latest tree is a miss (the identification
+// condition failed: the view's writeback is refused, never redirected). A path
+// that is malformed on its own — a forbidden key — is invalid regardless of state.
+function resolvePatchTarget(
+  props: Record<string, unknown>,
+  path: PatchPathSegment[],
+): { holder: unknown[] | Record<string, unknown>; key: number | string } | "miss" | "invalid" {
+  let target: unknown = props;
+  for (const segment of path.slice(0, -1)) {
+    const next = stepInto(target, segment);
+    if (next === PATCH_MISS) return "miss";
+    if (next === PATCH_INVALID) return "invalid";
+    target = next;
+    if (typeof target !== "object" || target === null) return "miss";
   }
-  if (typeof target === "object" && target !== null) {
-    (target as Record<string, unknown>)[leaf] = value;
-    return true;
+  const leaf = path[path.length - 1] as PatchPathSegment;
+  if (typeof leaf === "string") {
+    if (FORBIDDEN_PATH_SEGMENTS.has(leaf)) return "invalid";
+    if (!isPlainRecord(target)) return "miss";
+    return { holder: target, key: leaf };
   }
-  return false;
+  if (!Array.isArray(target)) return "miss";
+  const index = labelIndex(target, leaf);
+  if (index === -1) return "miss";
+  return { holder: target, key: index };
+}
+
+const PATCH_MISS: unique symbol = Symbol("patch-miss");
+const PATCH_INVALID: unique symbol = Symbol("patch-invalid");
+
+function stepInto(target: unknown, segment: PatchPathSegment): unknown {
+  if (typeof segment === "string") {
+    if (FORBIDDEN_PATH_SEGMENTS.has(segment)) return PATCH_INVALID;
+    if (!isPlainRecord(target)) return PATCH_MISS;
+    return target[segment];
+  }
+  if (!Array.isArray(target)) return PATCH_MISS;
+  const index = labelIndex(target, segment);
+  return index === -1 ? PATCH_MISS : target[index];
+}
+
+// One conditional set: `expect` must deep-equal the current value (the tree may
+// have moved under the view — an external PUT — in which case the writeback no
+// longer applies and must not silently land on changed data).
+function applyPatchEntry(
+  props: Record<string, unknown>,
+  entry: PatchSetEntry,
+): "ok" | "target_not_found" | "value_conflict" | "invalid_set" {
+  if (entry.path.length === 0) return "invalid_set";
+  const location = resolvePatchTarget(props, entry.path);
+  if (location === "invalid") return "invalid_set";
+  if (location === "miss") return "target_not_found";
+  const { holder, key } = location;
+  const current = Array.isArray(holder)
+    ? holder[key as number]
+    : holder[key as string];
+  if (!jsonEqual(current, entry.expect)) return "value_conflict";
+  if (Array.isArray(holder)) holder[key as number] = entry.value;
+  else holder[key as string] = entry.value;
+  return "ok";
 }
 
 function findNodeById(root: Item, id: string): Item | undefined {
@@ -395,26 +459,31 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
   function patch(
     id: string,
     input: PatchInput,
-    validate: (node: Item) => boolean,
+    validate: (root: Item) => boolean,
   ): Promise<PatchResult> {
     return enqueue(() =>
       withLock(async () => {
         const data = await read();
         const existing = data.snapshots[id];
         if (!existing) return { ok: false, error: "not_found" };
-        const node = findNodeById(existing.root, input.nodeId);
+        // Apply onto a clone: a refused set or a failed schema check leaves the
+        // stored tree untouched.
+        const root = structuredClone(existing.root);
+        const node = findNodeById(root, input.nodeId);
         if (!node) return { ok: false, error: "node_not_found", nodeId: input.nodeId };
-        // Apply onto a props copy so a failed set leaves nothing half-written.
-        const props = structuredClone(node.props);
-        for (const [path, value] of Object.entries(input.set)) {
-          if (!setPropPath(props, path, value)) {
-            return { ok: false, error: "invalid_set", path };
-          }
+        // A stored tree isn't revalidated, so a node may carry a malformed props.
+        if (!isPlainRecord(node.props)) node.props = {};
+        for (const entry of input.set) {
+          const outcome = applyPatchEntry(node.props, entry);
+          if (outcome !== "ok") return { ok: false, error: outcome };
         }
-        if (!validate({ ...node, props })) {
+        // Reproject before validating: fields removed from the schema (e.g. `tags`)
+        // ride along in stored trees but must not count as schema violations here.
+        const cleanRoot = stripLegacyNodeFields(root);
+        if (!validate(cleanRoot)) {
           return { ok: false, error: "invalid_set" };
         }
-        node.props = props;
+        existing.root = cleanRoot;
         await write(data);
         notify({ id: existing.id, kind: "patch" });
         return {

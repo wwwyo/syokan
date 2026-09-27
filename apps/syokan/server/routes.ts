@@ -1,7 +1,7 @@
 import type { BunRequest } from "bun";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
-import { itemSchema, specs } from "../src/catalogs";
+import { itemSchema } from "../src/catalogs";
 import { catalogManifest, catalogEnvelopeSchema } from "../src/catalogs/manifest";
 import { probeCheckSchema } from "../src/catalogs/Probe/check";
 import { resolveRepoHead, runProbe } from "./probe";
@@ -43,12 +43,26 @@ const putInputSchema = inputBaseSchema
   .extend({ idempotencyKey: z.string().min(1) })
   .superRefine(uniqueRootIds);
 
-// The writeback body: set prop paths on the node carrying `nodeId`
-// (e.g. { nodeId: "todo", set: { "items.2.checked": true } }).
+// The writeback body: conditional sets on the node carrying `nodeId`. A path walks
+// object keys and { label, nth } array correspondences — never indexes — and each
+// entry lands only if the value at `path` currently equals `expect`
+// (e.g. { nodeId: "todo", set: [{ path: ["items", { label: "x", nth: 1 }, "checked"], expect: false, value: true }] }).
+const labelMatchSchema = z
+  .object({ label: z.unknown(), nth: z.number().int().min(1) })
+  .strict();
+const patchSetEntrySchema = z
+  .object({
+    path: z.array(z.union([z.string().min(1), labelMatchSchema])).min(1),
+    // optional on the wire: an absent `expect` is the condition "the location must
+    // not exist" (JSON has no way to carry undefined as a value).
+    expect: z.unknown().optional(),
+    value: z.unknown(),
+  })
+  .strict();
 const patchInputSchema = z
   .object({
     nodeId: z.string().min(1),
-    set: z.record(z.string(), z.unknown()),
+    set: z.array(patchSetEntrySchema).min(1),
   })
   .strict();
 
@@ -173,9 +187,10 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       return Response.json(env);
     },
 
-    // Node-scoped writeback from a view (a Checklist check etc.). The set paths apply
-    // inside the node's props only, and the write goes through only if the result still
-    // satisfies the node's props schema — a view can't corrupt the stored tree.
+    // Node-scoped writeback from a view (a Checklist check etc.). The set is
+    // conditional: it lands only when the target resolves by the label
+    // correspondence and its current value equals `expect`, and the resulting
+    // tree must still satisfy the catalog schema — a view can't corrupt the store.
     async patchSnapshot(req) {
       const deny = forbidden(req);
       if (deny) return deny;
@@ -190,12 +205,11 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
           issues: formatValidationError(parsed.error),
         });
       }
-      const result = await store.patch(id, parsed.data, (node) => {
-        const spec = specs.get(node.type);
-        return (
-          spec !== undefined && spec.propsSchema.safeParse(node.props).success
-        );
-      });
+      const result = await store.patch(
+        id,
+        parsed.data,
+        (root) => itemSchema.safeParse(root).success,
+      );
       if (!result.ok) {
         switch (result.error) {
           case "not_found":
@@ -210,11 +224,25 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
               error: "node_not_found",
               message: `Node ${result.nodeId} is not in the latest tree`,
             });
+          // The path no longer resolves in the latest tree — the label
+          // correspondence broke (insert/delete/reorder), so the target can't be
+          // identified. Never redirect the write to a different target.
+          case "target_not_found":
+            return jsonError(409, {
+              error: "target_not_found",
+              message: "The set path does not resolve in the latest tree",
+            });
+          // The target's value moved since the view rendered it (an external
+          // update): applying would silently overwrite that change.
+          case "value_conflict":
+            return jsonError(409, {
+              error: "value_conflict",
+              message: "The target's current value does not match `expect`",
+            });
           case "invalid_set":
             return jsonError(422, {
               error: "invalid_set",
-              message: "The set does not apply to the node's props",
-              ...(result.path !== undefined ? { path: result.path } : {}),
+              message: "The set does not satisfy the catalog schema",
             });
         }
       }

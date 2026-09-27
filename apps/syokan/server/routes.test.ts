@@ -660,6 +660,13 @@ describe("PATCH /api/snapshots/:id", () => {
     ],
   };
 
+  // A conditional set landing on item `label`'s nth occurrence.
+  const check = (label: string, nth = 1, expect?: unknown) => ({
+    path: ["items", { label, nth }, "checked"],
+    expect,
+    value: true,
+  });
+
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "syokan-patch-api-"));
     store = createSnapshotStore(dir);
@@ -690,11 +697,11 @@ describe("PATCH /api/snapshots/:id", () => {
     return api.patchSnapshot(req as never);
   }
 
-  test("a prop-path set applies to the node carrying nodeId and is visible via GET", async () => {
+  test("a conditional set lands on the item the label correspondence identifies and is visible via GET", async () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "todo",
-      set: { "items.1.checked": true },
+      set: [check("b")],
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -719,7 +726,7 @@ describe("PATCH /api/snapshots/:id", () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "gone",
-      set: { "items.0.checked": true },
+      set: [check("a")],
     });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string };
@@ -734,38 +741,78 @@ describe("PATCH /api/snapshots/:id", () => {
     expect(stored.root.children[0].props.items[0]?.checked).toBeUndefined();
   });
 
+  test("a set the label correspondence can't resolve is 409 target_not_found — it never lands on a different item", async () => {
+    const id = await postTree(checklistTree);
+    const res = await patch(id, {
+      nodeId: "todo",
+      set: [check("absent")],
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      "target_not_found",
+    );
+    const get = await api.getSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
+    );
+    const stored = (await get.json()) as {
+      root: { children: [{ props: { items: { checked?: boolean }[] } }] };
+    };
+    expect(
+      stored.root.children[0].props.items.every((i) => i.checked === undefined),
+    ).toBe(true);
+  });
+
+  test("a set whose expect no longer matches the stored value is 409 value_conflict", async () => {
+    const id = await postTree(checklistTree);
+    // Land checked:true first, then a stale write that still expects it absent.
+    const first = await patch(id, { nodeId: "todo", set: [check("a")] });
+    expect(first.status).toBe(200);
+    const stale = await patch(id, {
+      nodeId: "todo",
+      set: [check("a")], // expect: undefined — but the store now holds true
+    });
+    expect(stale.status).toBe(409);
+    expect(((await stale.json()) as { error: string }).error).toBe(
+      "value_conflict",
+    );
+  });
+
   test("an unknown snapshot id is 404 not_found", async () => {
     const res = await patch("missing", {
       nodeId: "todo",
-      set: { "items.0.checked": true },
+      set: [check("a")],
     });
     expect(res.status).toBe(404);
   });
 
-  test("a set that breaks the node's props schema is 422 invalid_set", async () => {
+  test("a set producing a schema-violating tree is 422 invalid_set and leaves the store unchanged", async () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "todo",
-      set: { "items.0.checked": "yes" },
+      set: [
+        {
+          path: ["items", { label: "a", nth: 1 }, "checked"],
+          expect: undefined,
+          value: "yes", // a string can never satisfy the boolean schema
+        },
+      ],
     });
     expect(res.status).toBe(422);
     expect(((await res.json()) as { error: string }).error).toBe("invalid_set");
-  });
-
-  test("an out-of-bounds array index is 422 invalid_set", async () => {
-    const id = await postTree(checklistTree);
-    const res = await patch(id, {
-      nodeId: "todo",
-      set: { "items.9.checked": true },
-    });
-    expect(res.status).toBe(422);
+    const get = await api.getSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
+    );
+    const stored = (await get.json()) as {
+      root: { children: [{ props: { items: { checked?: boolean }[] } }] };
+    };
+    expect(stored.root.children[0].props.items[0]?.checked).toBeUndefined();
   });
 
   test("a prototype-chain path is 422 invalid_set", async () => {
     const id = await postTree(checklistTree);
     const res = await patch(id, {
       nodeId: "todo",
-      set: { "__proto__.polluted": true, "items.0.checked": true },
+      set: [{ path: ["__proto__", "polluted"], expect: undefined, value: true }],
     });
     expect(res.status).toBe(422);
     expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
@@ -773,7 +820,7 @@ describe("PATCH /api/snapshots/:id", () => {
 
   test("a malformed body is 400", async () => {
     const id = await postTree(checklistTree);
-    const res = await patch(id, { set: { "items.0.checked": true } });
+    const res = await patch(id, { set: [check("a")] });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toBe(
       "validation_failed",
@@ -806,12 +853,12 @@ describe("PATCH /api/snapshots/:id", () => {
           body: JSON.stringify({ root: putRoot, idempotencyKey: "raced" }),
         }),
       ),
-      patch(id, { nodeId: "todo", set: { "items.0.checked": true } }),
+      patch(id, { nodeId: "todo", set: [check("a")] }),
     ]);
     expect(putRes.status).toBe(200);
-    expect(patchRes.status).toBe(200);
-    // Serialized inside the write lock: the final tree is the PUT's tree, with the
-    // check present iff the patch landed last — never a half-merged blob.
+    // Serialized inside the write lock. If the patch ran last, the check landed;
+    // if the PUT ran last, "a" still resolves and the check lands on the new tree
+    // — either way the final tree is one coherent ordering, never a merged blob.
     const get = await api.getSnapshot(
       makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
     );
@@ -827,6 +874,7 @@ describe("PATCH /api/snapshots/:id", () => {
         },
       ],
     };
+    expect(patchRes.status).toBe(200);
     expect([putRoot, patchedLast] as unknown[]).toContainEqual(stored.root);
   });
 });
@@ -883,7 +931,16 @@ describe("GET /api/snapshots/changes", () => {
 
     const patchReq = new Request(`http://test/api/snapshots/${id}`, {
       method: "PATCH",
-      body: JSON.stringify({ nodeId: "todo", set: { "items.0.checked": true } }),
+      body: JSON.stringify({
+        nodeId: "todo",
+        set: [
+          {
+            path: ["items", { label: "a", nth: 1 }, "checked"],
+            expect: undefined,
+            value: true,
+          },
+        ],
+      }),
     }) as Request & { params: Record<string, string> };
     Object.defineProperty(patchReq, "params", { value: { id } });
     await api.patchSnapshot(patchReq as never);
@@ -941,7 +998,7 @@ describe("cross-origin guard on mutations", () => {
     const patchReq = new Request(`http://localhost:5773/api/snapshots/${env.id}`, {
       method: "PATCH",
       headers: { ...foreign, "content-type": "application/json" },
-      body: JSON.stringify({ nodeId: "x", set: {} }),
+      body: JSON.stringify({ nodeId: "x", set: [] }),
     }) as Request & { params: Record<string, string> };
     Object.defineProperty(patchReq, "params", { value: { id: env.id } });
     expect((await api.patchSnapshot(patchReq as never)).status).toBe(403);
@@ -980,5 +1037,31 @@ describe("cross-origin guard on mutations", () => {
       }),
     );
     expect(noOrigin.status).toBe(201);
+  });
+
+  test("a foreign Referer is rejected the same way even when Origin is absent", async () => {
+    const res = await api.createSnapshot(
+      new Request("http://localhost:5773/api/snapshots", {
+        method: "POST",
+        headers: {
+          referer: "http://localhost:9999/evil",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ root: baseInput.root }),
+      }),
+    );
+    expect(res.status).toBe(403);
+
+    const sameReferer = await api.createSnapshot(
+      new Request("http://localhost:5773/api/snapshots", {
+        method: "POST",
+        headers: {
+          referer: "http://localhost:5773/snapshots/abc",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ root: baseInput.root }),
+      }),
+    );
+    expect(sameReferer.status).toBe(201);
   });
 });
