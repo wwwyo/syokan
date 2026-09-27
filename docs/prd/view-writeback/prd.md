@@ -130,6 +130,7 @@ Collapsible の開閉や probe の実行結果など「表示上の状態」は�
 - CLI 側でのファイル watch (`syokan watch` 等の常駐)
 - 既に store に残っている TreeDoc 入り snapshot の移行 (ephemeral のため unknown type 表示を許容)
 - Collapsible 開閉・probe 結果など表示状態の永続化
+- Checklist 項目への stable id 付与による同定 (items が変化しても同一項目に書き戻せる方式)。v1 は items 配列の CAS で誤適用を防ぎ、外部変更中の書き戻しは拒否する側に倒す
 
 ## Glossary
 
@@ -146,7 +147,7 @@ Collapsible の開閉や probe の実行結果など「表示上の状態」は�
 - [ ] check を入れた snapshot を publish すると、share された view にも check 状態が現れる
 - [ ] check 済みの状態は `GET /api/snapshots/:id` の内容に含まれ、LLM が次の tree を組み立てる際に読める
 - [ ] 書き戻し対象の node id が最新の snapshot に存在しない場合、view の表示は操作前に戻り、書き戻せなかった旨が表示される
-- [ ] LLM が Checklist の項目を挿入・削除・並べ替えたあとでも、書き戻しはユーザーが操作した項目 (ラベル対応) にだけ適用される。対応が取れなくなった項目への書き戻しは拒否され、別の項目へ誤適用されない
+- [ ] 描画時点の `items` 配列と一致する場合に限り、書き戻しはユーザーが操作した項目 (ラベル対応) にだけ適用される。`items` がずれた項目への書き戻しは拒否され、別の項目へ誤適用されない
 - [ ] 同じラベルの項目が複数ある Checklist では、ユーザーが操作した出現順の項目にだけ書き戻される
 - [ ] 描画時点から `items` 配列が変わっている場合 (同じラベルの項目の挿入・削除・並べ替えを含む外部からの更新) は拒否され、別の項目を誤って書き換えず、view は操作前に戻る
 - [ ] schema に違反する値への set は拒否され、store の tree は変更されない
