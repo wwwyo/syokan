@@ -27,6 +27,7 @@ flowchart LR
 
 - `DELETE /api/snapshots/:id` は envelope の写しを archive に記録として残し、active store から除く。`GET /api/snapshots` の一覧と view route からは消える (view から見れば delete と同じく not-found に落ち、SSE の delete 通知も同じく流れる)。`GET /api/snapshots/:id` 自体は引き続き envelope を返す (後述)
 - archive は per-id の JSON file (`state/archive/<id>.json`) とし、再 archive 時は**最新の envelope で常に上書き**する。`archivedAt` は「最後に archive された時刻」を示す envelope の field であり、世代識別子ではない。過去状態の履歴は downstream git sync が担うため (後述)、product 内に世代管理は持たない — file 世代と git history の二重管理を避ける
+- archive 経路で file path を組むとき、route param の `:id` は **安全な単一 path component に限定**する — 生成時は `crypto.randomUUID()` でも lookup は外部入力なので、`../` 等を含む値を reject するか解決後 path が `state/archive/` 配下に収まることを強制する (path traversal 防止。generator の安全性だけに頼らない)
 - `GET /api/snapshots/:id` は **active / archived を問わず** envelope を返す — archived は「resource が消えた」のではなく「archive 状態にある」ので、plain GET の意味論に合わせて返し、response の `archivedAt` field (active では null) で状態を示す。**同一 id が active と archive に同居する場合 (revive 後) は常に active が勝ち、archive は active が無いときの fallback** — 同一 id に対して resource の現在形を返す、という plain GET の契約を維持する。archived を既定経路から外す必要があるのは list だけなので、query parameter での分離は `GET /api/snapshots?archived=1` のみとする (既定は active のみ)。`/api/snapshots/archived` のような literal segment は `:id` param と衝突するため置かない (Bun.serve の static-vs-param 解決順に依存させない)
 - view route は `archivedAt` が立つ envelope を not-found として扱う (sidebar の整理操作が live view に影響しない = 従来の delete と同じ結末)
 
