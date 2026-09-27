@@ -26,7 +26,7 @@ flowchart LR
 ### archive の意味論
 
 - `DELETE /api/snapshots/:id` は envelope の写しを archive に記録として残し、active store から除く。`GET /api/snapshots` の一覧・`GET /api/snapshots/:id`・view route からは消える (view から見れば delete と同じく not-found に落ち、SSE の delete 通知も同じく流れる)
-- archive は per-event の JSON file (`state/archive/<id>.<archivedAt>.json`、`archivedAt` は unixtime) とする。1回の archive = 1つの file で、衝突時は上書きせず接尾辞を繰り上げる (append-only を保証するため)。active store の単一 JSON を常に小さく保てる利点がある — 「記録は残すが live store は肥やさない」がこの設計の肝で、肥大化した場合の read/write コストを archive 側に逃がす
+- archive は per-event の JSON file (`state/archive/<id>.<archivedAt>.json`) とする。`archivedAt` は同一 id 内で一意に採番される unixtime (ms 精度、同一値との衝突時は繰り上げ) で、filename 上の識別子と generation selector (`?archived=<archivedAt>`) を兼ねる — 分離した suffix を持たせると「file は2つ・selector は1つ」の不整合が起きるため。append-only はこの一意採番で保証する (上書き禁止)
 - 同じ id は複数の archive **generation** を持ちうる (archive → revive → 再 archive)。一覧は generation 単位の行を返し、個別取得は既定で最新 generation、generation 指定で任意の記録を引く
 - archived snapshot の read は query parameter で名前空間を分ける: `GET /api/snapshots?archived=1` (一覧) / `GET /api/snapshots/:id?archived=1` (最新 generation) / `GET /api/snapshots/:id?archived=<archivedAt>` (generation 指定)。`/api/snapshots/archived` のような literal segment は `:id` param と衝突するため置かない (Bun.serve の static-vs-param 解決順に依存させない)
 
@@ -69,13 +69,13 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 ## Glossary
 
 - **archive**: delete された snapshot の envelope が記録として残る保存領域。queryable だが active な参照経路には出ない
-- **generation**: 同じ id が archive → revive → 再 archive を経るたびに積まれる記録の世代。archive file 名の suffix で識別する
+- **generation**: 同じ id が archive → revive → 再 archive を経るたびに積まれる記録の世代。一意採番された `archivedAt` がその識別子を兼ねる
 - **revive**: archive 済み snapshot が同じ idempotencyKey の post により同じ id で active に戻ること。restore 専用の操作は持たない
 
 ## Acceptance Criteria
 
 - [ ] `DELETE /api/snapshots/:id` した snapshot が一覧と `GET /:id` から消え、archive に envelope が残る
-- [ ] archived snapshot は `GET /api/snapshots?archived=1` で generation 単位の一覧が取れ、`GET /api/snapshots/:id?archived=1` (最新) / `?archived=<archivedAt>` (generation 指定) で個別に envelope を取得できる。同じ id の再 archive が別 file に記録され、過去の記録を上書きしない
+- [ ] archived snapshot は `GET /api/snapshots?archived=1` で generation 単位の一覧が取れ、`GET /api/snapshots/:id?archived=1` (最新) / `?archived=<archivedAt>` (generation 指定) で個別に envelope を取得できる。同じ id の再 archive は一意な `archivedAt` を持つ別 file に記録され、過去の記録を上書きしない
 - [ ] archive 時に開いている view は従来の delete と同じく not-found に落ちる (SSE で通知される)
 - [ ] archive 済み snapshot と同じ idempotencyKey で再 post すると同じ id / URL が active に戻り、新しい envelope の内容が採用される。archive 側の記録 (旧 check 状態を含む) は残る
 - [ ] `syokan snapshots list --archived` で archive 済みを含む一覧が引け、createdAt で日付を絞れる
