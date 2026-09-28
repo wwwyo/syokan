@@ -4,11 +4,11 @@ import { renderToString } from "react-dom/server";
 import { ViewList } from "./ViewList";
 
 const sample = [
-  { id: "abc", title: "Daily RSS", createdAt: "2026-05-21T03:04:00Z" },
+  { id: "abc", title: "Daily RSS", createdAt: "2026-05-21T03:04:00Z", archivedAt: null },
   {
     id: "def",
     title: "PR review",
-    createdAt: "2026-05-20T10:00:00Z",
+    createdAt: "2026-05-20T10:00:00Z", archivedAt: null,
   },
 ];
 
@@ -50,7 +50,7 @@ describe("ViewList", () => {
   test("falls back to (untitled) when title is absent", () => {
     const html = renderToString(
       createElement(ViewList, {
-        items: [{ id: "x", createdAt: "2026-05-21T03:04:00Z" }],
+        items: [{ id: "x", createdAt: "2026-05-21T03:04:00Z", archivedAt: null }],
         currentId: null,
       }),
     );

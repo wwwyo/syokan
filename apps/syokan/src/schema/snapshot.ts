@@ -9,6 +9,8 @@ export type SnapshotEnvelope = {
   title?: string;
   root: Item;
   createdAt: string;
+  // When the snapshot was last archived (DELETE); null while it is active.
+  archivedAt: string | null;
 };
 
 // A single row of the list (GET /api/snapshots): a lightweight summary with root dropped from the envelope.
@@ -17,6 +19,7 @@ export type SnapshotSummary = {
   id: string;
   title?: string;
   createdAt: string;
+  archivedAt: string | null;
 };
 
 export function createSnapshotEnvelopeSchema(itemSchema: z.ZodType<Item>) {
@@ -27,6 +30,7 @@ export function createSnapshotEnvelopeSchema(itemSchema: z.ZodType<Item>) {
       title: z.string().min(1).optional(),
       root: itemSchema,
       createdAt: z.iso.datetime(),
+      archivedAt: z.iso.datetime().nullable(),
     })
     .strict();
 }

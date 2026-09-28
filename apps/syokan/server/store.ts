@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rm } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { writeJsonAtomic } from "../src/lib/fsAtomic";
 import { isRecord, jsonEqual } from "../src/lib/json";
@@ -12,8 +12,16 @@ import {
   type SnapshotSummary,
 } from "../src/schema";
 
+// Envelopes persisted before archiving existed carry no archivedAt; active entries are
+// null either way, and buildEnvelope projects the field onto every response.
+type StoredEnvelope = Omit<SnapshotEnvelope, "archivedAt"> & {
+  archivedAt?: string | null;
+};
+
 type StoreFile = {
-  snapshots: Record<string, SnapshotEnvelope>;
+  snapshots: Record<string, StoredEnvelope>;
+  // key→id outlives the active snapshot: an archived id stays registered so a later post
+  // with the same key revives it under the same id/URL.
   idempotency: Record<string, string>;
 };
 
@@ -24,6 +32,7 @@ export type CreateInput = {
   // Passing an already-registered key returns the existing one as-is instead of creating (dedup) —
   // even if the CLI's PUT→404→POST fallback runs concurrently, this dedup takes effect inside the
   // enqueue+withLock that serializes read-modify-write, so no orphan snapshots accumulate.
+  // A key whose id is no longer active (archived) revives that id with the posted content.
   idempotencyKey?: string;
 };
 
@@ -70,9 +79,15 @@ export type SnapshotStore = {
     input: SnapshotPatchInput,
     validate: (node: Item) => boolean,
   ) => Promise<PatchResult>;
+  // Resolves the active snapshot first, then the archive record (archivedAt set).
   get: (id: string) => Promise<SnapshotEnvelope | undefined>;
-  list: () => Promise<SnapshotSummary[]>;
+  // Active snapshots by default; `archived` lists the archive records instead.
+  list: (options?: { archived?: boolean }) => Promise<SnapshotSummary[]>;
+  // Archive: copy the envelope to the archive (overwriting an older record) and drop it
+  // from the active store. false when there is no active snapshot.
   delete: (id: string) => Promise<boolean>;
+  // Physically remove the archive record. false when there is none; the active store is untouched.
+  purge: (id: string) => Promise<boolean>;
   // Subscribe to mutations issued through this store instance. Returns the unsubscribe.
   subscribe: (listener: (change: SnapshotChange) => void) => () => void;
 };
@@ -111,9 +126,60 @@ export const FORBIDDEN_PROP_KEYS = new Set([
   "prototype",
 ]);
 
-export function createSnapshotStore(dataDir: string): SnapshotStore {
+// Archive paths are built from the route's :id (external input), so an id must be one plain
+// path component — no separators, no dot-segments — before it reaches join(). Ids are minted by
+// crypto.randomUUID(), but the lookup side must not lean on the generator's shape.
+const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+const ARCHIVE_EXT = ".json";
+
+export function createSnapshotStore(
+  dataDir: string,
+  archiveDir: string = join(dataDir, "archive"),
+): SnapshotStore {
   const file = join(dataDir, "snapshots.json");
   const lockFile = `${file}.lock`;
+
+  // undefined = the id can't name an archive record (treated as "not archived").
+  function archiveFile(id: string): string | undefined {
+    return SAFE_ID.test(id) ? join(archiveDir, `${id}${ARCHIVE_EXT}`) : undefined;
+  }
+
+  // Archive records are read without schema revalidation, like the active store; a record
+  // that isn't envelope-shaped (hand-edited, truncated) counts as absent instead of a 500.
+  async function readArchive(id: string): Promise<SnapshotEnvelope | undefined> {
+    const path = archiveFile(id);
+    if (!path) return undefined;
+    let text: string;
+    try {
+      text = await readFile(path, "utf8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw err;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return undefined;
+    }
+    if (
+      !isRecord(parsed) ||
+      typeof parsed.createdAt !== "string" ||
+      typeof parsed.archivedAt !== "string" ||
+      !isRecord(parsed.root)
+    ) {
+      return undefined;
+    }
+    const env = parsed as unknown as StoredEnvelope;
+    return buildEnvelope(
+      id,
+      env.createdAt,
+      env.root,
+      env.title,
+      parsed.archivedAt,
+    );
+  }
+
   // Serialize writes (create/delete) within one process (in-process mutex).
   // Prevents idempotency violations / lost updates from interleaved read-modify-write.
   let writeChain: Promise<unknown> = Promise.resolve();
@@ -274,6 +340,7 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     createdAt: string,
     root: Item,
     title: string | undefined,
+    archivedAt: string | null = null,
   ): SnapshotEnvelope {
     return {
       schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -281,6 +348,7 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
       root: stripLegacyNodeFields(root),
       createdAt,
       ...(title !== undefined ? { title } : {}),
+      archivedAt,
     };
   }
 
@@ -288,21 +356,23 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     return enqueue(() =>
       withLock(async () => {
         const data = await read();
-        if (input.idempotencyKey) {
-          const existingId = data.idempotency[input.idempotencyKey];
-          const existing = existingId ? data.snapshots[existingId] : undefined;
-          // Re-project through buildEnvelope: snapshots persisted by older versions may
-          // carry since-removed fields (e.g. metadata), which must not leak into responses.
-          if (existing) {
-            return buildEnvelope(
-              existing.id,
-              existing.createdAt,
-              existing.root,
-              existing.title,
-            );
-          }
+        const registeredId = input.idempotencyKey
+          ? data.idempotency[input.idempotencyKey]
+          : undefined;
+        const existing = registeredId ? data.snapshots[registeredId] : undefined;
+        // Re-project through buildEnvelope: snapshots persisted by older versions may
+        // carry since-removed fields (e.g. metadata), which must not leak into responses.
+        if (existing) {
+          return buildEnvelope(
+            existing.id,
+            existing.createdAt,
+            existing.root,
+            existing.title,
+          );
         }
-        const id = crypto.randomUUID();
+        // A registered key without an active snapshot = archived: revive under the same
+        // id/URL with the posted content. The archive record is left as it is.
+        const id = registeredId ?? crypto.randomUUID();
         const envelope = buildEnvelope(
           id,
           new Date().toISOString(),
@@ -415,20 +485,43 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     );
   }
 
+  // Active wins over an archive record of the same id (a revived snapshot): GET returns the
+  // resource's current form, and the archive is only the fallback.
   async function get(id: string): Promise<SnapshotEnvelope | undefined> {
     const data = await read();
     const env = data.snapshots[id];
-    if (!env) return undefined;
     // Same projection as the dedup path: strip fields removed from the envelope schema.
-    return buildEnvelope(env.id, env.createdAt, env.root, env.title);
+    if (env) return buildEnvelope(env.id, env.createdAt, env.root, env.title);
+    return readArchive(id);
   }
 
-  async function list(): Promise<SnapshotSummary[]> {
-    const data = await read();
-    const items = Object.values(data.snapshots).map((env) => {
+  async function listArchived(): Promise<SnapshotEnvelope[]> {
+    let names: string[];
+    try {
+      names = await readdir(archiveDir);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw err;
+    }
+    const envs = await Promise.all(
+      names
+        .filter((name) => name.endsWith(ARCHIVE_EXT))
+        .map((name) => readArchive(name.slice(0, -ARCHIVE_EXT.length))),
+    );
+    return envs.filter((env) => env !== undefined);
+  }
+
+  async function list(
+    options: { archived?: boolean } = {},
+  ): Promise<SnapshotSummary[]> {
+    const envs: StoredEnvelope[] = options.archived
+      ? await listArchived()
+      : Object.values((await read()).snapshots);
+    const items = envs.map((env) => {
       const summary: SnapshotSummary = {
         id: env.id,
         createdAt: env.createdAt,
+        archivedAt: env.archivedAt ?? null,
       };
       if (env.title !== undefined) summary.title = env.title;
       return summary;
@@ -438,15 +531,27 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     return items;
   }
 
+  // The archive record is written before the active entry is dropped, so a crash in between
+  // leaves both (active wins on read) rather than neither. The idempotency key stays
+  // registered so the same key revives this id.
   function remove(id: string): Promise<boolean> {
     return enqueue(() =>
       withLock(async () => {
         const data = await read();
-        if (!(id in data.snapshots)) return false;
+        const env = data.snapshots[id];
+        const path = archiveFile(id);
+        if (!env || !path) return false;
+        await writeJsonAtomic(
+          path,
+          buildEnvelope(
+            id,
+            env.createdAt,
+            env.root,
+            env.title,
+            new Date().toISOString(),
+          ),
+        );
         delete data.snapshots[id];
-        for (const key of Object.keys(data.idempotency)) {
-          if (data.idempotency[key] === id) delete data.idempotency[key];
-        }
         await write(data);
         notify({ id, kind: "delete" });
         return true;
@@ -454,5 +559,33 @@ export function createSnapshotStore(dataDir: string): SnapshotStore {
     );
   }
 
-  return { create, update, patch, get, list, delete: remove, subscribe };
+  // Under the write lock so it can't interleave with an archive overwriting the same record.
+  // A key left pointing at a purged, inactive id is dropped: nothing remains to revive.
+  function purge(id: string): Promise<boolean> {
+    return enqueue(() =>
+      withLock(async () => {
+        const path = archiveFile(id);
+        if (!path) return false;
+        try {
+          await rm(path);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+          throw err;
+        }
+        const data = await read();
+        if (!(id in data.snapshots)) {
+          const stale = Object.keys(data.idempotency).filter(
+            (key) => data.idempotency[key] === id,
+          );
+          if (stale.length > 0) {
+            for (const key of stale) delete data.idempotency[key];
+            await write(data);
+          }
+        }
+        return true;
+      }),
+    );
+  }
+
+  return { create, update, patch, get, list, delete: remove, purge, subscribe };
 }

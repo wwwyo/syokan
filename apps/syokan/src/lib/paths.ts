@@ -35,6 +35,13 @@ export function dataDir(): string {
   return join(stateHome(), "syokan");
 }
 
+// Archived snapshots (DELETE keeps the envelope as a record, one file per id). Still state,
+// but unlike the active store it is the only copy of what was seen and checked, so this is
+// the directory a downstream git sync backs up.
+export function archiveDir(): string {
+  return join(dataDir(), "archive");
+}
+
 // The server log is machine-local state, so it lives in the same state dir as snapshots. Nothing
 // about a running server is recorded here — liveness is a question for the port, not for disk.
 export function runtimeDir(): string {

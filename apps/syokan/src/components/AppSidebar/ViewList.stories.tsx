@@ -19,18 +19,18 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 const items = [
-  { id: "a", title: "Today's RSS", createdAt: "2026-06-16T00:22:00Z" },
+  { id: "a", title: "Today's RSS", createdAt: "2026-06-16T00:22:00Z", archivedAt: null },
   {
     id: "b",
     title: "PR review: view-layer",
-    createdAt: "2026-06-16T00:10:00Z",
+    createdAt: "2026-06-16T00:10:00Z", archivedAt: null,
   },
   {
     id: "c",
     title: "Daily Feed — an example of a long title truncated to a single line",
-    createdAt: "2026-06-14T23:49:00Z",
+    createdAt: "2026-06-14T23:49:00Z", archivedAt: null,
   },
-  { id: "d", createdAt: "2026-06-07T14:20:00Z" },
+  { id: "d", createdAt: "2026-06-07T14:20:00Z", archivedAt: null },
 ];
 
 export const Default: Story = {

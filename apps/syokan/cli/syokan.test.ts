@@ -777,6 +777,102 @@ describe("cli main: templates", () => {
   });
 });
 
+describe("cli main: snapshots", () => {
+  // Local-time ISO strings so the day filter is TZ-independent in the assertion.
+  const at = (y: number, m: number, d: number, h: number) =>
+    new Date(y, m - 1, d, h).toISOString();
+  const rows = [
+    { id: "late", createdAt: at(2026, 9, 29, 1), archivedAt: null },
+    { id: "mid", createdAt: at(2026, 9, 28, 23), archivedAt: null },
+    { id: "early", createdAt: at(2026, 9, 27, 0), archivedAt: null },
+  ];
+
+  test("bare 'snapshots' lists active snapshots via GET /api/snapshots", async () => {
+    const h = makeDeps({ respond: () => Response.json({ items: rows }) });
+    const result = await main(["snapshots"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/snapshots");
+    expect(h.calls[0]?.method).toBe("GET");
+    const out = JSON.parse(h.out[0] as string) as { items: { id: string }[] };
+    expect(out.items.map((i) => i.id)).toEqual(["late", "mid", "early"]);
+  });
+
+  test("list --archived asks for the archive records", async () => {
+    const h = makeDeps({ respond: () => Response.json({ items: [] }) });
+    const result = await main(["snapshots", "list", "--archived"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.calls[0]?.url).toBe(
+      "http://localhost:5773/api/snapshots?archived=1",
+    );
+  });
+
+  test("--since/--until filter createdAt by inclusive local calendar days", async () => {
+    const h = makeDeps({ respond: () => Response.json({ items: rows }) });
+    await main(
+      ["snapshots", "list", "--since", "2026-09-28", "--until", "2026-09-28"],
+      h.deps,
+    );
+    const out = JSON.parse(h.out[0] as string) as { items: { id: string }[] };
+    expect(out.items.map((i) => i.id)).toEqual(["mid"]);
+  });
+
+  test("an invalid day or unknown flag is an arg error before any request", async () => {
+    for (const args of [
+      ["snapshots", "list", "--since", "yesterday"],
+      ["snapshots", "list", "--since", "2026-02-30"],
+      ["snapshots", "list", "--until"],
+      ["snapshots", "list", "--bogus"],
+      ["snapshots", "list", "extra"],
+    ]) {
+      const h = makeDeps({ respond: () => Response.json({ items: [] }) });
+      const result = await main(args, h.deps);
+      expect(result.exitCode).toBe(1);
+      expect(h.calls.length).toBe(0);
+    }
+  });
+
+  test("get <id> prints the envelope from GET /api/snapshots/:id (no flag for archived)", async () => {
+    const envelope = { id: "x", archivedAt: "2026-09-28T00:00:00.000Z" };
+    const h = makeDeps({ respond: () => Response.json(envelope) });
+    const result = await main(["snapshots", "get", "x"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/snapshots/x");
+    expect(JSON.parse(h.out[0] as string)).toEqual(envelope);
+  });
+
+  test("purge <id> POSTs /api/snapshots/:id/purge", async () => {
+    const h = makeDeps({ respond: () => Response.json({ ok: true }) });
+    const result = await main(["snapshots", "purge", "x"], h.deps);
+    expect(result.exitCode).toBe(0);
+    expect(h.calls[0]?.url).toBe("http://localhost:5773/api/snapshots/x/purge");
+    expect(h.calls[0]?.method).toBe("POST");
+  });
+
+  test("purge of a missing archive record exits 1 with the server's error JSON", async () => {
+    const h = makeDeps({
+      respond: () =>
+        Response.json({ error: "not_found", message: "m" }, { status: 404 }),
+    });
+    const result = await main(["snapshots", "purge", "x"], h.deps);
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(h.err[0] as string).error).toBe("not_found");
+  });
+
+  test("get/purge without an id and unknown subcommands fail without a request", async () => {
+    for (const [args, error] of [
+      [["snapshots", "get"], "missing_id"],
+      [["snapshots", "purge"], "missing_id"],
+      [["snapshots", "bogus"], "unknown_subcommand"],
+    ] as const) {
+      const h = makeDeps({ respond: () => okResponse() });
+      const result = await main([...args], h.deps);
+      expect(result.exitCode).toBe(1);
+      expect(h.calls.length).toBe(0);
+      expect(JSON.parse(h.err[0] as string).error).toBe(error);
+    }
+  });
+});
+
 describe("cli main: stop", () => {
   test("stops a syokan-managed server", async () => {
     const h = makeDeps({ respond: () => okResponse(), stopped: true });
@@ -881,6 +977,7 @@ describe("cli main: help (generated from command declarations)", () => {
       "syokan stop",
       "syokan catalog",
       "syokan templates [list|add|get|rm]",
+      "syokan snapshots [list|get|purge]",
       "syokan --version",
     ]) {
       expect(text).toContain(usage);

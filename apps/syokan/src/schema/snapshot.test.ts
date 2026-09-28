@@ -25,9 +25,11 @@ describe("snapshot envelope", () => {
       title: "Sample",
       root: baseRoot,
       createdAt: "2026-05-10T12:00:00Z",
+      archivedAt: "2026-05-11T12:00:00Z",
     });
     expect(parsed.id).toBe("abc-123");
     expect(parsed.title).toBe("Sample");
+    expect(parsed.archivedAt).toBe("2026-05-11T12:00:00Z");
   });
 
   test("accepts envelope without optional fields", () => {
@@ -36,8 +38,20 @@ describe("snapshot envelope", () => {
       id: "abc",
       root: baseRoot,
       createdAt: "2026-05-10T12:00:00Z",
+      archivedAt: null,
     });
     expect(parsed.title).toBeUndefined();
+    expect(parsed.archivedAt).toBeNull();
+  });
+
+  test("requires archivedAt (null for an active snapshot, never omitted)", () => {
+    const result = envelopeSchema.safeParse({
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      id: "abc",
+      root: baseRoot,
+      createdAt: "2026-05-10T12:00:00Z",
+    });
+    expect(result.success).toBe(false);
   });
 
   test("rejects mismatched schemaVersion", () => {
@@ -46,6 +60,7 @@ describe("snapshot envelope", () => {
       id: "abc",
       root: baseRoot,
       createdAt: "2026-05-10T12:00:00Z",
+      archivedAt: null,
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -60,6 +75,7 @@ describe("snapshot envelope", () => {
       id: "",
       root: baseRoot,
       createdAt: "2026-05-10T12:00:00Z",
+      archivedAt: null,
     });
     expect(result.success).toBe(false);
   });
@@ -70,6 +86,7 @@ describe("snapshot envelope", () => {
       id: "abc",
       root: baseRoot,
       createdAt: "not-a-date",
+      archivedAt: null,
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -84,6 +101,7 @@ describe("snapshot envelope", () => {
       id: "abc",
       root: baseRoot,
       createdAt: "2026-05-10T12:00:00Z",
+      archivedAt: null,
       extraneous: "field",
     });
     expect(result.success).toBe(false);
@@ -95,6 +113,7 @@ describe("snapshot envelope", () => {
       id: "abc",
       root: { type: "UnknownComponent", props: {} },
       createdAt: "2026-05-10T12:00:00Z",
+      archivedAt: null,
     });
     expect(result.success).toBe(false);
     if (!result.success) {

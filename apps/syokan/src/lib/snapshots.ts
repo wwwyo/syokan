@@ -17,14 +17,19 @@ export function nextSnapshotId(
   return items[i + 1]?.id ?? items[i - 1]?.id ?? null;
 }
 
-/** Fetch a single snapshot. 404 → null, other failures → throw (the route loader routes to error display). */
+/**
+ * Fetch a single snapshot for the view route. 404 or an archived envelope → null (an
+ * archived snapshot is not viewable, same outcome as the old delete); other failures →
+ * throw (the route loader routes to error display).
+ */
 export async function fetchSnapshotEnvelope(
   id: string,
 ): Promise<SnapshotEnvelope | null> {
   const res = await fetch(`/api/snapshots/${encodeURIComponent(id)}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  return (await res.json()) as SnapshotEnvelope;
+  const envelope = (await res.json()) as SnapshotEnvelope;
+  return envelope.archivedAt ? null : envelope;
 }
 
 /** Fetch the snapshot list. Failures throw (the caller swallows it into an error state). */

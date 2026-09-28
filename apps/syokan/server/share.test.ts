@@ -247,6 +247,7 @@ describe("share routes", () => {
       expect(body.sourceSnapshotId).toBe(env.id);
       expect(body.expiresIn).toBe(3600);
       expect(body.envelope.id).toBe(env.id);
+      expect("archivedAt" in body.envelope).toBe(false);
       // stored content goes out as-is …
       expect(body.envelope.root.children[0]).toEqual({
         type: "Checklist",
@@ -288,6 +289,21 @@ describe("share routes", () => {
       );
       expect(res.status).toBe(404);
       expect(((await res.json()) as { error: string }).error).toBe("not_found");
+    });
+
+    test("an archived snapshot -> 404 not_found; worker is not called", async () => {
+      const env = await store.create({
+        root: { type: "Heading", props: { text: "S" } },
+      });
+      await store.delete(env.id);
+      await loginDirectly();
+      const { stub, calls } = makeWorkerFetch(() => Response.json({}));
+      const res = await app(stub).request(
+        `/api/snapshots/${env.id}/publish`,
+        { method: "POST" },
+      );
+      expect(res.status).toBe(404);
+      expect(calls).toEqual([]);
     });
 
     test("not logged in -> 401 not_logged_in; worker is not called", async () => {

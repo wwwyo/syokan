@@ -358,7 +358,7 @@ describe("api routes", () => {
         body: JSON.stringify({ root: baseInput.root, title: "B" }),
       }),
     );
-    const res = await api.listSnapshots();
+    const res = await api.listSnapshots(makeRequest("/api/snapshots"));
     expect(res.status).toBe(200);
     const data = (await res.json()) as {
       items: Array<{ id: string; title?: string; createdAt: string }>;
@@ -370,34 +370,181 @@ describe("api routes", () => {
   });
 
   test("GET /api/snapshots returns empty array when store is empty", async () => {
-    const res = await api.listSnapshots();
+    const res = await api.listSnapshots(makeRequest("/api/snapshots"));
     const data = (await res.json()) as { items: unknown[] };
     expect(data.items).toEqual([]);
   });
 
-  test("DELETE /api/snapshots/:id removes the snapshot; subsequent GET returns 404", async () => {
+  async function postSnapshot(body: object): Promise<string> {
     const post = await api.createSnapshot(
       makeRequest("/api/snapshots", {
         method: "POST",
-        body: JSON.stringify({ root: baseInput.root }),
+        body: JSON.stringify(body),
       }),
     );
-    const { id } = (await post.json()) as { id: string };
-    const del = await api.deleteSnapshot(
+    return ((await post.json()) as { id: string }).id;
+  }
+
+  function getById(id: string) {
+    return api.getSnapshot(
       makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
     );
+  }
+
+  function deleteById(id: string) {
+    return api.deleteSnapshot(
+      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
+    );
+  }
+
+  function purgeById(id: string) {
+    return api.purgeSnapshot(
+      makeParamRequest(`/api/snapshots/${id}/purge`, { id }, {
+        method: "POST",
+      }) as never,
+    );
+  }
+
+  async function listIds(url: string): Promise<string[]> {
+    const res = await api.listSnapshots(makeRequest(url));
+    const data = (await res.json()) as { items: { id: string }[] };
+    return data.items.map((i) => i.id);
+  }
+
+  test("GET /api/snapshots/:id of an active snapshot carries archivedAt: null", async () => {
+    const id = await postSnapshot({ root: baseInput.root });
+    const env = (await (await getById(id)).json()) as { archivedAt: unknown };
+    expect(env.archivedAt).toBeNull();
+  });
+
+  test("DELETE archives: gone from the default list, still readable via GET with archivedAt", async () => {
+    const id = await postSnapshot({ root: baseInput.root, title: "Daily" });
+    const del = await deleteById(id);
     expect(del.status).toBe(200);
-    const get = await api.getSnapshot(
-      makeParamRequest(`/api/snapshots/${id}`, { id }) as never,
+    expect(await listIds("/api/snapshots")).toEqual([]);
+    const get = await getById(id);
+    expect(get.status).toBe(200);
+    const env = (await get.json()) as {
+      id: string;
+      title?: string;
+      archivedAt: string | null;
+    };
+    expect(env.id).toBe(id);
+    expect(env.title).toBe("Daily");
+    expect(env.archivedAt).toEqual(expect.any(String));
+  });
+
+  test("GET /api/snapshots?archived=1 lists archive records only, with archivedAt", async () => {
+    const kept = await postSnapshot({ root: baseInput.root });
+    const gone = await postSnapshot({ root: baseInput.root });
+    await deleteById(gone);
+    expect(await listIds("/api/snapshots")).toEqual([kept]);
+    const res = await api.listSnapshots(
+      makeRequest("/api/snapshots?archived=1"),
     );
-    expect(get.status).toBe(404);
+    const data = (await res.json()) as {
+      items: { id: string; archivedAt: string | null }[];
+    };
+    expect(data.items.map((i) => i.id)).toEqual([gone]);
+    expect(data.items[0]?.archivedAt).toEqual(expect.any(String));
   });
 
   test("DELETE /api/snapshots/:id returns 404 for unknown id", async () => {
-    const del = await api.deleteSnapshot(
-      makeParamRequest("/api/snapshots/missing", { id: "missing" }) as never,
-    );
+    const del = await deleteById("missing");
     expect(del.status).toBe(404);
+  });
+
+  test("DELETE of an already-archived snapshot is a 404 (nothing active to archive)", async () => {
+    const id = await postSnapshot({ root: baseInput.root });
+    await deleteById(id);
+    expect((await deleteById(id)).status).toBe(404);
+  });
+
+  test("re-posting the same idempotencyKey revives the archived id with the new content; the archive record stays", async () => {
+    const id = await postSnapshot({
+      root: baseInput.root,
+      title: "v1",
+      idempotencyKey: "file:/tmp/daily.json",
+    });
+    await deleteById(id);
+    const revived = await api.createSnapshot(
+      makeRequest("/api/snapshots", {
+        method: "POST",
+        body: JSON.stringify({
+          root: { type: "Heading", props: { text: "v2" } },
+          title: "v2",
+          idempotencyKey: "file:/tmp/daily.json",
+        }),
+      }),
+    );
+    const body = (await revived.json()) as {
+      id: string;
+      url: string;
+      snapshot: { title?: string; archivedAt: string | null };
+    };
+    expect(body.id).toBe(id);
+    expect(body.url).toBe(`/snapshots/${id}`);
+    expect(body.snapshot.title).toBe("v2");
+    expect(body.snapshot.archivedAt).toBeNull();
+    // active wins over the archive record of the same id
+    const env = (await (await getById(id)).json()) as {
+      title?: string;
+      archivedAt: string | null;
+    };
+    expect(env.title).toBe("v2");
+    expect(env.archivedAt).toBeNull();
+    expect(await listIds("/api/snapshots")).toEqual([id]);
+    expect(await listIds("/api/snapshots?archived=1")).toEqual([id]);
+  });
+
+  test("POST /api/snapshots/:id/purge removes the archive record; GET then 404s", async () => {
+    const id = await postSnapshot({ root: baseInput.root });
+    await deleteById(id);
+    const purge = await purgeById(id);
+    expect(purge.status).toBe(200);
+    expect((await getById(id)).status).toBe(404);
+    expect(await listIds("/api/snapshots?archived=1")).toEqual([]);
+    expect((await purgeById(id)).status).toBe(404);
+  });
+
+  test("purge never touches an active snapshot: 404 without an archive, and a revived one survives", async () => {
+    const active = await postSnapshot({ root: baseInput.root });
+    expect((await purgeById(active)).status).toBe(404);
+    expect((await getById(active)).status).toBe(200);
+
+    const id = await postSnapshot({
+      root: baseInput.root,
+      idempotencyKey: "revive-then-purge",
+    });
+    await deleteById(id);
+    await postSnapshot({ root: baseInput.root, idempotencyKey: "revive-then-purge" });
+    expect((await purgeById(id)).status).toBe(200);
+    const env = (await (await getById(id)).json()) as {
+      id: string;
+      archivedAt: string | null;
+    };
+    expect(env.id).toBe(id);
+    expect(env.archivedAt).toBeNull();
+    expect(await listIds("/api/snapshots")).toContain(id);
+  });
+
+  test("archive lookups reject ids that are not a single safe path component", async () => {
+    // A record planted beside the archive dir must never be reachable through :id.
+    await Bun.write(
+      join(dir, "outside.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "outside",
+        root: baseInput.root,
+        createdAt: "2026-05-01T00:00:00.000Z",
+        archivedAt: "2026-05-02T00:00:00.000Z",
+      }),
+    );
+    for (const id of ["../outside", "..%2Foutside", "a/b", "..", "."]) {
+      expect((await getById(id)).status).toBe(404);
+      expect((await purgeById(id)).status).toBe(404);
+    }
+    expect(await Bun.file(join(dir, "outside.json")).exists()).toBe(true);
   });
 
   test("POST /api/snapshots: unknown component type response is JSON with content-type", async () => {
@@ -1039,9 +1186,22 @@ describe("cross-origin guard on mutations", () => {
     );
     expect((await api.deleteSnapshot(delReq as never)).status).toBe(403);
 
-    // nothing was written, nothing was deleted
+    const archived = await store.create({ root: { type: "Stack", props: {} } });
+    await store.delete(archived.id);
+    const purgeReq = makeParamRequest(
+      `/api/snapshots/${archived.id}/purge`,
+      { id: archived.id },
+      { method: "POST", headers: foreign },
+      "http://localhost:5773",
+    );
+    expect((await api.purgeSnapshot(purgeReq as never)).status).toBe(403);
+
+    // nothing was written, nothing was deleted or purged
     expect(await store.get(env.id)).toBeDefined();
     expect((await store.list()).length).toBe(1);
+    expect((await store.get(archived.id))?.archivedAt).toEqual(
+      expect.any(String),
+    );
   });
 
   test("a same-origin Origin and an absent Origin are both allowed", async () => {

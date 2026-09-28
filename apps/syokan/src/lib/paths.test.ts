@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
+  archiveDir,
   dataDir,
   legacyTemplatesDir,
   runtimeDir,
@@ -37,6 +38,7 @@ describe("paths", () => {
     expect(settingFile()).toBe("/x/config/syokan/settings.json");
     expect(templatesDir()).toBe("/x/data/syokan/templates");
     expect(dataDir()).toBe("/x/state/syokan");
+    expect(archiveDir()).toBe("/x/state/syokan/archive");
     expect(runtimeDir()).toBe("/x/state/syokan");
     expect(legacyTemplatesDir()).toBe("/x/config/syokan/templates");
   });

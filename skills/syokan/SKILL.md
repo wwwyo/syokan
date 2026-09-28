@@ -14,7 +14,7 @@ If syokan is not installed yet (`syokan --help` fails), or the user says "onboar
 
 ## Non-negotiables
 
-- **Snapshots are ephemeral**: a posted snapshot has no persistence guarantee. Only put reconstructible, transient data there (today's RSS, an in-progress review, etc.). For layouts you reuse, save a template to reproduce them (templates persist — see "Templates for reproducibility" below).
+- **Snapshots are ephemeral views**: only put reconstructible, transient data there (today's RSS, an in-progress review, etc.). Deleting a view archives it rather than destroying it (see "Looking back at past snapshots" below), but the archive is a record, not a place to keep things on purpose. For layouts you reuse, save a template to reproduce them (templates persist — see "Templates for reproducibility" below).
 - **JSON only — no free-form markdown ingest**: the server accepts nothing but a JSON envelope; you can't POST a raw `.md` file. `Markdown` is a catalog node like any other, and it is deliberately restricted to prose flow: paragraphs, plain bullet/numbered lists (nested ok), bold/italic/strikethrough, inline code, fenced code, blockquotes, links. Block structure and data still belong to their own node — the server 400s a `Markdown` body containing a heading (use `Heading`), a GFM table (`Table`), a task-list item (`Checklist`), raw HTML, an image, or a non-http(s) link, naming the replacement in the error. A ` ```mermaid ` fence inside `Markdown` renders as a plain code block, not a diagram — put diagrams in their own `Mermaid` node. For anything outside that prose subset, structure it into catalog nodes yourself: headings → `Heading`, code fences needing their own filename/copy affordance → `Code`, mermaid fences → `Mermaid`, preformatted or verbatim text outside prose (raw logs, ASCII tables) → `Code` with no `lang`.
 - **Strict schema**: props are validated strictly. Keys not in the schema are rejected — do not invent extra keys.
 - **Leaves cannot have children**: only containers (`Stack`, `Card`, `Checklist`, `Collapsible`) accept children; check `childrenTypes` in `syokan catalog`. Attaching children to a leaf node is rejected at ingest.
@@ -103,6 +103,20 @@ jq -n --rawfile body app.log \
   '{title:"app.log", root:{type:"Code",props:{code:$body}}}' \
   | syokan
 ```
+
+## Looking back at past snapshots
+
+Deleting a snapshot (the sidebar's delete, or `DELETE /api/snapshots/:id`) **archives** it: it leaves the list and its view shows not-found, but the envelope — including checks the reader wrote back — stays readable. Use this to answer "what did I look at / finish yesterday?" from the store instead of digging through files:
+
+```bash
+syokan snapshots list --since 2026-06-27 --until 2026-06-27            # active snapshots created that day
+syokan snapshots list --archived --since 2026-06-27 --until 2026-06-27 # archived ones (archivedAt set)
+syokan snapshots get <id>                                              # full envelope, active or archived — no flag needed
+```
+
+- `--since` / `--until` are inclusive local calendar days on `createdAt`. Query both the active list and `--archived` when you need the whole day.
+- An archived snapshot is read-only. Re-posting with the same `idempotencyKey` (e.g. re-running `syokan ./daily.json`) brings it back under the same id/URL with the **newly posted** content; the archive keeps the old copy, and old checks are not carried over.
+- `syokan snapshots purge <id>` **permanently deletes** an archive record — irreversible, and it only works on archived records (an active snapshot must be deleted first). Do not purge unless the user asks for it.
 
 ## Templates for reproducibility
 

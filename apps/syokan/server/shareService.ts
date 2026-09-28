@@ -210,8 +210,13 @@ export function createShareService(deps: ShareServiceDeps): ShareService {
         deps.store.get(id),
         readAuth(deps.authFilePath),
       ]);
-      if (!envelope) return { ok: false, kind: "not_found", id };
+      // An archived snapshot is a record, not a view — publishing stays active-only.
+      if (!envelope || envelope.archivedAt) {
+        return { ok: false, kind: "not_found", id };
+      }
       if (!auth) return { ok: false, kind: "not_logged_in" };
+      // archivedAt is local store state; the Worker's envelope contract doesn't carry it.
+      const { archivedAt: _archivedAt, ...shared } = envelope;
       let res: Awaited<ReturnType<typeof client.api.v1.shares.$post>>;
       try {
         res = await client.api.v1.shares.$post(
@@ -219,7 +224,7 @@ export function createShareService(deps: ShareServiceDeps): ShareService {
             json: {
               // Snapshots are already self-contained; publish only strips probe
               // args/results (which can carry local paths) unless shareVisible.
-              envelope: { ...envelope, root: redactTree(envelope.root) },
+              envelope: { ...shared, root: redactTree(envelope.root) },
               sourceSnapshotId: envelope.id,
               ...(expiresIn !== undefined ? { expiresIn } : {}),
             },
