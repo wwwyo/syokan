@@ -83,7 +83,7 @@ archive は `POST /api/snapshots/:id/purge` で明示的に消すまで残す。
 - [ ] archive 済み snapshot と同じ idempotencyKey で再 post すると同じ id / URL が active に戻り、新しい envelope の内容が採用される。archive 側の記録 (旧 check 状態を含む) は残る
 - [ ] `syokan snapshots list --archived` で archive 済みを含む一覧が引け、createdAt で日付を絞れる
 - [ ] `syokan snapshots get <id>` が flag なしで archive 済み snapshot の envelope (書き戻された check 状態を含む) を返す
-- [ ] `POST /api/snapshots/:id/purge` が archive record を物理削除する (archive が無ければ 404、active snapshot は不動)。purge 後の `GET /api/snapshots/:id` は 404 を返す。`syokan snapshots purge <id>` が同等操作を提供する
+- [ ] `POST /api/snapshots/:id/purge` が archive record を物理削除する (archive が無ければ 404、active snapshot は不動)。purge 後の `GET /api/snapshots/:id` は同じ id の active が無い場合に限り 404 を返し、active があればそれを返す。`syokan snapshots purge <id>` が同等操作を提供する
 
 ## Required Updates
 
@@ -92,8 +92,8 @@ archive は `POST /api/snapshots/:id/purge` で明示的に消すまで残す。
 - `src/schema/snapshot.ts` — response の `archivedAt` field (active では null) を envelope / summary の型と schema に載せる (envelope schema は `.strict()` のため要更新)
 - `apps/syokan/server/store.ts` — `get(id)` を active snapshot → archive file の順に解決し、`archivedAt` を response に載せる
 - `apps/syokan/server/routes.ts` — `GET /api/snapshots/:id` を上記の解決契約に合わせ、`GET /api/snapshots?archived=1` の一覧経路と `POST /api/snapshots/:id/purge` (物理削除・mutation なので Origin guard 対象) を足す
-- `skills/syokan/` — delete が archive になること、`syokan snapshots` で過去の snapshot を引けることを明記する
-- `apps/syokan/scripts/smoke.ts` — delete → archive → revive の leg を足す
+- `skills/syokan/` — delete が archive になること、`syokan snapshots` で過去の snapshot を引けること、`purge` が物理削除であることを明記する
+- `apps/syokan/scripts/smoke.ts` — delete → archive → revive の leg に加え、purge の leg を足す (archive record 削除 + active snapshot 不動の確認)
 
 ## Success Metrics
 
