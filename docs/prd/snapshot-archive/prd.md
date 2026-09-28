@@ -30,6 +30,7 @@ flowchart LR
 - archive 経路で file path を組むとき、route param の `:id` は **安全な単一 path component に限定**する — 生成時は `crypto.randomUUID()` でも lookup は外部入力なので、`../` 等を含む値を reject するか解決後 path が `state/archive/` 配下に収まることを強制する (path traversal 防止。generator の安全性だけに頼らない)
 - `GET /api/snapshots/:id` は **active / archived を問わず** envelope を返す — archived は「resource が消えた」のではなく「archive 状態にある」ので、plain GET の意味論に合わせて返し、response の `archivedAt` field (active では null) で状態を示す。**同一 id が active と archive に同居する場合 (revive 後) は常に active が勝ち、archive は active が無いときの fallback** — 同一 id に対して resource の現在形を返す、という plain GET の契約を維持する。archived を既定経路から外す必要があるのは list だけなので、query parameter での分離は `GET /api/snapshots?archived=1` のみとする (既定は active のみ)。`/api/snapshots/archived` のような literal segment は `:id` param と衝突するため置かない (Bun.serve の static-vs-param 解決順に依存させない)
 - view route は `archivedAt` が立つ envelope を not-found として扱う (sidebar の整理操作が live view に影響しない = 従来の delete と同じ結末)
+- **物理削除は `POST /api/snapshots/:id/purge`** — archive record を消す復元不能な操作。AIP-136 の custom method (`{resource}:{verb}` → `POST`) に倣い、Bun.serve が `:verb` suffix を route できない (segment 内の複数 param を解釈できず後者が全体を食う) ため nested segment で綴る。`?archived=1` 付きの DELETE にしないのは、同じ URL が param で別操作になると URL から操作を一意に読めないため。purge は archive にある record のみ対象とし (無ければ 404)、active な snapshot には触れない — active を完全に消すには `DELETE` (archive) → `POST :id/purge` の2段とし、破壊的操作を必ず明示的にする
 
 ### revive (再 post = restore)
 
@@ -43,12 +44,13 @@ idempotencyKey の対応は archive 後も生かす。archive 済み snapshot �
 
 - `syokan snapshots list [--archived]` — id / title / createdAt (+ archivedAt) の一覧。`--archived` 時は archived id ごと1行を返す。日付で絞れること
 - `syokan snapshots get <id>` — `GET /api/snapshots/:id` の envelope をそのまま出す。server 側で active → archive の順に解決されるため flag 類は一切不要 — LLM が「この id」で引くときに archive かどうかを事前に知る必要はない
+- `syokan snapshots purge <id>` — `POST /api/snapshots/:id/purge` で archive record を物理削除する。`list --archived` の整理と合わせた archive の手入れ経路
 
 これで「昨日の daily 何してた」は `list` で昨日付の snapshot を引き、`get` で中身を読む2手に落ちる。書き戻された check 状態も envelope に含まれるため「何を済ませたか」まで答えられる。
 
 ### retention と GitHub 管理の位置
 
-archive は明示的に消すまで残す。肥大化が実害になったときの TTL / purge は別 PRD とする (Non-Goal)。
+archive は `POST /api/snapshots/:id/purge` で明示的に消すまで残す。肥大化が実害になったときの TTL / 自動 purge は別 PRD とする (Non-Goal)。
 
 履歴・バックアップ・github.com 上の検索 UI は欲しいが、store / archive の backend を GitHub (git repo) にはしない。書き込み経路に外部 service を置くと、外部からの push / web 編集が store の write lock と CAS の合流点を迂回する — TreeDoc の file 参照と同型の split-brain になる上、localhost / offline / 秘密を持たない前提も崩れる。
 
@@ -62,7 +64,7 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 
 ### Non-Goals
 
-- archive の TTL / 自動 purge、pin、restore 専用 UI、archive の世代管理 (履歴は downstream git sync が担う。product 内で世代を持つと file 世代と git history の二重管理になる)
+- archive の TTL / **自動** purge、pin、restore 専用 UI、archive の世代管理 (履歴は downstream git sync が担う。product 内で世代を持つと file 世代と git history の二重管理になる)
 - store / archive の backend を GitHub (git repo) にすること (外部書き込みが合流点を迂回するため。履歴・backup は downstream sync で取る — 上記参照)
 - share / publish 済み snapshot の archive (Worker 側の話)
 - archived snapshot への書き戻し (archive は read-only の記録)
@@ -71,6 +73,7 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 
 - **archive**: delete された snapshot の envelope が記録として残る保存領域 (per-id file・常に最新)。既定の一覧と view には出ないが `GET /:id` では引ける (`archivedAt` 付き)
 - **revive**: archive 済み snapshot が同じ idempotencyKey の post により同じ id で active に戻ること。restore 専用の操作は持たない
+- **purge**: archive record の物理削除 (`POST /api/snapshots/:id/purge`)。復元不能。active な snapshot には効かない
 
 ## Acceptance Criteria
 
@@ -80,6 +83,7 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 - [ ] archive 済み snapshot と同じ idempotencyKey で再 post すると同じ id / URL が active に戻り、新しい envelope の内容が採用される。archive 側の記録 (旧 check 状態を含む) は残る
 - [ ] `syokan snapshots list --archived` で archive 済みを含む一覧が引け、createdAt で日付を絞れる
 - [ ] `syokan snapshots get <id>` が flag なしで archive 済み snapshot の envelope (書き戻された check 状態を含む) を返す
+- [ ] `POST /api/snapshots/:id/purge` が archive record を物理削除する (archive が無ければ 404、active snapshot は不動)。purge 後の `GET /api/snapshots/:id` は 404 を返す。`syokan snapshots purge <id>` が同等操作を提供する
 
 ## Required Updates
 
@@ -87,7 +91,7 @@ archive は明示的に消すまで残す。肥大化が実害になったとき
 - `src/lib/paths.ts` — `state/archive/` の path 解決を足す
 - `src/schema/snapshot.ts` — response の `archivedAt` field (active では null) を envelope / summary の型と schema に載せる (envelope schema は `.strict()` のため要更新)
 - `apps/syokan/server/store.ts` — `get(id)` を active snapshot → archive file の順に解決し、`archivedAt` を response に載せる
-- `apps/syokan/server/routes.ts` — `GET /api/snapshots/:id` を上記の解決契約に合わせ、`GET /api/snapshots?archived=1` の一覧経路を足す
+- `apps/syokan/server/routes.ts` — `GET /api/snapshots/:id` を上記の解決契約に合わせ、`GET /api/snapshots?archived=1` の一覧経路と `POST /api/snapshots/:id/purge` (物理削除・mutation なので Origin guard 対象) を足す
 - `skills/syokan/` — delete が archive になること、`syokan snapshots` で過去の snapshot を引けることを明記する
 - `apps/syokan/scripts/smoke.ts` — delete → archive → revive の leg を足す
 
