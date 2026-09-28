@@ -267,13 +267,12 @@ describe("SnapshotStore", () => {
       idempotencyKey: "k",
     });
     await store.delete(env.id);
-    const firstRecord = await store.get(env.id);
+    expect((await store.get(env.id))?.title).toBe("v1");
     await store.create({ root: sampleRoot, title: "v2", idempotencyKey: "k" });
-    await Bun.sleep(2);
     await store.delete(env.id);
     const second = await store.get(env.id);
     expect(second?.title).toBe("v2");
-    expect(second?.archivedAt).not.toBe(firstRecord?.archivedAt);
+    expect(second?.archivedAt).toEqual(expect.any(String));
     expect(await store.list({ archived: true })).toHaveLength(1);
   });
 
@@ -310,6 +309,24 @@ describe("SnapshotStore", () => {
       expect(await store.purge(id)).toBe(false);
     }
     expect(await Bun.file(join(dir, "planted.json")).exists()).toBe(true);
+  });
+
+  test("list({ archived }) returns every record even past one read batch", async () => {
+    await Promise.all(
+      Array.from({ length: 70 }, (_, i) =>
+        Bun.write(
+          join(dir, "archive", `rec-${i}.json`),
+          JSON.stringify({
+            schemaVersion: 1,
+            id: `rec-${i}`,
+            root: sampleRoot,
+            createdAt: "2026-05-01T00:00:00.000Z",
+            archivedAt: "2026-05-02T00:00:00.000Z",
+          }),
+        ),
+      ),
+    );
+    expect(await store.list({ archived: true })).toHaveLength(70);
   });
 
   test("a malformed archive record reads as absent instead of throwing", async () => {

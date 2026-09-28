@@ -131,6 +131,7 @@ export const FORBIDDEN_PROP_KEYS = new Set([
 // crypto.randomUUID(), but the lookup side must not lean on the generator's shape.
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const ARCHIVE_EXT = ".json";
+const ARCHIVE_READ_BATCH = 32;
 
 export function createSnapshotStore(
   dataDir: string,
@@ -503,12 +504,19 @@ export function createSnapshotStore(
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw err;
     }
-    const envs = await Promise.all(
-      names
-        .filter((name) => name.endsWith(ARCHIVE_EXT))
-        .map((name) => readArchive(name.slice(0, -ARCHIVE_EXT.length))),
-    );
-    return envs.filter((env) => env !== undefined);
+    const ids = names
+      .filter((name) => name.endsWith(ARCHIVE_EXT))
+      .map((name) => name.slice(0, -ARCHIVE_EXT.length));
+    // The archive grows until an explicit purge, so reading every record at once could
+    // exhaust file descriptors; read in fixed-size batches.
+    const envs: SnapshotEnvelope[] = [];
+    for (let i = 0; i < ids.length; i += ARCHIVE_READ_BATCH) {
+      const batch = await Promise.all(
+        ids.slice(i, i + ARCHIVE_READ_BATCH).map(readArchive),
+      );
+      for (const env of batch) if (env) envs.push(env);
+    }
+    return envs;
   }
 
   async function list(
