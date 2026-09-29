@@ -8,7 +8,7 @@ const envelope: SnapshotEnvelope = {
   schemaVersion: 1,
   id: "abc-123",
   title: "Sample",
-  createdAt: "2026-05-21T03:04:00Z",
+  createdAt: "2026-05-21T03:04:00Z", archivedAt: null,
   root: {
     type: "Stack",
     props: {},

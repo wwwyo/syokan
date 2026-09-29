@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { serve } from "bun";
 import {
+  archiveDir as resolveArchiveDir,
   authFile,
   dataDir as resolveDataDir,
   legacyTemplatesDir,
@@ -50,7 +51,7 @@ function migrateLegacyTemplates(): void {
 export function startServer() {
   migrateLegacyTemplates();
   const dataDir = resolveDataDir();
-  const store = createSnapshotStore(dataDir);
+  const store = createSnapshotStore(dataDir, resolveArchiveDir());
   const api = createApiHandlers(store);
   const templates = createTemplateHandlers(createTemplateStore(templatesDir()));
   const setting = createSettingHandlers(createSettingStore(settingFile()));
@@ -82,6 +83,8 @@ export function startServer() {
         PATCH: api.patchSnapshot,
         DELETE: api.deleteSnapshot,
       },
+      // Physical removal of an archive record (DELETE above only archives).
+      "/api/snapshots/:id/purge": { POST: api.purgeSnapshot },
       // public share: publish freezes a store snapshot and sends it to the Worker; auth
       // exchanges and holds the Worker token; shares is an authenticated proxy to the Worker.
       "/api/snapshots/:id/publish": { POST: share },

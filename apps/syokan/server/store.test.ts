@@ -60,12 +60,16 @@ describe("SnapshotStore", () => {
     const got = await store.get("legacy-1");
     expect(got?.title).toBe("Legacy");
     expect(got && "metadata" in got).toBe(false);
+    // persisted before archiving existed: no archivedAt on disk, null in responses
+    expect(got?.archivedAt).toBeNull();
+    expect((await store.list())[0]?.archivedAt).toBeNull();
     const deduped = await store.create({
       root: sampleRoot,
       idempotencyKey: "legacy-key",
     });
     expect(deduped.id).toBe("legacy-1");
     expect("metadata" in deduped).toBe(false);
+    expect(deduped.archivedAt).toBeNull();
   });
 
   test("strips a legacy `tags` field from every node in the tree on get()", async () => {
@@ -175,12 +179,183 @@ describe("SnapshotStore", () => {
     expect(items).toEqual([]);
   });
 
-  test("delete removes the snapshot and returns true; further get is undefined", async () => {
-    const env = await store.create({ root: sampleRoot });
+  test("delete archives: drops from the active list, get falls back to the archive record", async () => {
+    const env = await store.create({ root: sampleRoot, title: "Daily" });
+    expect(env.archivedAt).toBeNull();
     const ok = await store.delete(env.id);
     expect(ok).toBe(true);
+    expect(await store.list()).toEqual([]);
     const got = await store.get(env.id);
-    expect(got).toBeUndefined();
+    expect(got?.id).toBe(env.id);
+    expect(got?.title).toBe("Daily");
+    expect(got?.createdAt).toBe(env.createdAt);
+    expect(got?.archivedAt).toEqual(expect.any(String));
+    expect(await Bun.file(join(dir, "archive", `${env.id}.json`)).exists()).toBe(
+      true,
+    );
+  });
+
+  test("the archive keeps written-back check state", async () => {
+    const env = await store.create({ root: checklistTree });
+    await store.patch(env.id, { nodeId: "todo", ...checkWriteback("b") }, () => true);
+    await store.delete(env.id);
+    const got = await store.get(env.id);
+    const items = (got?.root.children?.[0]?.props as {
+      items: { label: string; checked?: boolean }[];
+    }).items;
+    expect(items.find((i) => i.label === "b")?.checked).toBe(true);
+  });
+
+  test("an archived snapshot is read-only: patch reports not_found", async () => {
+    const env = await store.create({ root: checklistTree });
+    await store.delete(env.id);
+    const result = await store.patch(
+      env.id,
+      { nodeId: "todo", ...checkWriteback("b") },
+      () => true,
+    );
+    expect(result).toEqual({ ok: false, error: "not_found" });
+  });
+
+  test("list({ archived }) returns archive records with archivedAt; the default stays active-only", async () => {
+    const a = await store.create({ root: sampleRoot, title: "A" });
+    const b = await store.create({ root: sampleRoot, title: "B" });
+    await store.create({ root: sampleRoot, title: "still active" });
+    await store.delete(a.id);
+    await store.delete(b.id);
+    const archived = await store.list({ archived: true });
+    expect(archived.map((s) => s.id).sort()).toEqual([a.id, b.id].sort());
+    expect(archived.every((s) => typeof s.archivedAt === "string")).toBe(true);
+    expect((await store.list()).map((s) => s.archivedAt)).toEqual([null]);
+  });
+
+  test("revive: posting an archived id's idempotencyKey restores that id with the posted content, archive untouched", async () => {
+    const first = await store.create({
+      root: checklistTree,
+      title: "v1",
+      idempotencyKey: "file:/tmp/daily.json",
+    });
+    await store.patch(first.id, { nodeId: "todo", ...checkWriteback("b") }, () => true);
+    await store.delete(first.id);
+    const revived = await store.create({
+      root: sampleRoot,
+      title: "v2",
+      idempotencyKey: "file:/tmp/daily.json",
+    });
+    expect(revived.id).toBe(first.id);
+    expect(revived.title).toBe("v2");
+    expect(revived.archivedAt).toBeNull();
+    // active wins on get
+    expect((await store.get(first.id))?.title).toBe("v2");
+    // the archive record (with the old check) is still there
+    const [record] = await store.list({ archived: true });
+    expect(record?.id).toBe(first.id);
+    expect(record?.title).toBe("v1");
+    // and a later PUT on the key targets the revived snapshot again
+    const updated = await store.update({
+      root: sampleRoot,
+      title: "v3",
+      idempotencyKey: "file:/tmp/daily.json",
+    });
+    expect(updated.ok && updated.envelope.id).toBe(first.id);
+  });
+
+  test("re-archiving overwrites the record with the latest envelope", async () => {
+    const env = await store.create({
+      root: sampleRoot,
+      title: "v1",
+      idempotencyKey: "k",
+    });
+    await store.delete(env.id);
+    expect((await store.get(env.id))?.title).toBe("v1");
+    await store.create({ root: sampleRoot, title: "v2", idempotencyKey: "k" });
+    await store.delete(env.id);
+    const second = await store.get(env.id);
+    expect(second?.title).toBe("v2");
+    expect(second?.archivedAt).toEqual(expect.any(String));
+    expect(await store.list({ archived: true })).toHaveLength(1);
+  });
+
+  test("purge removes only the archive record and forgets the key of an inactive id", async () => {
+    const env = await store.create({ root: sampleRoot, idempotencyKey: "gone" });
+    await store.delete(env.id);
+    expect(await store.purge(env.id)).toBe(true);
+    expect(await store.get(env.id)).toBeUndefined();
+    expect(await store.purge(env.id)).toBe(false);
+    // nothing left to revive: the key now mints a fresh id
+    const again = await store.create({ root: sampleRoot, idempotencyKey: "gone" });
+    expect(again.id).not.toBe(env.id);
+  });
+
+  test("purge returns false for an active snapshot without an archive record", async () => {
+    const env = await store.create({ root: sampleRoot });
+    expect(await store.purge(env.id)).toBe(false);
+    expect((await store.get(env.id))?.archivedAt).toBeNull();
+  });
+
+  test("unsafe ids never reach the archive path", async () => {
+    await Bun.write(
+      join(dir, "planted.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "planted",
+        root: sampleRoot,
+        createdAt: "2026-05-01T00:00:00.000Z",
+        archivedAt: "2026-05-02T00:00:00.000Z",
+      }),
+    );
+    for (const id of ["../planted", "..", "a/b", "a\\b", ""]) {
+      expect(await store.get(id)).toBeUndefined();
+      expect(await store.purge(id)).toBe(false);
+    }
+    expect(await Bun.file(join(dir, "planted.json")).exists()).toBe(true);
+  });
+
+  test("list({ archived }) returns every record even past one read batch", async () => {
+    await Promise.all(
+      Array.from({ length: 70 }, (_, i) =>
+        Bun.write(
+          join(dir, "archive", `rec-${i}.json`),
+          JSON.stringify({
+            schemaVersion: 1,
+            id: `rec-${i}`,
+            root: sampleRoot,
+            createdAt: "2026-05-01T00:00:00.000Z",
+            archivedAt: "2026-05-02T00:00:00.000Z",
+          }),
+        ),
+      ),
+    );
+    expect(await store.list({ archived: true })).toHaveLength(70);
+  });
+
+  test("a malformed archive record reads as absent instead of throwing", async () => {
+    await Bun.write(join(dir, "archive", "broken.json"), "{not json");
+    await Bun.write(
+      join(dir, "archive", "no-archived-at.json"),
+      JSON.stringify({ root: sampleRoot, createdAt: "2026-05-01T00:00:00.000Z" }),
+    );
+    expect(await store.get("broken")).toBeUndefined();
+    expect(await store.get("no-archived-at")).toBeUndefined();
+    expect(await store.list({ archived: true })).toEqual([]);
+  });
+
+  test("archive records strip since-removed node fields like the active read path", async () => {
+    await Bun.write(
+      join(dir, "archive", "legacy-arch.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "legacy-arch",
+        root: { type: "Stack", props: {}, tags: ["x"] },
+        createdAt: "2026-05-01T00:00:00.000Z",
+        archivedAt: "2026-05-02T00:00:00.000Z",
+        metadata: { source: "old" },
+      }),
+    );
+    const got = await store.get("legacy-arch");
+    expect(got?.archivedAt).toBe("2026-05-02T00:00:00.000Z");
+    expect(got && "tags" in got.root).toBe(false);
+    expect(got && "metadata" in got).toBe(false);
   });
 
   test("delete returns false for unknown id", async () => {

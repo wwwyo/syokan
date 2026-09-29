@@ -22,7 +22,7 @@ Design rationale, directory layout, and development conventions live in [AGENTS.
 
 ## How it works
 
-Under the hood, syokan is a personal schema-driven view layer. Instead of writing JSX, an LLM (Claude Code / scheduled agent / CLI) posts a **JSON tree**, and syokan renders it with predefined React components. Snapshots are **ephemeral** — summoned views are not meant to stay; data that must persist does not belong here.
+Under the hood, syokan is a personal schema-driven view layer. Instead of writing JSX, an LLM (Claude Code / scheduled agent / CLI) posts a **JSON tree**, and syokan renders it with predefined React components. Snapshots are **ephemeral** — summoned views are not meant to stay; data that must persist does not belong here. Deleting a view archives it instead of destroying it: it leaves the list, but `syokan snapshots list --archived` / `syokan snapshots get <id>` can still answer "what did I look at yesterday?", and `syokan snapshots purge <id>` removes the record for good.
 
 A snapshot is a JSON tree of `{ type, props, children? }` nodes. Each `type` names a catalog component; on receipt, Zod validates the tree and the registry maps it to a React component:
 

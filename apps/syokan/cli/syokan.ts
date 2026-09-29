@@ -515,6 +515,109 @@ export async function runTemplates(
   return { exitCode: 1 };
 }
 
+// `--since` / `--until` take a calendar day in the local time zone ("what did I do yesterday"
+// is a local-day question), so parse YYYY-MM-DD as local midnight rather than via Date's UTC
+// reading of date-only strings. undefined = not a valid day.
+function parseLocalDay(value: string): Date | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const day = new Date(y, m - 1, d);
+  return day.getFullYear() === y && day.getMonth() === m - 1 && day.getDate() === d
+    ? day
+    : undefined;
+}
+
+type SnapshotRow = { createdAt?: unknown };
+
+async function runSnapshotList(
+  args: readonly string[],
+  deps: CliDeps,
+): Promise<CliResult> {
+  let archived = false;
+  let since: Date | undefined;
+  let until: Date | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === undefined) continue;
+    if (a === "--archived") {
+      archived = true;
+    } else if (a === "--since" || a === "--until") {
+      const v = args[i + 1];
+      if (v === undefined || v.startsWith("--")) {
+        return argError(deps, "missing_option_value", `${a} needs a value`);
+      }
+      const day = parseLocalDay(v);
+      if (!day) {
+        return argError(
+          deps,
+          "invalid_date",
+          `${a} expects a local calendar day YYYY-MM-DD, got: ${v}`,
+        );
+      }
+      if (a === "--since") since = day;
+      else until = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+      i++;
+    } else if (a.startsWith("--")) {
+      return argError(deps, "unknown_option", a);
+    } else {
+      return argError(deps, "too_many_args", `unexpected argument: ${a}`);
+    }
+  }
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(
+    deps,
+    archived ? "/api/snapshots?archived=1" : "/api/snapshots",
+  );
+  if (!result.ok) return reportFailure(deps, result);
+  const items =
+    (result.data as { items?: SnapshotRow[] } | null)?.items ?? [];
+  // Both bounds are inclusive days: since = from its local midnight, until = through its end.
+  const filtered = items.filter((item) => {
+    const at = Date.parse(String(item.createdAt));
+    return (
+      (since === undefined || at >= since.getTime()) &&
+      (until === undefined || at < until.getTime())
+    );
+  });
+  deps.stdout(JSON.stringify({ items: filtered }));
+  return { exitCode: 0 };
+}
+
+async function runSnapshotPurge(
+  id: string | undefined,
+  deps: CliDeps,
+): Promise<CliResult> {
+  if (!id) return argError(deps, "missing_id", "snapshot id is required");
+  const fail = await ensureOrFail(deps);
+  if (fail) return fail;
+  const result = await apiCall(
+    deps,
+    `/api/snapshots/${encodeURIComponent(id)}/purge`,
+    { method: "POST" },
+  );
+  if (!result.ok) return reportFailure(deps, result);
+  deps.stdout(JSON.stringify(result.data));
+  return { exitCode: 0 };
+}
+
+// snapshots: list (omitted / list), get <id>, purge <id>. get needs no --archived: the
+// server resolves active first, then the archive.
+export async function runSnapshots(
+  args: readonly string[],
+  deps: CliDeps,
+): Promise<CliResult> {
+  const [sub, ...rest] = args;
+  if (sub === undefined || sub === "list") return runSnapshotList(rest, deps);
+  if (sub === "get") {
+    if (!rest[0]) return argError(deps, "missing_id", "snapshot id is required");
+    return getJson(deps, `/api/snapshots/${encodeURIComponent(rest[0])}`);
+  }
+  if (sub === "purge") return runSnapshotPurge(rest[0], deps);
+  return argError(deps, "unknown_subcommand", `snapshots ${sub}`);
+}
+
 // GitHub OAuth App (public client for the device flow). Swap in the real client_id after creating the OAuth App.
 const GITHUB_OAUTH_CLIENT_ID = "PLACEHOLDER_CLIENT_ID";
 const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
@@ -803,6 +906,31 @@ const COMMANDS: Command<CliDeps, CliResult | Promise<CliResult>>[] = [
     run: (rest, deps) => runTemplates(rest, deps),
   },
   {
+    name: "snapshots",
+    usage: "syokan snapshots [list|get|purge]",
+    summary:
+      "Look up snapshots, including archived ones (deleting a view archives it)",
+    subcommands: [
+      {
+        usage:
+          "syokan snapshots [list] [--archived] [--since <YYYY-MM-DD>] [--until <YYYY-MM-DD>]",
+        summary:
+          "List snapshots as JSON { items: [{ id, title, createdAt, archivedAt }] } — active by default, archive records with --archived; --since/--until filter createdAt by local calendar day (inclusive)",
+      },
+      {
+        usage: "syokan snapshots get <id>",
+        summary:
+          "Print one snapshot envelope as JSON, active or archived (archivedAt is set when archived)",
+      },
+      {
+        usage: "syokan snapshots purge <id>",
+        summary:
+          "Permanently delete an archive record (irreversible; an active snapshot is untouched)",
+      },
+    ],
+    run: (rest, deps) => runSnapshots(rest, deps),
+  },
+  {
     name: "login",
     usage: "syokan login",
     summary: "Log in with GitHub (device flow) to enable publishing",
@@ -883,17 +1011,17 @@ export const helpManifest = {
     {
       name: "XDG_STATE_HOME",
       summary:
-        "State root (default ~/.local/state); snapshots and the server log live under <root>/syokan",
+        "State root (default ~/.local/state); snapshots, their archive (<root>/syokan/archive), and the server log live under <root>/syokan",
     },
   ],
   output:
-    "catalog/templates print JSON to stdout; post prints the view URL; every error prints a JSON object to stderr.",
+    "catalog/templates/snapshots print JSON to stdout; post prints the view URL; every error prints a JSON object to stderr.",
   exitCodes: [
     { code: 0, summary: "success" },
     {
       code: 1,
       summary:
-        "error: invalid_json | unsupported_input | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand | unknown_option | not_logged_in | login_failed | invalid_expires | share_api_unreachable",
+        "error: invalid_json | unsupported_input | validation_failed | read_failed | server_unavailable | missing_title | missing_id | unknown_subcommand | unknown_option | invalid_date | not_found | not_logged_in | login_failed | invalid_expires | share_api_unreachable",
     },
   ],
 };

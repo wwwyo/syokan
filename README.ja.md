@@ -22,7 +22,7 @@ English: [README.md](./README.md)
 
 ## 仕組み
 
-実体は個人用の schema 駆動 view layer。JSX を書く代わりに、LLM（Claude Code / scheduled agent / CLI）が **JSON tree** を投げ、syokan が事前定義した React component で描画する。snapshot は **ephemeral** — 召喚した view は残らない前提。残し続けるデータは置かない。
+実体は個人用の schema 駆動 view layer。JSX を書く代わりに、LLM（Claude Code / scheduled agent / CLI）が **JSON tree** を投げ、syokan が事前定義した React component で描画する。snapshot は **ephemeral** — 召喚した view は残らない前提。残し続けるデータは置かない。view を削除すると破棄ではなく archive になる — 一覧からは消えるが、`syokan snapshots list --archived` / `syokan snapshots get <id>` で「昨日何を見ていたか」を引ける。`syokan snapshots purge <id>` で記録ごと消える。
 
 snapshot は `{ type, props, children? }` のノードからなる JSON tree。`type` は catalog component を指し、受信時に Zod が検証して registry が React component に対応付ける:
 

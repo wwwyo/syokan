@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { deleteSnapshot, nextSnapshotId, patchSnapshot } from "./snapshots";
+import {
+  deleteSnapshot,
+  fetchSnapshotEnvelope,
+  nextSnapshotId,
+  patchSnapshot,
+} from "./snapshots";
 
 describe("nextSnapshotId", () => {
   const items = [{ id: "a" }, { id: "b" }, { id: "c" }];
@@ -19,6 +24,37 @@ describe("nextSnapshotId", () => {
 
   test("returns null when the deleted id is not in the list", () => {
     expect(nextSnapshotId(items, "missing")).toBeNull();
+  });
+});
+
+describe("fetchSnapshotEnvelope (the view route's read)", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  const envelope = {
+    schemaVersion: 1,
+    id: "a",
+    root: { type: "Stack", props: {} },
+    createdAt: "2026-05-21T03:04:00Z",
+  };
+
+  test("an active envelope is returned as-is", async () => {
+    globalThis.fetch = (async () =>
+      Response.json({ ...envelope, archivedAt: null })) as unknown as typeof fetch;
+    expect((await fetchSnapshotEnvelope("a"))?.id).toBe("a");
+  });
+
+  test("an archived envelope is not-found for the view, like a 404", async () => {
+    globalThis.fetch = (async () =>
+      Response.json({
+        ...envelope,
+        archivedAt: "2026-05-22T00:00:00Z",
+      })) as unknown as typeof fetch;
+    expect(await fetchSnapshotEnvelope("a")).toBeNull();
+    globalThis.fetch = (async () => new Response(null, { status: 404 })) as unknown as typeof fetch;
+    expect(await fetchSnapshotEnvelope("a")).toBeNull();
   });
 });
 

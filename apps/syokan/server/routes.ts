@@ -115,10 +115,13 @@ function forbidden(req: Request): Response | null {
 export type ApiHandlers = {
   createSnapshot: (req: Request) => Promise<Response>;
   updateSnapshot: (req: Request) => Promise<Response>;
-  listSnapshots: () => Promise<Response>;
+  listSnapshots: (req: Request) => Promise<Response>;
   getSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
   patchSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
   deleteSnapshot: (req: BunRequest<"/api/snapshots/:id">) => Promise<Response>;
+  purgeSnapshot: (
+    req: BunRequest<"/api/snapshots/:id/purge">,
+  ) => Promise<Response>;
   watchChanges: () => Response;
 };
 
@@ -149,11 +152,15 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       return snapshotResponse(result.envelope);
     },
 
-    async listSnapshots() {
-      const items = await store.list();
+    // Active only by default; `?archived=1` lists the archive records instead. A query
+    // parameter, not a literal `/archived` segment, which would collide with `:id`.
+    async listSnapshots(req) {
+      const archived = new URL(req.url).searchParams.get("archived") === "1";
+      const items = await store.list({ archived });
       return Response.json({ items });
     },
 
+    // Active or archived alike (archivedAt tells which) — archiving is a state, not a removal.
     async getSnapshot(req) {
       const id = req.params.id;
       const env = await store.get(id);
@@ -248,6 +255,7 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
       return snapshotResponse(result.envelope);
     },
 
+    // Archives: the snapshot leaves the list and views but stays readable via GET.
     async deleteSnapshot(req) {
       const deny = forbidden(req);
       if (deny) return deny;
@@ -257,6 +265,22 @@ export function createApiHandlers(store: SnapshotStore): ApiHandlers {
         return jsonError(404, {
           error: "not_found",
           message: `Snapshot ${id} not found`,
+        });
+      }
+      return Response.json({ ok: true });
+    },
+
+    // The irreversible step, spelled as its own custom method (AIP-136) rather than a
+    // DELETE variant so the URL alone names the operation. Only archive records qualify.
+    async purgeSnapshot(req) {
+      const deny = forbidden(req);
+      if (deny) return deny;
+      const id = req.params.id;
+      const ok = await store.purge(id);
+      if (!ok) {
+        return jsonError(404, {
+          error: "not_found",
+          message: `Archived snapshot ${id} not found`,
         });
       }
       return Response.json({ ok: true });
