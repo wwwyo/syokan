@@ -1,2 +1,6 @@
 scripts:
+  # The sync is best-effort: `|| true` must stay *inside* the group because
+  # `{ ...; }` propagates the last command's exit status, so a failing sync
+  # would otherwise block `bun install` past `&&`. Moving `|| true` outside or
+  # swapping `&&` for `;` re-breaks this.
   setup: '{ [ ! -x "$HOME/src/github.com/wwwyo/dotfiles/.agents/skills/project-setup/tools/sync-local-worktree-files.sh" ] || "$HOME/src/github.com/wwwyo/dotfiles/.agents/skills/project-setup/tools/sync-local-worktree-files.sh" || true; } && bun install'
