@@ -11,5 +11,5 @@ Use this skill before changing syokan implementation or build/runtime behavior.
 
 | Work | Read |
 | --- | --- |
-| Code rendering, file watching, Bun configuration, or dev-server behavior | [references/pitfalls.md](references/pitfalls.md) |
+| Code rendering, file watching, Bun configuration, dev-server behavior, or CI/automation config (`orca.yaml`, `pullfrog.config.sh`, workflows) | [references/pitfalls.md](references/pitfalls.md) |
 | Snapshot store, envelope schema, response shape, or compatibility changes | [references/snapshot-envelope.md](references/snapshot-envelope.md) |
