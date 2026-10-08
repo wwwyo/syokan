@@ -1,0 +1,6 @@
+# `hono` は `apps/syokan` / `apps/share` の版を必ず揃える — 任意ではなく型制約
+
+- Status: Accepted
+- Date: 2026-08-12
+
+（[#54](https://github.com/wwwyo/syokan/pull/54) merged、[#56](https://github.com/wwwyo/syokan/pull/56) merged）。08-07 時点では「3箇所を1本の PR でまとめる」を運用上の効率として選んだだけだったが、実際に片方だけ 4.12.34 へ上げて検証すると `apps/syokan/server/shareService.ts` が `apps/share` の RPC client 型を import している関係で `HonoRequest` の `[GET_MATCH_RESULT]` 型が不一致になり typecheck が壊れることを確認した（main は pass するので hono 4.12.34 固有）。**版分割は選択肢ではなく禁止**として log を上書きする。検証時の落とし穴として、**片側だけ版を上げた状態を worktree で試すと nested node_modules が汚染され偽陽性/偽陰性が出る** — 検証は毎回 clean install（`rm -rf node_modules` 相当）からやり直す必要がある。あわせて、**cooldown 明け（08-10 hono / 08-11 mermaid）後も CI は別の理由で赤いままだった** — dependabot の該当 PR は `package.json` の版だけ上げ `bun.lock` を追随させておらず、`--frozen-lockfile` が `lockfile had changes, but lockfile is frozen` で落ちる。cooldown 解除は「install できる」を意味するだけで「lockfile が同期済み」は別途 `bun install` して確認・push する必要がある。**次アクション（未決）**: `.github/dependabot.yml` の `minor-and-patch` group は `applies-to: version-updates` 指定のため、cooldown を無視して単独 PR が立つ security update は group 化対象外になり、複数 workspace が共有する依存（今回の hono）は security update のたびに PR が割れる構造が残っている。`applies-to: security-updates` の group を足せば防げるが設定変更なので未着手 — 本人判断待ち
