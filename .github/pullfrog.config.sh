@@ -7,13 +7,13 @@
 # backend and are invisible to git — this script records and reapplies them.
 #
 # Apply:  .github/pullfrog.config.sh        (uses gh auth)
-# Audit:  npx -y pullfrog@0.1.82 config list --repo wwwyo/syokan
+# Audit:  mise exec -- pullfrog config list --repo wwwyo/syokan
 #
 # BYOK keys are org-scoped (OPENCODE_API_KEY inherited) — see `pf secret list`.
 set -euo pipefail
 
 REPO="wwwyo/syokan"
-PF=(npx -y pullfrog@0.1.82)
+PF=(mise exec -- pullfrog)
 
 pf_set()   { "${PF[@]}" config set   "$1" "$2" --repo "$REPO" --yes; }
 pf_unset() { "${PF[@]}" config unset "$1"     --repo "$REPO" --yes; }
