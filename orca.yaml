@@ -4,4 +4,4 @@ scripts:
   # blocking `bun install` past `&&`. Only dropping `|| true` re-breaks this
   # (`;` for `&&` or `|| true` outside the braces is equivalent); `&&` stays
   # so a future guard regression blocks setup loudly instead of silently.
-  setup: '{ [ ! -x "$HOME/src/github.com/wwwyo/dotfiles/.agents/skills/project-setup/tools/sync-local-worktree-files.sh" ] || "$HOME/src/github.com/wwwyo/dotfiles/.agents/skills/project-setup/tools/sync-local-worktree-files.sh" || true; } && bun install'
+  setup: '{ [ ! -x "$HOME/src/github.com/wwwyo/dotfiles/.agents/tools/sync-local-worktree-files.sh" ] || "$HOME/src/github.com/wwwyo/dotfiles/.agents/tools/sync-local-worktree-files.sh" || true; } && bun install'
